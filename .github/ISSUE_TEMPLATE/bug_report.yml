@@ -1,0 +1,47 @@
+name: Bug report
+description: 再現できる不具合を報告する
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。個人情報や実際の蔵書一覧は添付しないでください。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何が起きたかを簡潔に説明してください。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: アプリのバージョン
+      placeholder: 0.1.0
+  - type: input
+    id: device
+    attributes:
+      label: 端末 / Androidバージョン
+      placeholder: Pixel 10 / Android 17
+  - type: textarea
+    id: notes
+    attributes:
+      label: 補足
+      description: 必要なら、個人情報を除いたログやスクリーンショットを添付してください。

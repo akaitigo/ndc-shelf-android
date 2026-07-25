@@ -1,0 +1,209 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "4888d655a5ab319642e5e4a1a0bb3975",
+    "entities": [
+      {
+        "tableName": "book_works",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `primaryAuthor` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryAuthor",
+            "columnName": "primaryAuthor",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "book_editions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `workId` TEXT NOT NULL, `isbn13` TEXT NOT NULL, `publisher` TEXT, `publishedYear` INTEGER, `coverUrl` TEXT, `ndcCode` TEXT, `ndcEdition` TEXT, `classificationSource` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`workId`) REFERENCES `book_works`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workId",
+            "columnName": "workId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isbn13",
+            "columnName": "isbn13",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "publisher",
+            "columnName": "publisher",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "publishedYear",
+            "columnName": "publishedYear",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "coverUrl",
+            "columnName": "coverUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ndcCode",
+            "columnName": "ndcCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ndcEdition",
+            "columnName": "ndcEdition",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "classificationSource",
+            "columnName": "classificationSource",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_book_editions_workId",
+            "unique": false,
+            "columnNames": [
+              "workId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_book_editions_workId` ON `${TABLE_NAME}` (`workId`)"
+          },
+          {
+            "name": "index_book_editions_isbn13",
+            "unique": true,
+            "columnNames": [
+              "isbn13"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_book_editions_isbn13` ON `${TABLE_NAME}` (`isbn13`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "book_works",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "workId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "owned_copies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `editionId` TEXT NOT NULL, `mediaType` TEXT NOT NULL, `location` TEXT NOT NULL, `readingStatus` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`editionId`) REFERENCES `book_editions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editionId",
+            "columnName": "editionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaType",
+            "columnName": "mediaType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readingStatus",
+            "columnName": "readingStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_owned_copies_editionId",
+            "unique": false,
+            "columnNames": [
+              "editionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_owned_copies_editionId` ON `${TABLE_NAME}` (`editionId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "book_editions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "editionId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4888d655a5ab319642e5e4a1a0bb3975')"
+    ]
+  }
+}

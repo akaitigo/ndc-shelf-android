@@ -1,0 +1,38 @@
+name: Feature request
+description: 新しい機能や改善を提案する
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したいこと
+      description: 機能名より先に、どんな場面で何に困っているかを教えてください。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: アイデア
+      description: 望ましい操作や表示があれば記載してください。
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 関連領域
+      options:
+        - スキャン
+        - 蔵書・検索
+        - NDC分類
+        - 本棚・置き場所
+        - 読書記録
+        - データ移行
+        - その他
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: データ・プライバシーへの影響
+      description: 外部送信や新しい権限が必要になりそうなら記載してください。
