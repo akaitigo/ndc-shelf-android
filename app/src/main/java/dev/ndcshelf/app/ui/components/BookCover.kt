@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.ui.components
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,9 +15,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 
 @Composable
 fun BookCover(
@@ -39,9 +45,10 @@ fun BookCover(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(30.dp),
         )
-        if (coverUrl != null) {
+        val imageRequest = buildNdlCoverImageRequest(LocalContext.current, coverUrl)
+        if (imageRequest != null) {
             AsyncImage(
-                model = coverUrl,
+                model = imageRequest,
                 contentDescription = "$title の表紙",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
@@ -49,3 +56,18 @@ fun BookCover(
         }
     }
 }
+
+internal fun buildNdlCoverImageRequest(
+    context: Context,
+    coverUrl: String?,
+): ImageRequest? = coverUrl
+    ?.takeIf { NdlEndpointPolicy.isAllowedCoverUrl(it) }
+    ?.let { url ->
+        ImageRequest.Builder(context)
+            .data(url)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .networkCachePolicy(CachePolicy.ENABLED)
+            .crossfade(true)
+            .build()
+    }

@@ -6,6 +6,8 @@ import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.LibraryBookRow
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.remote.BookMetadataFailure
+import dev.ndcshelf.app.data.remote.BookMetadataLookupResult
 import dev.ndcshelf.app.data.remote.BookMetadataService
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
@@ -22,6 +24,7 @@ import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
@@ -58,15 +61,21 @@ class DefaultLibraryRepository(
             return AddBookResult.Duplicate(existing.toDomain())
         }
 
-        val metadata = try {
+        val lookup = try {
             metadataService.findByIsbn(isbn13)
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (error: Exception) {
-            return AddBookResult.Failure(
-                error.message ?: "書誌情報の取得に失敗しました",
+        } catch (_: Exception) {
+            return AddBookResult.Failure(AddBookFailure.NETWORK, isbn13)
+        }
+        val metadata = when (lookup) {
+            is BookMetadataLookupResult.Found -> lookup.metadata
+            BookMetadataLookupResult.NotFound -> return AddBookResult.NotFound(isbn13)
+            is BookMetadataLookupResult.Failure -> return AddBookResult.Failure(
+                reason = lookup.reason.toAddBookFailure(),
+                isbn13 = isbn13,
             )
-        } ?: return AddBookResult.NotFound(isbn13)
+        }
 
         val workId = idFactory()
         val editionId = idFactory()
@@ -115,7 +124,7 @@ class DefaultLibraryRepository(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            return AddBookResult.Failure("蔵書を端末へ保存できませんでした")
+            return AddBookResult.Failure(AddBookFailure.SAVE, isbn13)
         }
 
         return AddBookResult.Added(
@@ -305,6 +314,16 @@ class DefaultLibraryRepository(
         )
         dao.upsertCopies(books.map(LibraryBook::toCopyEntity))
     }
+}
+
+private fun BookMetadataFailure.toAddBookFailure(): AddBookFailure = when (this) {
+    BookMetadataFailure.OFFLINE -> AddBookFailure.OFFLINE
+    BookMetadataFailure.TIMEOUT -> AddBookFailure.TIMEOUT
+    BookMetadataFailure.RATE_LIMITED -> AddBookFailure.RATE_LIMITED
+    BookMetadataFailure.SERVER -> AddBookFailure.SERVICE_UNAVAILABLE
+    BookMetadataFailure.NETWORK -> AddBookFailure.NETWORK
+    BookMetadataFailure.CLIENT -> AddBookFailure.REQUEST_REJECTED
+    BookMetadataFailure.PARSE -> AddBookFailure.INVALID_RESPONSE
 }
 
 private fun LibraryBook.toWorkEntity() = BookWorkEntity(

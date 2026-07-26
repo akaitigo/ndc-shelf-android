@@ -8,6 +8,7 @@ import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.remote.BookMetadata
+import dev.ndcshelf.app.data.remote.BookMetadataLookupResult
 import dev.ndcshelf.app.data.remote.BookMetadataService
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
@@ -18,6 +19,7 @@ import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
@@ -59,7 +61,7 @@ class DefaultLibraryRepositoryIntegrationTest {
             ids = listOf("work-new", "edition-new", "copy-new"),
             service = BookMetadataService {
                 metadataCalls += 1
-                metadata()
+                BookMetadataLookupResult.Found(metadata())
             },
         )
 
@@ -123,16 +125,13 @@ class DefaultLibraryRepositoryIntegrationTest {
         )
         val repository = repository(
             ids = listOf("work-must-rollback", "edition-collision", "copy-new"),
-            service = BookMetadataService { metadata() },
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
         )
 
         val result = repository.addFromIsbn(ISBN)
 
         assertTrue(result is AddBookResult.Failure)
-        assertEquals(
-            "蔵書を端末へ保存できませんでした",
-            (result as AddBookResult.Failure).message,
-        )
+        assertEquals(AddBookFailure.SAVE, (result as AddBookResult.Failure).reason)
         assertNull(database.libraryDao().findWorkById("work-must-rollback"))
         assertEquals(listOf("existing-work"), database.libraryDao().getAllWorks().map { it.id })
         assertTrue(database.libraryDao().getAllCopies().isEmpty())
@@ -195,7 +194,10 @@ class DefaultLibraryRepositoryIntegrationTest {
 
     @Test
     fun invalidImportConstraint_rollsBackAllThreeTables() = runBlocking {
-        val repository = repository(emptyList(), BookMetadataService { null })
+        val repository = repository(
+            emptyList(),
+            BookMetadataService { BookMetadataLookupResult.NotFound },
+        )
         val first = importBook("first", ISBN)
         val conflicting = importBook("second", ISBN)
         val preview = LibraryImportPreview(

@@ -13,7 +13,9 @@ NDC Shelfは、アカウント、広告、開発者独自のアクセス解析�
 
 ## 外部への通信
 
-ISBNを登録したとき、入力または読み取ったISBNをHTTPSで[国立国会図書館サーチ](https://ndlsearch.ndl.go.jp/help/api)へ送信し、書誌情報とNDCを取得します。表紙を表示するときは、NDL SearchのHTTPS画像URLへ画像を要求します。通信先にはIPアドレス、時刻、User-Agentなど、通常のHTTPS通信に伴う情報が伝わる場合があります。各通信先での取扱いは提供元の規約に従います。
+ISBNを登録したとき、入力または読み取ったISBNだけをHTTPSで[国立国会図書館サーチ](https://ndlsearch.ndl.go.jp/help/api)へ送信し、書誌情報とNDCを取得します。表紙を表示し端末キャッシュに画像がないときも、同サービスの`/thumbnail/<ISBN>.jpg`へ要求します。表紙は再表示時の通信を減らすため端末のキャッシュ領域へ最大50MiB保存され、古い画像から自動削除されます。Androidの設定からアプリのキャッシュを削除するか、アプリデータ削除・アンインストールで消去できます。表紙キャッシュはバックアップやexportに含めません。
+
+書誌・表紙通信はNDL SearchのHTTPS hostだけを許可し、別hostへのredirectを追従しません。タイトル、著者、NDC、読書状態、置き場所、他の蔵書は送信しません。通信先にはIPアドレス、時刻、User-Agentなど、通常のHTTPS通信に伴う情報が伝わる場合があります。各通信先での取扱いは提供元の規約に従います。障害時の分類と再試行上限は[外部通信方針](docs/NETWORK_BOUNDARY.md)に記載しています。
 
 バーコード認識に使用するML Kitは、カメラ画像、バーコード値、認識結果をGoogleへ送信しません。一方、Googleの説明によると、ML Kit Android SDKは端末・アプリ情報、インストール単位の識別子、性能、API設定、入出力サイズ、機能バージョン、利用イベント、エラーコード等を診断と利用分析のため収集します。これらはHTTPSで暗号化され、Googleから第三者へ共有されないと説明されています。詳細は[ML Kitのデータ開示](https://developers.google.com/ml-kit/android-data-disclosure)と[規約・プライバシー](https://developers.google.com/ml-kit/terms)を確認してください。本アプリは自動ズームを有効にしていません。
 
