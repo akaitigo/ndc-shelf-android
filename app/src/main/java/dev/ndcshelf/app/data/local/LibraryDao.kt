@@ -21,6 +21,45 @@ interface LibraryDao {
     @Query("SELECT * FROM wishlist_items ORDER BY editionId")
     suspend fun getAllWishlistItems(): List<WishlistItemEntity>
 
+    @Query("SELECT * FROM scan_sessions ORDER BY startedAt DESC, id ASC")
+    suspend fun getAllScanSessions(): List<ScanSessionEntity>
+
+    @Query("SELECT * FROM scan_attempts ORDER BY attemptedAt ASC, id ASC")
+    suspend fun getAllScanAttempts(): List<ScanAttemptEntity>
+
+    @Query(
+        """
+        SELECT
+            sessions.id AS sessionId,
+            sessions.startedAt AS startedAt,
+            sessions.endedAt AS endedAt,
+            attempts.id AS attemptId,
+            attempts.isbn AS isbn,
+            attempts.outcome AS outcome,
+            attempts.copyId AS copyId,
+            attempts.attemptedAt AS attemptedAt,
+            attempts.undoneAt AS undoneAt
+        FROM scan_sessions AS sessions
+        LEFT JOIN scan_attempts AS attempts ON attempts.sessionId = sessions.id
+        WHERE sessions.id IN (
+            SELECT id FROM scan_sessions ORDER BY startedAt DESC, id ASC LIMIT :limit
+        )
+        ORDER BY sessions.startedAt DESC, attempts.attemptedAt DESC, attempts.id ASC
+        """,
+    )
+    fun observeRecentScanSessions(limit: Int): Flow<List<ScanSessionAttemptRow>>
+
+    @Query("SELECT * FROM scan_sessions WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
+    suspend fun findActiveScanSession(): ScanSessionEntity?
+
+    @Query("SELECT * FROM scan_attempts WHERE id = :attemptId LIMIT 1")
+    suspend fun findScanAttempt(attemptId: String): ScanAttemptEntity?
+
+    @Query(
+        "SELECT * FROM scan_attempts WHERE sessionId = :sessionId ORDER BY attemptedAt ASC, id ASC",
+    )
+    suspend fun findScanAttemptsBySession(sessionId: String): List<ScanAttemptEntity>
+
     @Query(
         """
         SELECT
@@ -240,6 +279,12 @@ interface LibraryDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertCopy(copy: OwnedCopyEntity)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertScanSession(session: ScanSessionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertScanAttempt(attempt: ScanAttemptEntity)
+
     @Upsert
     suspend fun upsertWishlistItem(item: WishlistItemEntity)
 
@@ -254,6 +299,18 @@ interface LibraryDao {
 
     @Upsert
     suspend fun upsertCopies(copies: List<OwnedCopyEntity>)
+
+    @Upsert
+    suspend fun upsertScanSessions(sessions: List<ScanSessionEntity>)
+
+    @Upsert
+    suspend fun upsertScanAttempts(attempts: List<ScanAttemptEntity>)
+
+    @Query("DELETE FROM scan_attempts")
+    suspend fun deleteAllScanAttempts()
+
+    @Query("DELETE FROM scan_sessions")
+    suspend fun deleteAllScanSessions()
 
     @Query("DELETE FROM owned_copies")
     suspend fun deleteAllCopies()
@@ -327,4 +384,24 @@ interface LibraryDao {
 
     @Query("DELETE FROM book_works WHERE id = :workId")
     suspend fun deleteWorkById(workId: String): Int
+
+    @Query("UPDATE scan_sessions SET endedAt = :endedAt WHERE endedAt IS NULL")
+    suspend fun finishActiveScanSessions(endedAt: Long): Int
+
+    @Query("UPDATE scan_sessions SET endedAt = :endedAt WHERE id = :sessionId AND endedAt IS NULL")
+    suspend fun finishScanSession(sessionId: String, endedAt: Long): Int
+
+    @Query("UPDATE scan_attempts SET undoneAt = :undoneAt WHERE id = :attemptId AND undoneAt IS NULL")
+    suspend fun markScanAttemptUndone(attemptId: String, undoneAt: Long): Int
+
+    @Query(
+        """
+        DELETE FROM scan_sessions
+        WHERE endedAt IS NOT NULL
+          AND id NOT IN (
+              SELECT id FROM scan_sessions ORDER BY startedAt DESC, id ASC LIMIT :keepCount
+          )
+        """,
+    )
+    suspend fun pruneScanSessions(keepCount: Int): Int
 }

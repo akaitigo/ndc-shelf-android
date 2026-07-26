@@ -146,6 +146,55 @@ data class WishlistItemEntity(
     val updatedAt: Long,
 )
 
+@Entity(
+    tableName = "scan_sessions",
+    indices = [Index(value = ["endedAt"])],
+)
+data class ScanSessionEntity(
+    @PrimaryKey val id: String,
+    val startedAt: Long,
+    val endedAt: Long?,
+)
+
+@Entity(
+    tableName = "scan_attempts",
+    foreignKeys = [
+        ForeignKey(
+            entity = ScanSessionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sessionId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["sessionId"]),
+        Index(value = ["copyId"]),
+        Index(value = ["attemptedAt"]),
+    ],
+)
+data class ScanAttemptEntity(
+    @PrimaryKey val id: String,
+    val sessionId: String,
+    val isbn: String,
+    val outcome: String,
+    val copyId: String?,
+    val copySnapshot: String?,
+    val attemptedAt: Long,
+    val undoneAt: Long?,
+)
+
+data class ScanSessionAttemptRow(
+    val sessionId: String,
+    val startedAt: Long,
+    val endedAt: Long?,
+    val attemptId: String?,
+    val isbn: String?,
+    val outcome: String?,
+    val copyId: String?,
+    val attemptedAt: Long?,
+    val undoneAt: Long?,
+)
+
 data class WishlistBookRow(
     val workId: String,
     val editionId: String,

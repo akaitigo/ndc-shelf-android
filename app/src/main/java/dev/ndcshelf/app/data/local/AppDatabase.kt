@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 5
+const val APP_DATABASE_VERSION = 6
 
 @Database(
     entities = [
@@ -16,6 +16,8 @@ const val APP_DATABASE_VERSION = 5
         LocationTierEntity::class,
         OwnedCopyEntity::class,
         WishlistItemEntity::class,
+        ScanSessionEntity::class,
+        ScanAttemptEntity::class,
     ],
     version = APP_DATABASE_VERSION,
     exportSchema = true,
@@ -30,12 +32,56 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_2_3,
             MIGRATION_3_4,
             MIGRATION_4_5,
+            MIGRATION_5_6,
         )
     }
 
     abstract fun libraryDao(): LibraryDao
 
     abstract fun locationDao(): LocationDao
+}
+
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS scan_sessions (
+                id TEXT NOT NULL PRIMARY KEY,
+                startedAt INTEGER NOT NULL,
+                endedAt INTEGER
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_scan_sessions_endedAt ON scan_sessions(endedAt)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS scan_attempts (
+                id TEXT NOT NULL PRIMARY KEY,
+                sessionId TEXT NOT NULL,
+                isbn TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                copyId TEXT,
+                copySnapshot TEXT,
+                attemptedAt INTEGER NOT NULL,
+                undoneAt INTEGER,
+                FOREIGN KEY(sessionId) REFERENCES scan_sessions(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_scan_attempts_sessionId ON scan_attempts(sessionId)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_scan_attempts_copyId ON scan_attempts(copyId)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_scan_attempts_attemptedAt " +
+                "ON scan_attempts(attemptedAt)",
+        )
+    }
 }
 
 private val MIGRATION_4_5 = object : Migration(4, 5) {
