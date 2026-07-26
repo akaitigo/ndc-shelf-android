@@ -84,6 +84,8 @@ Room schemaとRepositoryのテスト構成、Migration追加手順は[docs/DATAB
 
 NDL Searchへの書誌・表紙通信、障害分類、再試行、表紙キャッシュの境界は[docs/NETWORK_BOUNDARY.md](docs/NETWORK_BOUNDARY.md)を参照してください。
 
+利用者向け変更は[CHANGELOG.md](CHANGELOG.md)、v0.2の公開判定と復旧手順は[リリースチェックリスト](docs/releases/V0.2_RELEASE_CHECKLIST.md)および[ロールバック手順](docs/releases/V0.2_ROLLBACK.md)を参照してください。
+
 NDL Search APIの利用にAPIキーは不要です。アプリはISBNの登録時だけ、対象ISBNをNDL Searchへ送信します。蔵書データは端末内に保存され、Androidのクラウドバックアップからも除外されます。Android 9以降の端末間転送ではRoom DBだけを移行対象にします。表紙表示時はNDL SearchのHTTPS画像URLへ接続し、最大50MiBの端末キャッシュを利用します。バーコード画像と認識結果はML Kitにより端末内処理されますが、同SDKは診断・利用分析メトリクスをGoogleへ送信します。詳しい取扱いは[PRIVACY.md](PRIVACY.md)、バックアップ判断は[docs/BACKUP_THREAT_MODEL.md](docs/BACKUP_THREAT_MODEL.md)を参照してください。
 
 SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLとして取得・解析します。

@@ -29,10 +29,12 @@ jobs:
       - name: Verify
         run: >-
           ./gradlew
+          verifyV02ReleaseConfiguration
           verifyBackupPolicy
           verifyLicenseReport
           testDebugUnitTest
           lintDebug
+          assembleDebug
           --stacktrace
 
       - name: Verify exported Room schemas are committed

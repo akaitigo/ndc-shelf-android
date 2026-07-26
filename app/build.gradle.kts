@@ -13,8 +13,8 @@ android {
         applicationId = "dev.ndcshelf.app"
         minSdk = 23
         targetSdk = 37
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = 4
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -48,6 +48,7 @@ android {
         // Robolectric reads migration fixtures from the debug target assets; release stays clean.
         getByName("debug").assets.directories.add("$projectDir/schemas")
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
+        getByName("test").resources.directories.add("$rootDir/fixtures")
     }
 
     packaging {
@@ -225,6 +226,29 @@ val verifyBackupPolicy by tasks.registering {
         check(transferIncludes.size == 1)
         assertRule(transferIncludes.single(), "database")
     }
+}
+
+val verifyV02ReleaseConfiguration by tasks.registering {
+    group = "verification"
+    description = "Verifies the installable v0.2 release candidate identity."
+
+    val configuredVersionCode = android.defaultConfig.versionCode
+    val configuredVersionName = android.defaultConfig.versionName
+    inputs.property("versionCode", configuredVersionCode)
+    inputs.property("versionName", configuredVersionName.orEmpty())
+
+    doLast {
+        check(configuredVersionCode == 4) {
+            "v0.2 release candidate must use versionCode 4, found $configuredVersionCode."
+        }
+        check(configuredVersionName == "0.2.0") {
+            "v0.2 release candidate must use versionName 0.2.0, found $configuredVersionName."
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyV02ReleaseConfiguration)
 }
 
 tasks.named("check") {
