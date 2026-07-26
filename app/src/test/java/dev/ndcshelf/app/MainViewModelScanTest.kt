@@ -86,17 +86,42 @@ class MainViewModelScanTest {
         assertEquals(1, repository.lookupCount)
     }
 
+    @Test
+    fun duplicateCanBeConfirmedOrAddedAsAnotherCopy() = runTest(dispatcher) {
+        val existing = book()
+        val repository = FakeRepository(
+            ArrayDeque(listOf(AddBookResult.Duplicate(existing, copyCount = 2))),
+        ).apply {
+            anotherCopyResult = AddBookResult.Added(existing.copy(copyId = "copy-3", copyLabel = "保存用"))
+        }
+        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
+
+        viewModel.submitIsbn(ISBN)
+
+        assertEquals(ScanUiState.Duplicate(ISBN, "題名", 2), viewModel.scanState.value)
+        viewModel.addDuplicateCopy(" 保存用 ")
+        assertEquals(" 保存用 ", repository.requestedCopyLabel)
+        assertEquals(ScanUiState.Added(ISBN, "題名"), viewModel.scanState.value)
+    }
+
     private class FakeRepository(
         private val results: ArrayDeque<AddBookResult>,
     ) : LibraryRepository {
         private val books = MutableStateFlow(emptyList<LibraryBook>())
         var lookupCount = 0
+        var anotherCopyResult: AddBookResult = AddBookResult.Failure(AddBookFailure.SAVE, ISBN)
+        var requestedCopyLabel: String? = null
 
         override fun observeLibrary(): Flow<List<LibraryBook>> = books
 
         override suspend fun addFromIsbn(rawIsbn: String): AddBookResult {
             lookupCount += 1
             return results.removeFirst()
+        }
+
+        override suspend fun addAnotherCopy(rawIsbn: String, copyLabel: String): AddBookResult {
+            requestedCopyLabel = copyLabel
+            return anotherCopyResult
         }
 
         override suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult =

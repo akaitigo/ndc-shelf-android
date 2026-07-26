@@ -73,6 +73,8 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.ui.components.BookCover
+import java.text.DateFormat
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +104,7 @@ fun LibraryScreen(
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
+    val editionCounts = remember(books) { books.groupingBy { it.editionId }.eachCount() }
 
     LaunchedEffect(bookEditState) {
         val saved = bookEditState as? BookEditUiState.Saved ?: return@LaunchedEffect
@@ -186,6 +189,7 @@ fun LibraryScreen(
                 ) { book ->
                     BookCard(
                         book = book,
+                        editionCopyCount = editionCounts[book.editionId] ?: 1,
                         onClick = {
                             onClearBookEditState()
                             onClearBookDeleteState()
@@ -200,6 +204,7 @@ fun LibraryScreen(
     selectedBook?.let { book ->
         EditBookSheet(
             book = book,
+            editionCopyCount = editionCounts[book.editionId] ?: 1,
             editState = bookEditState,
             deleteState = bookDeleteState,
             locations = locations,
@@ -274,6 +279,7 @@ private fun SummaryValue(value: String, label: String) {
 @Composable
 private fun BookCard(
     book: LibraryBook,
+    editionCopyCount: Int,
     onClick: () -> Unit,
 ) {
     Card(
@@ -311,6 +317,12 @@ private fun BookCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${book.copyLabel} ・ " +
+                        stringResource(R.string.book_copy_count, editionCopyCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -426,6 +438,7 @@ private fun EmptyLibrary(
 @Composable
 private fun EditBookSheet(
     book: LibraryBook,
+    editionCopyCount: Int,
     locations: LocationTree,
     allBooks: List<LibraryBook>,
     shelfMoveState: ShelfMoveUiState,
@@ -439,6 +452,7 @@ private fun EditBookSheet(
     onClearShelfMoveState: () -> Unit,
 ) {
     var title by rememberSaveable(book.copyId) { mutableStateOf(book.title) }
+    var copyLabel by rememberSaveable(book.copyId) { mutableStateOf(book.copyLabel) }
     var primaryAuthor by rememberSaveable(book.copyId) { mutableStateOf(book.primaryAuthor) }
     var publisher by rememberSaveable(book.copyId) { mutableStateOf(book.publisher.orEmpty()) }
     var publishedYear by rememberSaveable(book.copyId) {
@@ -488,6 +502,7 @@ private fun EditBookSheet(
 
     fun reset() {
         title = book.title
+        copyLabel = book.copyLabel
         primaryAuthor = book.primaryAuthor
         publisher = book.publisher.orEmpty()
         publishedYear = book.publishedYear?.toString().orEmpty()
@@ -519,6 +534,29 @@ private fun EditBookSheet(
                 text = stringResource(R.string.book_edit_isbn, book.isbn13),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(
+                    R.string.book_added_at,
+                    DateFormat.getDateTimeInstance().format(Date(book.addedAt)),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.book_copy_count, editionCopyCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            OutlinedTextField(
+                value = copyLabel,
+                onValueChange = { copyLabel = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_copy_label)) },
+                isError = error(BookEditField.COPY_LABEL) != null,
+                supportingText = error(BookEditField.COPY_LABEL)?.let { message -> { Text(message) } },
+                enabled = !busy,
+                singleLine = true,
             )
             OutlinedTextField(
                 value = title,
@@ -756,6 +794,7 @@ private fun EditBookSheet(
                             locationInsertAfterCopyId = insertAfterCopyId,
                             locationInsertAtStart = insertAtStart,
                             locationPositionSpecified = positionSpecified,
+                            copyLabel = copyLabel,
                         ),
                     )
                 },

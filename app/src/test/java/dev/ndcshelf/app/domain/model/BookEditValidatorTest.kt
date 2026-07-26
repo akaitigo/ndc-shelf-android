@@ -63,6 +63,17 @@ class BookEditValidatorTest {
         assertTrue(result.errors.any { it.field == BookEditField.PRIMARY_AUTHOR && it.reason.contains("NUL") })
     }
 
+    @Test
+    fun `copy label is trimmed and validated independently`() {
+        val valid = validator.validate(draft().copy(copyLabel = "  保存用  "))
+            as BookEditValidationResult.Valid
+        val blank = validator.validate(draft().copy(copyLabel = " "))
+            as BookEditValidationResult.Invalid
+
+        assertEquals("保存用", valid.edit.copyLabel)
+        assertTrue(blank.errors.any { it.field == BookEditField.COPY_LABEL })
+    }
+
     private fun draft(
         title: String = "本の題名",
         primaryAuthor: String = "著者",

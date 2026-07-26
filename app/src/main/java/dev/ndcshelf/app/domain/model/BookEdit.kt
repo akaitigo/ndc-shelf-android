@@ -16,6 +16,7 @@ data class BookEditDraft(
     val locationInsertAfterCopyId: String? = null,
     val locationInsertAtStart: Boolean = false,
     val locationPositionSpecified: Boolean = false,
+    val copyLabel: String = "所蔵本",
 )
 
 data class ValidatedBookEdit(
@@ -31,6 +32,7 @@ data class ValidatedBookEdit(
     val locationInsertAfterCopyId: String? = null,
     val locationInsertAtStart: Boolean = false,
     val locationPositionSpecified: Boolean = false,
+    val copyLabel: String,
 )
 
 data class BookEditValidationError(
@@ -46,6 +48,7 @@ enum class BookEditField {
     NDC_CODE,
     NDC_EDITION,
     LOCATION,
+    COPY_LABEL,
 }
 
 sealed interface BookEditValidationResult {
@@ -80,6 +83,12 @@ class BookEditValidator(
             MAX_LOCATION_LENGTH,
             errors,
         )
+        val copyLabel = required(
+            draft.copyLabel,
+            BookEditField.COPY_LABEL,
+            MAX_COPY_LABEL_LENGTH,
+            errors,
+        )
         val publishedYear = validatePublishedYear(draft.publishedYear, errors)
         if (ndcCode != null && !NDC_CODE_REGEX.matches(ndcCode)) {
             errors += BookEditValidationError(
@@ -103,6 +112,7 @@ class BookEditValidator(
                 locationInsertAfterCopyId = draft.locationInsertAfterCopyId,
                 locationInsertAtStart = draft.locationInsertAtStart,
                 locationPositionSpecified = draft.locationPositionSpecified,
+                copyLabel = requireNotNull(copyLabel),
             ),
         )
     }
@@ -175,6 +185,7 @@ class BookEditValidator(
     private companion object {
         const val MAX_TEXT_LENGTH = 2_000
         const val MAX_LOCATION_LENGTH = 500
+        const val MAX_COPY_LABEL_LENGTH = 100
         const val NDC_MAX_LENGTH = 32
         const val MIN_PUBLISHED_YEAR = 1
         val NDC_CODE_REGEX = Regex("""\d{3}(?:\.\d+)?""")

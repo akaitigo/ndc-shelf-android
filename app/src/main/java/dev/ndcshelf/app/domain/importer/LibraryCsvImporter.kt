@@ -102,6 +102,7 @@ class LibraryCsvImporter(
                     location = record.value("location"),
                     readingStatus = record.value("readingStatus"),
                     addedAt = record.longValue("addedAt", row, headerErrors.errors),
+                    copyLabel = record.value("copyLabel"),
                 )
                 if (headerErrors.errors.size >= MAX_ERRORS) break
             }

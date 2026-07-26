@@ -19,13 +19,14 @@ class LibraryExporterTest {
             exportedAt = 1_722_345_678_901L,
         ).toString(StandardCharsets.UTF_8)
 
-        assertTrue(output.contains("\"schemaVersion\": 1"))
+        assertTrue(output.contains("\"schemaVersion\": 2"))
         assertTrue(output.contains("\"exportedAt\": 1722345678901"))
         assertTrue(output.contains("\"bookCount\": 1"))
         assertTrue(output.contains("\"title\": \"引用符\\\"と改行\\nを含む本\""))
         assertTrue(output.contains("\"publisher\": null"))
         assertTrue(output.contains("\"classificationSource\": \"NDL\""))
         assertTrue(output.contains("\"readingStatus\": \"READING\""))
+        assertTrue(output.contains("\"copyLabel\": \"所蔵本\""))
         assertFalse(output.startsWith("\uFEFF"))
     }
 

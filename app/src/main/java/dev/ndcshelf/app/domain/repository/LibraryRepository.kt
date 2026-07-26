@@ -15,6 +15,9 @@ interface LibraryRepository {
 
     suspend fun addFromIsbn(rawIsbn: String): AddBookResult
 
+    suspend fun addAnotherCopy(rawIsbn: String, copyLabel: String): AddBookResult =
+        AddBookResult.Failure(AddBookFailure.SAVE)
+
     suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult
 
     suspend fun moveBookWithinTier(
@@ -77,7 +80,7 @@ sealed interface UpdateBookResult {
 sealed interface AddBookResult {
     data class Added(val book: LibraryBook) : AddBookResult
 
-    data class Duplicate(val book: LibraryBook) : AddBookResult
+    data class Duplicate(val book: LibraryBook, val copyCount: Int = 1) : AddBookResult
 
     data class InvalidIsbn(val rawValue: String) : AddBookResult
 

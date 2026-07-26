@@ -92,7 +92,7 @@ class MainViewModelImportTest {
         val repository = FakeLibraryRepository(emptyList())
         val viewModel = viewModel(repository)
         val source = export(sampleBook()).toString(Charsets.UTF_8)
-            .replace("\"schemaVersion\": 1", "\"schemaVersion\": 999")
+            .replace("\"schemaVersion\": 2", "\"schemaVersion\": 999")
             .toByteArray()
 
         viewModel.loadJsonImport(ByteArrayInputStream(source))
