@@ -7,6 +7,8 @@ import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportPreviewResult
 import dev.ndcshelf.app.domain.importer.ImportValidationError
+import dev.ndcshelf.app.domain.importer.LibraryCsvImporter
+import dev.ndcshelf.app.domain.importer.LibraryCsvParseResult
 import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.importer.LibraryJsonImporter
@@ -47,8 +49,10 @@ class MainViewModel(
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
+    private val csvImporter = LibraryCsvImporter()
     private var importBatch: LibraryImportBatch? = null
     private var importPreview: LibraryImportPreview? = null
+    private var importWarnings: List<ImportValidationError> = emptyList()
     private var importJob: Job? = null
 
     fun submitIsbn(rawIsbn: String) {
@@ -129,6 +133,7 @@ class MainViewModel(
 
                     is LibraryJsonParseResult.Valid -> {
                         importBatch = parsed.batch
+                        importWarnings = emptyList()
                         previewImport(parsed.batch, ImportConflictPolicy.SKIP_EXISTING)
                     }
                 }
@@ -136,6 +141,37 @@ class MainViewModel(
                 throw cancellation
             } catch (_: Exception) {
                 _importState.value = LibraryImportUiState.Error(ImportFailure.JSON_READ)
+            }
+        }
+    }
+
+    fun loadCsvImport(input: InputStream) {
+        importJob?.cancel()
+        importBatch = null
+        importPreview = null
+        importWarnings = emptyList()
+        importJob = viewModelScope.launch {
+            _importState.value = LibraryImportUiState.Loading
+            try {
+                when (
+                    val parsed = withContext(importIoDispatcher) {
+                        input.use { stream -> csvImporter.parse(stream) }
+                    }
+                ) {
+                    is LibraryCsvParseResult.Invalid -> {
+                        _importState.value = LibraryImportUiState.Invalid(parsed.errors)
+                    }
+
+                    is LibraryCsvParseResult.Valid -> {
+                        importBatch = parsed.batch
+                        importWarnings = parsed.warnings
+                        previewImport(parsed.batch, ImportConflictPolicy.SKIP_EXISTING)
+                    }
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                _importState.value = LibraryImportUiState.Error(ImportFailure.CSV_READ)
             }
         }
     }
@@ -228,6 +264,7 @@ class MainViewModel(
                     addedCount = result.preview.additions.size,
                     updatedCount = result.preview.updates.size,
                     skippedCount = result.preview.skippedCount,
+                    warnings = importWarnings,
                     conflictPolicy = result.preview.conflictPolicy,
                     staleRecalculated = staleRecalculated,
                 )
@@ -238,6 +275,7 @@ class MainViewModel(
     private fun clearPreparedImport() {
         importBatch = null
         importPreview = null
+        importWarnings = emptyList()
     }
 
     companion object {
@@ -285,6 +323,7 @@ sealed interface LibraryImportUiState {
         val addedCount: Int,
         val updatedCount: Int,
         val skippedCount: Int,
+        val warnings: List<ImportValidationError> = emptyList(),
         val conflictPolicy: ImportConflictPolicy,
         val staleRecalculated: Boolean = false,
     ) : LibraryImportUiState {
@@ -302,6 +341,7 @@ sealed interface LibraryImportUiState {
 
 enum class ImportFailure {
     JSON_READ,
+    CSV_READ,
     PREVIEW,
     APPLY,
     STALE_RESELECT,
