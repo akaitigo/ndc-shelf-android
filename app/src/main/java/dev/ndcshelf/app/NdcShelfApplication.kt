@@ -19,7 +19,7 @@ class AppContainer(application: Application) {
         application,
         AppDatabase::class.java,
         AppDatabase.DATABASE_NAME,
-    ).build()
+    ).addMigrations(*AppDatabase.MIGRATIONS.toTypedArray()).build()
 
     val libraryRepository: LibraryRepository = DefaultLibraryRepository(
         database = database,

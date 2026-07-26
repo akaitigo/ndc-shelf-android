@@ -6,7 +6,7 @@ import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.LibraryBookRow
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
-import dev.ndcshelf.app.data.remote.NdlBookMetadataService
+import dev.ndcshelf.app.data.remote.BookMetadataService
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportPreviewResult
@@ -34,7 +34,9 @@ import java.util.UUID
 
 class DefaultLibraryRepository(
     private val database: AppDatabase,
-    private val metadataService: NdlBookMetadataService,
+    private val metadataService: BookMetadataService,
+    private val idFactory: () -> String = { UUID.randomUUID().toString() },
+    private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : LibraryRepository {
     private val dao = database.libraryDao()
     private val bookEditValidator = BookEditValidator()
@@ -66,48 +68,54 @@ class DefaultLibraryRepository(
             )
         } ?: return AddBookResult.NotFound(isbn13)
 
-        val workId = UUID.randomUUID().toString()
-        val editionId = UUID.randomUUID().toString()
-        val copyId = UUID.randomUUID().toString()
+        val workId = idFactory()
+        val editionId = idFactory()
+        val copyId = idFactory()
         val author = metadata.authors.joinToString("・").ifBlank { "著者不明" }
         val source = if (metadata.ndcCode == null) {
             ClassificationSource.UNKNOWN
         } else {
             ClassificationSource.NDL
         }
-        val addedAt = System.currentTimeMillis()
+        val addedAt = nowMillis()
 
-        database.withTransaction {
-            dao.insertWork(
-                BookWorkEntity(
-                    id = workId,
-                    title = metadata.title,
-                    primaryAuthor = author,
-                ),
-            )
-            dao.insertEdition(
-                BookEditionEntity(
-                    id = editionId,
-                    workId = workId,
-                    isbn13 = isbn13,
-                    publisher = metadata.publisher,
-                    publishedYear = metadata.publishedYear,
-                    coverUrl = metadata.coverUrl,
-                    ndcCode = metadata.ndcCode,
-                    ndcEdition = metadata.ndcEdition,
-                    classificationSource = source.name,
-                ),
-            )
-            dao.insertCopy(
-                OwnedCopyEntity(
-                    id = copyId,
-                    editionId = editionId,
-                    mediaType = MediaType.PHYSICAL.name,
-                    location = "未設定",
-                    readingStatus = ReadingStatus.UNREAD.name,
-                    addedAt = addedAt,
-                ),
-            )
+        try {
+            database.withTransaction {
+                dao.insertWork(
+                    BookWorkEntity(
+                        id = workId,
+                        title = metadata.title,
+                        primaryAuthor = author,
+                    ),
+                )
+                dao.insertEdition(
+                    BookEditionEntity(
+                        id = editionId,
+                        workId = workId,
+                        isbn13 = isbn13,
+                        publisher = metadata.publisher,
+                        publishedYear = metadata.publishedYear,
+                        coverUrl = metadata.coverUrl,
+                        ndcCode = metadata.ndcCode,
+                        ndcEdition = metadata.ndcEdition,
+                        classificationSource = source.name,
+                    ),
+                )
+                dao.insertCopy(
+                    OwnedCopyEntity(
+                        id = copyId,
+                        editionId = editionId,
+                        mediaType = MediaType.PHYSICAL.name,
+                        location = "未設定",
+                        readingStatus = ReadingStatus.UNREAD.name,
+                        addedAt = addedAt,
+                    ),
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            return AddBookResult.Failure("蔵書を端末へ保存できませんでした")
         }
 
         return AddBookResult.Added(

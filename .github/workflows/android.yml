@@ -34,3 +34,6 @@ jobs:
           testDebugUnitTest
           lintDebug
           --stacktrace
+
+      - name: Verify exported Room schemas are committed
+        run: git diff --exit-code -- app/schemas
