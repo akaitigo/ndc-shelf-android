@@ -6,8 +6,6 @@ import dev.ndcshelf.app.domain.importer.ImportPreviewResult
 import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.BookEditDraft
-import dev.ndcshelf.app.domain.model.BookEditField
-import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
@@ -32,7 +30,7 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class MainViewModelBookEditTest {
+class MainViewModelBookDeleteTest {
     private val dispatcher = UnconfinedTestDispatcher()
 
     @Before
@@ -46,59 +44,47 @@ class MainViewModelBookEditTest {
     }
 
     @Test
-    fun `validation errors stay associated with edited copy`() = runTest(dispatcher) {
-        val repository = FakeRepository().apply {
-            updateResult = UpdateBookResult.Invalid(
-                listOf(BookEditValidationError(BookEditField.TITLE, "必須項目です")),
-            )
-        }
+    fun `deleted copy snapshot can be restored`() = runTest(dispatcher) {
+        val book = sampleBook()
+        val repository = FakeRepository(
+            deleteResult = DeleteBookResult.Deleted(book),
+            restoreResult = RestoreDeletedBookResult.Restored,
+        )
         val viewModel = MainViewModel(repository, dispatcher, dispatcher)
 
-        viewModel.saveBookEdit("copy-1", draft())
+        viewModel.deleteBook(book.copyId)
+        assertEquals(BookDeleteUiState.Deleted(book), viewModel.bookDeleteState.value)
 
-        val state = viewModel.bookEditState.value as BookEditUiState.Invalid
-        assertEquals("copy-1", state.copyId)
-        assertEquals(BookEditField.TITLE, state.errors.single().field)
+        viewModel.undoLastBookDeletion()
+
+        assertEquals(BookDeleteUiState.Restored, viewModel.bookDeleteState.value)
+        assertEquals(book, repository.restoredBook)
     }
 
     @Test
-    fun `saved edit can be undone with guarded snapshots`() = runTest(dispatcher) {
-        val previous = sampleBook(title = "旧題")
-        val current = previous.copy(title = "新題", classificationSource = ClassificationSource.MANUAL)
-        val repository = FakeRepository().apply {
-            updateResult = UpdateBookResult.Updated(previous, current)
-            restoreResult = true
-        }
+    fun `restore conflict becomes a visible failure state`() = runTest(dispatcher) {
+        val book = sampleBook()
+        val repository = FakeRepository(
+            deleteResult = DeleteBookResult.Deleted(book),
+            restoreResult = RestoreDeletedBookResult.Conflict,
+        )
         val viewModel = MainViewModel(repository, dispatcher, dispatcher)
 
-        viewModel.saveBookEdit(previous.copyId, draft(title = "新題"))
-        assertTrue(viewModel.bookEditState.value is BookEditUiState.Saved)
+        viewModel.deleteBook(book.copyId)
+        viewModel.undoLastBookDeletion()
 
-        viewModel.undoLastBookEdit()
-
-        assertEquals(BookEditUiState.Undone, viewModel.bookEditState.value)
-        assertEquals(previous to current, repository.restoredSnapshots)
+        val error = viewModel.bookDeleteState.value as BookDeleteUiState.Error
+        assertEquals(BookDeleteFailure.RESTORE_CONFLICT, error.failure)
     }
 
-    private fun draft(title: String = "本の題名") = BookEditDraft(
-        title = title,
-        primaryAuthor = "著者",
-        publisher = "出版社",
-        publishedYear = "2024",
-        ndcCode = "014.45",
-        ndcEdition = "NDC10",
-        location = "本棚A",
-        readingStatus = ReadingStatus.READING,
-    )
-
-    private fun sampleBook(title: String) = LibraryBook(
+    private fun sampleBook() = LibraryBook(
         copyId = "copy-1",
         workId = "work-1",
         editionId = "edition-1",
-        title = title,
+        title = "本の題名",
         primaryAuthor = "著者",
         isbn13 = "9784820418078",
-        publisher = "出版社",
+        publisher = null,
         publishedYear = 2024,
         coverUrl = null,
         ndcCode = "014.45",
@@ -106,35 +92,35 @@ class MainViewModelBookEditTest {
         classificationSource = ClassificationSource.NDL,
         mediaType = MediaType.PHYSICAL,
         location = "本棚A",
-        readingStatus = ReadingStatus.READING,
+        readingStatus = ReadingStatus.UNREAD,
         addedAt = 1_700_000_000_000L,
     )
 
-    private class FakeRepository : LibraryRepository {
+    private class FakeRepository(
+        private val deleteResult: DeleteBookResult,
+        private val restoreResult: RestoreDeletedBookResult,
+    ) : LibraryRepository {
         private val books = MutableStateFlow(emptyList<LibraryBook>())
-        lateinit var updateResult: UpdateBookResult
-        var restoreResult = false
-        var restoredSnapshots: Pair<LibraryBook, LibraryBook>? = null
+        var restoredBook: LibraryBook? = null
 
         override fun observeLibrary(): Flow<List<LibraryBook>> = books
 
         override suspend fun addFromIsbn(rawIsbn: String): AddBookResult = error("Not used")
 
         override suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult =
-            updateResult
+            error("Not used")
 
         override suspend fun restoreBook(
             previous: LibraryBook,
             expectedCurrent: LibraryBook,
-        ): Boolean {
-            restoredSnapshots = previous to expectedCurrent
+        ): Boolean = error("Not used")
+
+        override suspend fun deleteBook(copyId: String): DeleteBookResult = deleteResult
+
+        override suspend fun restoreDeletedBook(book: LibraryBook): RestoreDeletedBookResult {
+            restoredBook = book
             return restoreResult
         }
-
-        override suspend fun deleteBook(copyId: String): DeleteBookResult = error("Not used")
-
-        override suspend fun restoreDeletedBook(book: LibraryBook): RestoreDeletedBookResult =
-            error("Not used")
 
         override suspend fun previewImport(
             batch: LibraryImportBatch,

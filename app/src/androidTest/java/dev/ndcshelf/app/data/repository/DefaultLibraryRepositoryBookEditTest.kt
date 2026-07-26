@@ -13,6 +13,8 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.DeleteBookResult
+import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -114,6 +116,90 @@ class DefaultLibraryRepositoryBookEditTest {
 
         assertTrue(result is UpdateBookResult.Invalid)
         assertEquals(before, database.libraryDao().findOwnedByCopyId("copy-1")?.toDomain())
+    }
+
+    @Test
+    fun deletingOneCopyKeepsSharedEditionAndUndoRestoresOnlyThatCopy() = runBlocking {
+        database.libraryDao().insertCopy(
+            OwnedCopyEntity(
+                id = "copy-2",
+                editionId = "edition-1",
+                mediaType = "PHYSICAL",
+                location = "別の棚",
+                readingStatus = ReadingStatus.UNREAD.name,
+                addedAt = 1_700_000_000_001L,
+            ),
+        )
+
+        val deleted = repository.deleteBook("copy-1") as DeleteBookResult.Deleted
+
+        assertEquals(null, database.libraryDao().findCopyById("copy-1"))
+        assertTrue(database.libraryDao().findCopyById("copy-2") != null)
+        assertTrue(database.libraryDao().findEditionById("edition-1") != null)
+        assertTrue(database.libraryDao().findWorkById("work-1") != null)
+
+        assertEquals(
+            RestoreDeletedBookResult.Restored,
+            repository.restoreDeletedBook(deleted.book),
+        )
+        assertEquals(deleted.book, database.libraryDao().findOwnedByCopyId("copy-1")?.toDomain())
+        assertTrue(database.libraryDao().findCopyById("copy-2") != null)
+    }
+
+    @Test
+    fun deletingLastCopyCleansOrphansAndUndoRecreatesThem() = runBlocking {
+        val deleted = repository.deleteBook("copy-1") as DeleteBookResult.Deleted
+
+        assertEquals(null, database.libraryDao().findCopyById("copy-1"))
+        assertEquals(null, database.libraryDao().findEditionById("edition-1"))
+        assertEquals(null, database.libraryDao().findWorkById("work-1"))
+
+        assertEquals(
+            RestoreDeletedBookResult.Restored,
+            repository.restoreDeletedBook(deleted.book),
+        )
+        assertEquals(deleted.book, database.libraryDao().findOwnedByCopyId("copy-1")?.toDomain())
+    }
+
+    @Test
+    fun cascadeRemovalCanBeRestoredFromTheDeletedSnapshot() = runBlocking {
+        val snapshot = requireNotNull(database.libraryDao().findOwnedByCopyId("copy-1")).toDomain()
+
+        database.libraryDao().deleteWorkById("work-1")
+
+        assertEquals(null, database.libraryDao().findEditionById("edition-1"))
+        assertEquals(null, database.libraryDao().findCopyById("copy-1"))
+        assertEquals(
+            RestoreDeletedBookResult.Restored,
+            repository.restoreDeletedBook(snapshot),
+        )
+        assertEquals(snapshot, database.libraryDao().findOwnedByCopyId("copy-1")?.toDomain())
+    }
+
+    @Test
+    fun undoRefusesToOverwriteAReusedIsbn() = runBlocking {
+        val deleted = repository.deleteBook("copy-1") as DeleteBookResult.Deleted
+        database.libraryDao().insertWork(BookWorkEntity("work-2", "別の本", "別の著者"))
+        database.libraryDao().insertEdition(
+            BookEditionEntity(
+                id = "edition-2",
+                workId = "work-2",
+                isbn13 = ISBN,
+                publisher = null,
+                publishedYear = null,
+                coverUrl = null,
+                ndcCode = null,
+                ndcEdition = null,
+                classificationSource = ClassificationSource.UNKNOWN.name,
+            ),
+        )
+
+        assertEquals(
+            RestoreDeletedBookResult.Conflict,
+            repository.restoreDeletedBook(deleted.book),
+        )
+        assertEquals(null, database.libraryDao().findCopyById("copy-1"))
+        assertEquals("edition-2", database.libraryDao().findEditionByIsbn(ISBN)?.id)
     }
 
     private fun editedDraft() = BookEditDraft(

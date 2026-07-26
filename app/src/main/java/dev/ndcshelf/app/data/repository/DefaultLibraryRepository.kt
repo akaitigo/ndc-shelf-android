@@ -22,7 +22,9 @@ import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.scanner.Isbn
 import kotlinx.coroutines.CancellationException
@@ -224,6 +226,56 @@ class DefaultLibraryRepository(
         }
     }
 
+    override suspend fun deleteBook(copyId: String): DeleteBookResult = try {
+        database.withTransaction {
+            val book = dao.findOwnedByCopyId(copyId)?.toDomain()
+                ?: return@withTransaction DeleteBookResult.NotFound
+            check(dao.deleteCopyById(copyId) == 1)
+            if (dao.countCopiesForEdition(book.editionId) == 0) {
+                check(dao.deleteEditionById(book.editionId) == 1)
+            }
+            if (dao.countEditionsForWork(book.workId) == 0) {
+                check(dao.deleteWorkById(book.workId) == 1)
+            }
+            DeleteBookResult.Deleted(book)
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        DeleteBookResult.Failure
+    }
+
+    override suspend fun restoreDeletedBook(book: LibraryBook): RestoreDeletedBookResult = try {
+        database.withTransaction {
+            val expectedWork = book.toWorkEntity()
+            val expectedEdition = book.toEditionEntity()
+            val expectedCopy = book.toCopyEntity()
+            if (dao.findCopyById(book.copyId) != null) {
+                return@withTransaction RestoreDeletedBookResult.Conflict
+            }
+            val existingWork = dao.findWorkById(book.workId)
+            if (existingWork != null && existingWork != expectedWork) {
+                return@withTransaction RestoreDeletedBookResult.Conflict
+            }
+            val existingEdition = dao.findEditionById(book.editionId)
+            val isbnEdition = dao.findEditionByIsbn(book.isbn13)
+            if (existingEdition != null && existingEdition != expectedEdition) {
+                return@withTransaction RestoreDeletedBookResult.Conflict
+            }
+            if (isbnEdition != null && isbnEdition.id != book.editionId) {
+                return@withTransaction RestoreDeletedBookResult.Conflict
+            }
+            if (existingWork == null) dao.insertWork(expectedWork)
+            if (existingEdition == null) dao.insertEdition(expectedEdition)
+            dao.insertCopy(expectedCopy)
+            RestoreDeletedBookResult.Restored
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        RestoreDeletedBookResult.Failure
+    }
+
     override suspend fun previewImport(
         batch: LibraryImportBatch,
         conflictPolicy: ImportConflictPolicy,
@@ -238,43 +290,41 @@ class DefaultLibraryRepository(
 
     private suspend fun writeImportedBooks(books: List<LibraryBook>) {
         dao.upsertWorks(
-            books.distinctBy(LibraryBook::workId).map { book ->
-                BookWorkEntity(
-                    id = book.workId,
-                    title = book.title,
-                    primaryAuthor = book.primaryAuthor,
-                )
-            },
+            books.distinctBy(LibraryBook::workId).map(LibraryBook::toWorkEntity),
         )
         dao.upsertEditions(
-            books.distinctBy(LibraryBook::editionId).map { book ->
-                BookEditionEntity(
-                    id = book.editionId,
-                    workId = book.workId,
-                    isbn13 = book.isbn13,
-                    publisher = book.publisher,
-                    publishedYear = book.publishedYear,
-                    coverUrl = book.coverUrl,
-                    ndcCode = book.ndcCode,
-                    ndcEdition = book.ndcEdition,
-                    classificationSource = book.classificationSource.name,
-                )
-            },
+            books.distinctBy(LibraryBook::editionId).map(LibraryBook::toEditionEntity),
         )
-        dao.upsertCopies(
-            books.map { book ->
-                OwnedCopyEntity(
-                    id = book.copyId,
-                    editionId = book.editionId,
-                    mediaType = book.mediaType.name,
-                    location = book.location,
-                    readingStatus = book.readingStatus.name,
-                    addedAt = book.addedAt,
-                )
-            },
-        )
+        dao.upsertCopies(books.map(LibraryBook::toCopyEntity))
     }
 }
+
+private fun LibraryBook.toWorkEntity() = BookWorkEntity(
+    id = workId,
+    title = title,
+    primaryAuthor = primaryAuthor,
+)
+
+private fun LibraryBook.toEditionEntity() = BookEditionEntity(
+    id = editionId,
+    workId = workId,
+    isbn13 = isbn13,
+    publisher = publisher,
+    publishedYear = publishedYear,
+    coverUrl = coverUrl,
+    ndcCode = ndcCode,
+    ndcEdition = ndcEdition,
+    classificationSource = classificationSource.name,
+)
+
+private fun LibraryBook.toCopyEntity() = OwnedCopyEntity(
+    id = copyId,
+    editionId = editionId,
+    mediaType = mediaType.name,
+    location = location,
+    readingStatus = readingStatus.name,
+    addedAt = addedAt,
+)
 
 internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     copyId = copyId,

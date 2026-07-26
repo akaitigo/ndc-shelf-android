@@ -17,7 +17,9 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -50,6 +52,8 @@ class MainViewModel(
     val importState: StateFlow<LibraryImportUiState> = _importState.asStateFlow()
     private val _bookEditState = MutableStateFlow<BookEditUiState>(BookEditUiState.Idle)
     val bookEditState: StateFlow<BookEditUiState> = _bookEditState.asStateFlow()
+    private val _bookDeleteState = MutableStateFlow<BookDeleteUiState>(BookDeleteUiState.Idle)
+    val bookDeleteState: StateFlow<BookDeleteUiState> = _bookDeleteState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
@@ -144,6 +148,46 @@ class MainViewModel(
             _bookEditState.value !is BookEditUiState.Undoing
         ) {
             _bookEditState.value = BookEditUiState.Idle
+        }
+    }
+
+    fun deleteBook(copyId: String) {
+        if (_bookDeleteState.value is BookDeleteUiState.Deleting ||
+            _bookDeleteState.value is BookDeleteUiState.Restoring
+        ) {
+            return
+        }
+        viewModelScope.launch {
+            _bookDeleteState.value = BookDeleteUiState.Deleting(copyId)
+            _bookDeleteState.value = when (val result = repository.deleteBook(copyId)) {
+                is DeleteBookResult.Deleted -> BookDeleteUiState.Deleted(result.book)
+                DeleteBookResult.NotFound -> BookDeleteUiState.Error(BookDeleteFailure.NOT_FOUND)
+                DeleteBookResult.Failure -> BookDeleteUiState.Error(BookDeleteFailure.DELETE)
+            }
+        }
+    }
+
+    fun undoLastBookDeletion() {
+        val deleted = _bookDeleteState.value as? BookDeleteUiState.Deleted ?: return
+        viewModelScope.launch {
+            _bookDeleteState.value = BookDeleteUiState.Restoring
+            _bookDeleteState.value = when (repository.restoreDeletedBook(deleted.book)) {
+                RestoreDeletedBookResult.Restored -> BookDeleteUiState.Restored
+                RestoreDeletedBookResult.Conflict -> {
+                    BookDeleteUiState.Error(BookDeleteFailure.RESTORE_CONFLICT)
+                }
+                RestoreDeletedBookResult.Failure -> {
+                    BookDeleteUiState.Error(BookDeleteFailure.RESTORE)
+                }
+            }
+        }
+    }
+
+    fun clearBookDeleteState() {
+        if (_bookDeleteState.value !is BookDeleteUiState.Deleting &&
+            _bookDeleteState.value !is BookDeleteUiState.Restoring
+        ) {
+            _bookDeleteState.value = BookDeleteUiState.Idle
         }
     }
 
@@ -405,4 +449,25 @@ enum class BookEditFailure {
     NOT_FOUND,
     SAVE,
     UNDO,
+}
+
+sealed interface BookDeleteUiState {
+    data object Idle : BookDeleteUiState
+
+    data class Deleting(val copyId: String) : BookDeleteUiState
+
+    data class Deleted(val book: LibraryBook) : BookDeleteUiState
+
+    data object Restoring : BookDeleteUiState
+
+    data object Restored : BookDeleteUiState
+
+    data class Error(val failure: BookDeleteFailure) : BookDeleteUiState
+}
+
+enum class BookDeleteFailure {
+    NOT_FOUND,
+    DELETE,
+    RESTORE_CONFLICT,
+    RESTORE,
 }

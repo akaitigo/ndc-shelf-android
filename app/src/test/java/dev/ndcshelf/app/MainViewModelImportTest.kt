@@ -14,7 +14,9 @@ import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -181,6 +183,11 @@ class MainViewModelImportTest {
             previous: LibraryBook,
             expectedCurrent: LibraryBook,
         ): Boolean = error("Not used")
+
+        override suspend fun deleteBook(copyId: String): DeleteBookResult = error("Not used")
+
+        override suspend fun restoreDeletedBook(book: LibraryBook): RestoreDeletedBookResult =
+            error("Not used")
 
         override suspend fun previewImport(
             batch: LibraryImportBatch,

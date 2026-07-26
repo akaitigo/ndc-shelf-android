@@ -19,12 +19,32 @@ interface LibraryRepository {
 
     suspend fun restoreBook(previous: LibraryBook, expectedCurrent: LibraryBook): Boolean
 
+    suspend fun deleteBook(copyId: String): DeleteBookResult
+
+    suspend fun restoreDeletedBook(book: LibraryBook): RestoreDeletedBookResult
+
     suspend fun previewImport(
         batch: LibraryImportBatch,
         conflictPolicy: ImportConflictPolicy,
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+sealed interface DeleteBookResult {
+    data class Deleted(val book: LibraryBook) : DeleteBookResult
+
+    data object NotFound : DeleteBookResult
+
+    data object Failure : DeleteBookResult
+}
+
+sealed interface RestoreDeletedBookResult {
+    data object Restored : RestoreDeletedBookResult
+
+    data object Conflict : RestoreDeletedBookResult
+
+    data object Failure : RestoreDeletedBookResult
 }
 
 sealed interface UpdateBookResult {

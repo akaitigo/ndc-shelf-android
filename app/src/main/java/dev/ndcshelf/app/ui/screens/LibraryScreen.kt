@@ -20,11 +20,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -61,8 +63,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.ndcshelf.app.ImportFailure
+import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
+import dev.ndcshelf.app.ImportFailure
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
@@ -79,11 +82,14 @@ import dev.ndcshelf.app.ui.components.BookCover
 fun LibraryScreen(
     books: List<LibraryBook>,
     onSaveBook: (String, BookEditDraft) -> Unit,
+    onDeleteBook: (String) -> Unit,
     onExport: (LibraryExportFormat) -> Unit,
     onImport: (LibraryExportFormat) -> Unit,
     importState: LibraryImportUiState,
     bookEditState: BookEditUiState,
     onClearBookEditState: () -> Unit,
+    bookDeleteState: BookDeleteUiState,
+    onClearBookDeleteState: () -> Unit,
     onSelectImportPolicy: (ImportConflictPolicy) -> Unit,
     onConfirmImport: () -> Unit,
     onDismissImport: () -> Unit,
@@ -100,6 +106,10 @@ fun LibraryScreen(
     LaunchedEffect(bookEditState) {
         val saved = bookEditState as? BookEditUiState.Saved ?: return@LaunchedEffect
         if (selectedBook?.copyId == saved.current.copyId) selectedBook = null
+    }
+    LaunchedEffect(bookDeleteState) {
+        val deleted = bookDeleteState as? BookDeleteUiState.Deleted ?: return@LaunchedEffect
+        if (selectedBook?.copyId == deleted.book.copyId) selectedBook = null
     }
 
     Column(
@@ -196,6 +206,7 @@ fun LibraryScreen(
                         book = book,
                         onClick = {
                             onClearBookEditState()
+                            onClearBookDeleteState()
                             selectedBook = book
                         },
                     )
@@ -208,12 +219,15 @@ fun LibraryScreen(
         EditBookSheet(
             book = book,
             editState = bookEditState,
+            deleteState = bookDeleteState,
             onDismiss = {
                 onClearBookEditState()
+                onClearBookDeleteState()
                 selectedBook = null
             },
             onClearErrors = onClearBookEditState,
             onSave = { draft -> onSaveBook(book.copyId, draft) },
+            onDelete = { onDeleteBook(book.copyId) },
         )
     }
 
@@ -690,9 +704,11 @@ private fun EmptyLibrary(
 private fun EditBookSheet(
     book: LibraryBook,
     editState: BookEditUiState,
+    deleteState: BookDeleteUiState,
     onDismiss: () -> Unit,
     onClearErrors: () -> Unit,
     onSave: (BookEditDraft) -> Unit,
+    onDelete: () -> Unit,
 ) {
     var title by rememberSaveable(book.copyId) { mutableStateOf(book.title) }
     var primaryAuthor by rememberSaveable(book.copyId) { mutableStateOf(book.primaryAuthor) }
@@ -704,7 +720,11 @@ private fun EditBookSheet(
     var ndcEdition by rememberSaveable(book.copyId) { mutableStateOf(book.ndcEdition.orEmpty()) }
     var location by rememberSaveable(book.copyId) { mutableStateOf(book.location) }
     var status by remember(book.copyId) { mutableStateOf(book.readingStatus) }
+    var showDeleteConfirmation by rememberSaveable(book.copyId) { mutableStateOf(false) }
     val saving = editState is BookEditUiState.Saving && editState.copyId == book.copyId
+    val deleting = deleteState is BookDeleteUiState.Deleting &&
+        deleteState.copyId == book.copyId
+    val busy = saving || deleting
     val errors = (editState as? BookEditUiState.Invalid)
         ?.takeIf { it.copyId == book.copyId }
         ?.errors
@@ -724,7 +744,7 @@ private fun EditBookSheet(
         onClearErrors()
     }
 
-    ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() }) {
+    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -749,7 +769,7 @@ private fun EditBookSheet(
                 label = { Text(stringResource(R.string.book_edit_book_title)) },
                 isError = error(BookEditField.TITLE) != null,
                 supportingText = error(BookEditField.TITLE)?.let { message -> { Text(message) } },
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             OutlinedTextField(
@@ -761,7 +781,7 @@ private fun EditBookSheet(
                 supportingText = error(BookEditField.PRIMARY_AUTHOR)?.let { message ->
                     { Text(message) }
                 },
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             OutlinedTextField(
@@ -771,7 +791,7 @@ private fun EditBookSheet(
                 label = { Text(stringResource(R.string.book_edit_publisher)) },
                 isError = error(BookEditField.PUBLISHER) != null,
                 supportingText = error(BookEditField.PUBLISHER)?.let { message -> { Text(message) } },
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             OutlinedTextField(
@@ -784,7 +804,7 @@ private fun EditBookSheet(
                     { Text(message) }
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             OutlinedTextField(
@@ -794,7 +814,7 @@ private fun EditBookSheet(
                 label = { Text(stringResource(R.string.book_edit_ndc_code)) },
                 isError = error(BookEditField.NDC_CODE) != null,
                 supportingText = error(BookEditField.NDC_CODE)?.let { message -> { Text(message) } },
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             OutlinedTextField(
@@ -806,7 +826,7 @@ private fun EditBookSheet(
                 supportingText = error(BookEditField.NDC_EDITION)?.let { message ->
                     { Text(message) }
                 },
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             Text(
@@ -826,7 +846,7 @@ private fun EditBookSheet(
                 leadingIcon = { Icon(Icons.Rounded.LocationOn, contentDescription = null) },
                 isError = error(BookEditField.LOCATION) != null,
                 supportingText = error(BookEditField.LOCATION)?.let { message -> { Text(message) } },
-                enabled = !saving,
+                enabled = !busy,
                 singleLine = true,
             )
             Text(
@@ -842,13 +862,13 @@ private fun EditBookSheet(
                         selected = status == candidate,
                         onClick = { status = candidate },
                         label = { Text(candidate.label) },
-                        enabled = !saving,
+                        enabled = !busy,
                     )
                 }
             }
             TextButton(
                 onClick = ::reset,
-                enabled = !saving,
+                enabled = !busy,
                 modifier = Modifier.align(Alignment.End),
             ) {
                 Text(stringResource(R.string.book_edit_reset))
@@ -869,14 +889,73 @@ private fun EditBookSheet(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !saving,
+                enabled = !busy,
             ) {
                 if (saving) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
                 } else {
                     Text(stringResource(R.string.book_edit_save))
                 }
             }
+            Button(
+                onClick = { showDeleteConfirmation = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (deleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onError,
+                    )
+                } else {
+                    Icon(Icons.Rounded.Delete, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.book_delete_action))
+                }
+            }
         }
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            icon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
+            title = { Text(stringResource(R.string.book_delete_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.book_delete_confirm_message,
+                        book.title,
+                        book.isbn13,
+                    ),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    Text(stringResource(R.string.book_delete_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text(stringResource(R.string.book_delete_cancel))
+                }
+            },
+        )
     }
 }
