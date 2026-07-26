@@ -9,8 +9,8 @@ import java.net.URLEncoder
 
 class NdlBookMetadataService(
     private val parser: NdlSruParser = NdlSruParser(),
-) {
-    suspend fun findByIsbn(isbn13: String): BookMetadata? = withContext(Dispatchers.IO) {
+) : BookMetadataService {
+    override suspend fun findByIsbn(isbn13: String): BookMetadata? = withContext(Dispatchers.IO) {
         val endpoint = buildNdlSruUrl(isbn13)
         val connection = endpoint.openConnection() as HttpURLConnection
         try {

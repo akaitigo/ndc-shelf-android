@@ -10,3 +10,7 @@ data class BookMetadata(
     val ndcEdition: String?,
     val coverUrl: String?,
 )
+
+fun interface BookMetadataService {
+    suspend fun findByIsbn(isbn13: String): BookMetadata?
+}
