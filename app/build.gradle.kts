@@ -134,3 +134,84 @@ val verifyLicenseReport by tasks.registering {
 tasks.named("check") {
     dependsOn(verifyLicenseReport)
 }
+
+val verifyBackupPolicy by tasks.registering {
+    group = "verification"
+    description = "Verifies the fail-closed cloud backup and OS-specific D2D rules."
+
+    val manifest = layout.projectDirectory.file("src/main/AndroidManifest.xml")
+    val legacyRules = layout.projectDirectory.file("src/main/res/xml/backup_rules.xml")
+    val api28Rules = layout.projectDirectory.file("src/main/res/xml-v28/backup_rules.xml")
+    val modernRules = layout.projectDirectory.file("src/main/res/xml/data_extraction_rules.xml")
+    inputs.files(manifest, legacyRules, api28Rules, modernRules)
+
+    doLast {
+        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }
+        fun parse(file: File) = factory.newDocumentBuilder().parse(file)
+        fun childElements(parent: org.w3c.dom.Element, tag: String): List<org.w3c.dom.Element> =
+            (0 until parent.childNodes.length)
+                .map { parent.childNodes.item(it) }
+                .filterIsInstance<org.w3c.dom.Element>()
+                .filter { it.tagName == tag }
+        fun assertRule(
+            element: org.w3c.dom.Element,
+            domain: String,
+            flags: String = "",
+        ) {
+            check(element.getAttribute("domain") == domain && element.getAttribute("path") == ".")
+            check(element.getAttribute("requireFlags") == flags)
+        }
+
+        val application = parse(manifest.asFile).getElementsByTagName("application")
+            .item(0) as org.w3c.dom.Element
+        val androidNamespace = "http://schemas.android.com/apk/res/android"
+        check(application.getAttributeNS(androidNamespace, "allowBackup") == "true")
+        check(application.getAttributeNS(androidNamespace, "fullBackupContent") == "@xml/backup_rules")
+        check(
+            application.getAttributeNS(androidNamespace, "dataExtractionRules") ==
+                "@xml/data_extraction_rules",
+        )
+
+        val allDomains = setOf(
+            "root",
+            "file",
+            "database",
+            "sharedpref",
+            "external",
+            "device_root",
+            "device_file",
+            "device_database",
+            "device_sharedpref",
+        )
+        val legacyRoot = parse(legacyRules.asFile).documentElement
+        check(childElements(legacyRoot, "include").isEmpty())
+        val legacyExcludes = childElements(legacyRoot, "exclude")
+        check(legacyExcludes.map { it.getAttribute("domain") }.toSet() == allDomains)
+        legacyExcludes.forEach { check(it.getAttribute("path") == ".") }
+
+        val api28Root = parse(api28Rules.asFile).documentElement
+        check(childElements(api28Root, "exclude").isEmpty())
+        val api28Includes = childElements(api28Root, "include")
+        check(api28Includes.size == 1)
+        assertRule(api28Includes.single(), "database", "deviceToDeviceTransfer")
+
+        val modernRoot = parse(modernRules.asFile).documentElement
+        val cloud = childElements(modernRoot, "cloud-backup").single()
+        check(childElements(cloud, "include").isEmpty())
+        val cloudExcludes = childElements(cloud, "exclude")
+        check(cloudExcludes.map { it.getAttribute("domain") }.toSet() == allDomains)
+        cloudExcludes.forEach { check(it.getAttribute("path") == ".") }
+
+        val deviceTransfer = childElements(modernRoot, "device-transfer").single()
+        check(childElements(deviceTransfer, "exclude").isEmpty())
+        val transferIncludes = childElements(deviceTransfer, "include")
+        check(transferIncludes.size == 1)
+        assertRule(transferIncludes.single(), "database")
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyBackupPolicy)
+}

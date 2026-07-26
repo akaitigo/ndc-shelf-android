@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- API 28-30: include the Room DB only when the transport identifies itself as D2D. -->
+    <include
+        domain="database"
+        path="."
+        requireFlags="deviceToDeviceTransfer" />
+</full-backup-content>
