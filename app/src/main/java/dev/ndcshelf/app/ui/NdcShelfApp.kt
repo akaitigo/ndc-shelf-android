@@ -68,6 +68,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val scanSessions by viewModel.scanSessions.collectAsStateWithLifecycle()
     val scanSessionState by viewModel.scanSessionState.collectAsStateWithLifecycle()
+    val manualRegistrationState by viewModel.manualRegistrationState.collectAsStateWithLifecycle()
+    val manualReconciliationState by viewModel.manualReconciliationState.collectAsStateWithLifecycle()
     val bookstoreState by viewModel.bookstoreState.collectAsStateWithLifecycle()
     val wishlist by viewModel.wishlist.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
@@ -382,6 +384,10 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 shelfMoveState = shelfMoveState,
                 onMoveBookWithinTier = viewModel::moveBookWithinTier,
                 onClearShelfMoveState = viewModel::clearShelfMoveState,
+                manualReconciliationState = manualReconciliationState,
+                onPreviewManualReconciliation = viewModel::previewManualReconciliation,
+                onConfirmManualReconciliation = viewModel::confirmManualReconciliation,
+                onClearManualReconciliation = viewModel::clearManualReconciliationState,
                 contentPadding = contentPadding,
             )
 
@@ -391,6 +397,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 wishlist = wishlist,
                 scanSessions = scanSessions,
                 scanSessionState = scanSessionState,
+                manualRegistrationState = manualRegistrationState,
                 onSubmitIsbn = viewModel::submitIsbn,
                 onLookupBookstore = viewModel::lookupBookstore,
                 onCameraError = viewModel::reportCameraError,
@@ -400,6 +407,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 onClearState = viewModel::clearScanState,
                 onClearBookstoreState = viewModel::clearBookstoreState,
                 onAddDuplicateCopy = viewModel::addDuplicateCopy,
+                onAddManualBook = viewModel::addManualBook,
+                onClearManualRegistrationState = viewModel::clearManualRegistrationState,
                 onChangePurchaseState = viewModel::changePurchaseState,
                 onSelectWishlistItem = viewModel::selectWishlistItem,
                 onStartScanSession = viewModel::startScanSession,

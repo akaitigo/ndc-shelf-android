@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 6
+const val APP_DATABASE_VERSION = 7
 
 @Database(
     entities = [
@@ -33,12 +33,110 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_3_4,
             MIGRATION_4_5,
             MIGRATION_5_6,
+            MIGRATION_6_7,
         )
     }
 
     abstract fun libraryDao(): LibraryDao
 
     abstract fun locationDao(): LocationDao
+}
+
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE book_editions RENAME TO book_editions_old")
+        db.execSQL(
+            """
+            CREATE TABLE book_editions (
+                id TEXT NOT NULL PRIMARY KEY,
+                workId TEXT NOT NULL,
+                isbn13 TEXT,
+                publisher TEXT,
+                publishedYear INTEGER,
+                coverUrl TEXT,
+                ndcCode TEXT,
+                ndcEdition TEXT,
+                classificationSource TEXT NOT NULL,
+                bibliographicSource TEXT NOT NULL,
+                FOREIGN KEY(workId) REFERENCES book_works(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT INTO book_editions (
+                id, workId, isbn13, publisher, publishedYear, coverUrl,
+                ndcCode, ndcEdition, classificationSource, bibliographicSource
+            )
+            SELECT id, workId, isbn13, publisher, publishedYear, coverUrl,
+                ndcCode, ndcEdition, classificationSource, 'NDL'
+            FROM book_editions_old
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE owned_copies_new (
+                id TEXT NOT NULL PRIMARY KEY,
+                editionId TEXT NOT NULL,
+                mediaType TEXT NOT NULL,
+                location TEXT NOT NULL,
+                readingStatus TEXT NOT NULL,
+                addedAt INTEGER NOT NULL,
+                tierId TEXT,
+                shelfOrderKey TEXT,
+                copyLabel TEXT NOT NULL,
+                FOREIGN KEY(editionId) REFERENCES book_editions(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(tierId) REFERENCES location_tiers(id)
+                    ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT INTO owned_copies_new (
+                id, editionId, mediaType, location, readingStatus, addedAt,
+                tierId, shelfOrderKey, copyLabel
+            )
+            SELECT id, editionId, mediaType, location, readingStatus, addedAt,
+                tierId, shelfOrderKey, copyLabel
+            FROM owned_copies
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE wishlist_items_new (
+                editionId TEXT NOT NULL PRIMARY KEY,
+                status TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                FOREIGN KEY(editionId) REFERENCES book_editions(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT INTO wishlist_items_new (editionId, status, createdAt, updatedAt)
+            SELECT editionId, status, createdAt, updatedAt FROM wishlist_items
+            """.trimIndent(),
+        )
+        db.execSQL("DROP TABLE owned_copies")
+        db.execSQL("DROP TABLE wishlist_items")
+        db.execSQL("DROP TABLE book_editions_old")
+        db.execSQL("ALTER TABLE owned_copies_new RENAME TO owned_copies")
+        db.execSQL("ALTER TABLE wishlist_items_new RENAME TO wishlist_items")
+        db.execSQL("CREATE INDEX index_book_editions_workId ON book_editions(workId)")
+        db.execSQL("CREATE UNIQUE INDEX index_book_editions_isbn13 ON book_editions(isbn13)")
+        db.execSQL("CREATE INDEX index_owned_copies_editionId ON owned_copies(editionId)")
+        db.execSQL("CREATE INDEX index_owned_copies_tierId ON owned_copies(tierId)")
+        db.execSQL(
+            "CREATE INDEX index_owned_copies_tierId_shelfOrderKey " +
+                "ON owned_copies(tierId, shelfOrderKey)",
+        )
+        db.execSQL("CREATE INDEX index_wishlist_items_status ON wishlist_items(status)")
+    }
 }
 
 private val MIGRATION_5_6 = object : Migration(5, 6) {

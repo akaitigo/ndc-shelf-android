@@ -62,9 +62,12 @@ import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
+import dev.ndcshelf.app.ManualReconciliationUiState
+import dev.ndcshelf.app.ReconciliationFailure
 import dev.ndcshelf.app.ShelfMoveUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.MoveDirection
@@ -96,6 +99,10 @@ fun LibraryScreen(
     shelfMoveState: ShelfMoveUiState = ShelfMoveUiState.Idle,
     onMoveBookWithinTier: (String, ShelfMoveDirection) -> Unit = { _, _ -> },
     onClearShelfMoveState: () -> Unit = {},
+    manualReconciliationState: ManualReconciliationUiState = ManualReconciliationUiState.Idle,
+    onPreviewManualReconciliation: (String, String) -> Unit = { _, _ -> },
+    onConfirmManualReconciliation: () -> Unit = {},
+    onClearManualReconciliation: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -113,6 +120,12 @@ fun LibraryScreen(
     LaunchedEffect(bookDeleteState) {
         val deleted = bookDeleteState as? BookDeleteUiState.Deleted ?: return@LaunchedEffect
         if (selectedBook?.copyId == deleted.book.copyId) selectedBook = null
+    }
+    LaunchedEffect(manualReconciliationState) {
+        if (manualReconciliationState === ManualReconciliationUiState.Applied) {
+            selectedBook = null
+            onClearManualReconciliation()
+        }
     }
 
     Column(
@@ -193,6 +206,7 @@ fun LibraryScreen(
                         onClick = {
                             onClearBookEditState()
                             onClearBookDeleteState()
+                            onClearManualReconciliation()
                             selectedBook = book
                         },
                     )
@@ -214,6 +228,7 @@ fun LibraryScreen(
                 onClearBookEditState()
                 onClearBookDeleteState()
                 onClearShelfMoveState()
+                onClearManualReconciliation()
                 selectedBook = null
             },
             onClearErrors = onClearBookEditState,
@@ -221,6 +236,12 @@ fun LibraryScreen(
             onDelete = { onDeleteBook(book.copyId) },
             onMoveWithinTier = { direction -> onMoveBookWithinTier(book.copyId, direction) },
             onClearShelfMoveState = onClearShelfMoveState,
+            reconciliationState = manualReconciliationState,
+            onPreviewReconciliation = { isbn ->
+                onPreviewManualReconciliation(book.copyId, isbn)
+            },
+            onConfirmReconciliation = onConfirmManualReconciliation,
+            onClearReconciliation = onClearManualReconciliation,
         )
     }
 
@@ -450,6 +471,10 @@ private fun EditBookSheet(
     onDelete: () -> Unit,
     onMoveWithinTier: (ShelfMoveDirection) -> Unit,
     onClearShelfMoveState: () -> Unit,
+    reconciliationState: ManualReconciliationUiState,
+    onPreviewReconciliation: (String) -> Unit,
+    onConfirmReconciliation: () -> Unit,
+    onClearReconciliation: () -> Unit,
 ) {
     var title by rememberSaveable(book.copyId) { mutableStateOf(book.title) }
     var copyLabel by rememberSaveable(book.copyId) { mutableStateOf(book.copyLabel) }
@@ -467,10 +492,13 @@ private fun EditBookSheet(
     var positionSpecified by rememberSaveable(book.copyId) { mutableStateOf(false) }
     var status by remember(book.copyId) { mutableStateOf(book.readingStatus) }
     var showDeleteConfirmation by rememberSaveable(book.copyId) { mutableStateOf(false) }
+    var reconciliationIsbn by rememberSaveable(book.copyId) { mutableStateOf(book.isbn13.orEmpty()) }
     val saving = editState is BookEditUiState.Saving && editState.copyId == book.copyId
     val deleting = deleteState is BookDeleteUiState.Deleting &&
         deleteState.copyId == book.copyId
-    val busy = saving || deleting
+    val reconciling = reconciliationState === ManualReconciliationUiState.Loading ||
+        reconciliationState is ManualReconciliationUiState.Applying
+    val busy = saving || deleting || reconciling
     val moving = shelfMoveState is ShelfMoveUiState.Moving && shelfMoveState.copyId == book.copyId
     val errors = (editState as? BookEditUiState.Invalid)
         ?.takeIf { it.copyId == book.copyId }
@@ -533,8 +561,60 @@ private fun EditBookSheet(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
+            if (book.bibliographicSource == BibliographicSource.MANUAL) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.reconciliation_manual_notice),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        OutlinedTextField(
+                            value = reconciliationIsbn,
+                            onValueChange = {
+                                reconciliationIsbn = it
+                                onClearReconciliation()
+                            },
+                            label = { Text(stringResource(R.string.reconciliation_isbn)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = { onPreviewReconciliation(reconciliationIsbn) },
+                            enabled = !busy,
+                        ) {
+                            if (reconciliationState === ManualReconciliationUiState.Loading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            } else {
+                                Text(stringResource(R.string.reconciliation_lookup))
+                            }
+                        }
+                        (reconciliationState as? ManualReconciliationUiState.Error)?.let { state ->
+                            Text(
+                                text = stringResource(
+                                    when (state.failure) {
+                                        ReconciliationFailure.INVALID_ISBN -> R.string.reconciliation_invalid
+                                        ReconciliationFailure.NOT_FOUND -> R.string.reconciliation_not_found
+                                        ReconciliationFailure.LOOKUP -> R.string.reconciliation_lookup_error
+                                        ReconciliationFailure.CONFLICT -> R.string.reconciliation_conflict
+                                        ReconciliationFailure.SAVE -> R.string.reconciliation_save_error
+                                    },
+                                ),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+            }
             Text(
-                text = stringResource(R.string.book_edit_isbn, book.isbn13),
+                text = stringResource(R.string.book_edit_isbn, book.isbn13 ?: "ISBNなし"),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -851,7 +931,7 @@ private fun EditBookSheet(
                     stringResource(
                         R.string.book_delete_confirm_message,
                         book.title,
-                        book.isbn13,
+                        book.isbn13 ?: "ISBNなし",
                     ),
                 )
             },
@@ -872,6 +952,48 @@ private fun EditBookSheet(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmation = false }) {
                     Text(stringResource(R.string.book_delete_cancel))
+                }
+            },
+        )
+    }
+
+    val preview = when (reconciliationState) {
+        is ManualReconciliationUiState.Preview -> reconciliationState.preview
+        is ManualReconciliationUiState.Applying -> reconciliationState.preview
+        else -> null
+    }
+    if (preview != null && preview.current.copyId == book.copyId) {
+        AlertDialog(
+            onDismissRequest = { if (!reconciling) onClearReconciliation() },
+            title = { Text(stringResource(R.string.reconciliation_preview_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.reconciliation_preview_warning))
+                    Text("タイトル: ${book.title} → ${preview.candidate.title}")
+                    Text("著者: ${book.primaryAuthor} → ${preview.candidate.primaryAuthor}")
+                    Text("ISBN: ${book.isbn13 ?: "なし"} → ${preview.candidate.isbn13}")
+                    Text("出版社: ${book.publisher ?: "なし"} → ${preview.candidate.publisher ?: "なし"}")
+                    Text("出版年: ${book.publishedYear ?: "なし"} → ${preview.candidate.publishedYear ?: "なし"}")
+                    Text("NDC: ${book.ndcCode ?: "なし"} → ${preview.candidate.ndcCode ?: "なし"}")
+                    if (preview.existingEditionId != null) {
+                        Text(
+                            stringResource(
+                                R.string.reconciliation_merge_notice,
+                                preview.existingCopyCount,
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(enabled = !reconciling, onClick = onConfirmReconciliation) {
+                    Text(stringResource(R.string.reconciliation_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !reconciling, onClick = onClearReconciliation) {
+                    Text(stringResource(R.string.import_cancel))
                 }
             },
         )
