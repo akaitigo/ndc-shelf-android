@@ -9,6 +9,8 @@ import dev.ndcshelf.app.domain.backup.DatabaseBackupManager
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
 import dev.ndcshelf.app.domain.backup.DatabaseBackupPreview
 import dev.ndcshelf.app.domain.backup.DatabaseRestoreResult
+import dev.ndcshelf.app.domain.export.LibraryExportFormat
+import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportPreviewResult
@@ -64,6 +66,8 @@ class MainViewModel(
     val bookDeleteState: StateFlow<BookDeleteUiState> = _bookDeleteState.asStateFlow()
     private val _databaseBackupState = MutableStateFlow<DatabaseBackupUiState>(DatabaseBackupUiState.Idle)
     val databaseBackupState: StateFlow<DatabaseBackupUiState> = _databaseBackupState.asStateFlow()
+    private val _libraryExportState = MutableStateFlow<LibraryExportUiState>(LibraryExportUiState.Idle)
+    val libraryExportState: StateFlow<LibraryExportUiState> = _libraryExportState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
@@ -74,10 +78,47 @@ class MainViewModel(
     private var importJob: Job? = null
     private var databaseBackupPreview: DatabaseBackupPreview? = null
     private var databaseBackupJob: Job? = null
+    private var exportJob: Job? = null
+
+    fun exportLibrary(format: LibraryExportFormat, output: OutputStream) {
+        if (_libraryExportState.value === LibraryExportUiState.Exporting) {
+            output.closeSilently()
+            return
+        }
+        val booksToExport = books.value.toList()
+        exportJob?.cancel()
+        exportJob = viewModelScope.launch {
+            _libraryExportState.value = LibraryExportUiState.Exporting
+            try {
+                withContext(importIoDispatcher) {
+                    output.use { LibraryExporter.write(booksToExport, format, it) }
+                }
+                _libraryExportState.value = LibraryExportUiState.Success(booksToExport.size)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                _libraryExportState.value = LibraryExportUiState.Error
+            }
+        }
+    }
+
+    fun consumeLibraryExportResult() {
+        if (_libraryExportState.value is LibraryExportUiState.Success ||
+            _libraryExportState.value === LibraryExportUiState.Error
+        ) {
+            _libraryExportState.value = LibraryExportUiState.Idle
+        }
+    }
 
     fun createDatabaseBackup(output: OutputStream) {
-        val manager = databaseBackupManager ?: return
-        if (_databaseBackupState.value.isBusy) return
+        val manager = databaseBackupManager ?: run {
+            output.closeSilently()
+            return
+        }
+        if (_databaseBackupState.value.isBusy) {
+            output.closeSilently()
+            return
+        }
         databaseBackupJob?.cancel()
         databaseBackupJob = viewModelScope.launch {
             _databaseBackupState.value = DatabaseBackupUiState.Creating
@@ -94,8 +135,14 @@ class MainViewModel(
     }
 
     fun loadDatabaseBackup(input: InputStream) {
-        val manager = databaseBackupManager ?: return
-        if (_databaseBackupState.value.isBusy) return
+        val manager = databaseBackupManager ?: run {
+            input.closeSilently()
+            return
+        }
+        if (_databaseBackupState.value.isBusy) {
+            input.closeSilently()
+            return
+        }
         databaseBackupPreview = null
         databaseBackupJob?.cancel()
         databaseBackupJob = viewModelScope.launch {
@@ -463,10 +510,21 @@ sealed interface DatabaseBackupUiState {
     data class Error(val failure: DatabaseBackupFailure) : DatabaseBackupUiState
 }
 
+sealed interface LibraryExportUiState {
+    data object Idle : LibraryExportUiState
+    data object Exporting : LibraryExportUiState
+    data class Success(val bookCount: Int) : LibraryExportUiState
+    data object Error : LibraryExportUiState
+}
+
 private val DatabaseBackupUiState.isBusy: Boolean
     get() = this === DatabaseBackupUiState.Creating ||
         this === DatabaseBackupUiState.Inspecting ||
         this === DatabaseBackupUiState.Restoring
+
+private fun java.io.Closeable.closeSilently() {
+    runCatching(::close)
+}
 
 sealed interface ScanUiState {
     data object Idle : ScanUiState

@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelImportTest {
@@ -129,6 +132,33 @@ class MainViewModelImportTest {
         assertTrue(preview.staleRecalculated)
         assertEquals(2, repository.previewCalls)
         assertEquals(1, repository.applyCalls)
+    }
+
+    @Test
+    fun `export remains in ViewModel state until result is consumed`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeLibraryRepository(listOf(sampleBook())))
+        val collection = launch { viewModel.books.collect {} }
+        val output = ByteArrayOutputStream()
+
+        viewModel.exportLibrary(LibraryExportFormat.JSON, output)
+
+        assertEquals(LibraryExportUiState.Success(1), viewModel.libraryExportState.value)
+        assertTrue(output.toString(Charsets.UTF_8.name()).contains("本の題名"))
+        viewModel.consumeLibraryExportResult()
+        assertEquals(LibraryExportUiState.Idle, viewModel.libraryExportState.value)
+        collection.cancel()
+    }
+
+    @Test
+    fun `export write failure becomes visible state`() = runTest(dispatcher) {
+        val viewModel = viewModel(FakeLibraryRepository(listOf(sampleBook())))
+        val output = object : OutputStream() {
+            override fun write(value: Int) = throw java.io.IOException("disk full")
+        }
+
+        viewModel.exportLibrary(LibraryExportFormat.JSON, output)
+
+        assertEquals(LibraryExportUiState.Error, viewModel.libraryExportState.value)
     }
 
     private fun viewModel(repository: LibraryRepository) = MainViewModel(
