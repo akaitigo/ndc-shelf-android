@@ -21,8 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,9 +45,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.ui.components.BookCover
@@ -55,10 +60,12 @@ import dev.ndcshelf.app.ui.components.BookCover
 fun LibraryScreen(
     books: List<LibraryBook>,
     onUpdateCopy: (String, String, ReadingStatus) -> Unit,
+    onExport: (LibraryExportFormat) -> Unit,
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var selectedBook by remember { mutableStateOf<LibraryBook?>(null) }
+    var showExportDialog by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
@@ -71,11 +78,25 @@ fun LibraryScreen(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp),
         ) {
-            Text(
-                text = "My Library",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "My Library",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                IconButton(
+                    onClick = { showExportDialog = true },
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.FileDownload,
+                        contentDescription = stringResource(R.string.export_library),
+                    )
+                }
+            }
             Text(
                 text = "${books.size}冊の本を、ちゃんと見つけられる場所。",
                 style = MaterialTheme.typography.bodyMedium,
@@ -146,6 +167,39 @@ fun LibraryScreen(
             },
         )
     }
+
+    if (showExportDialog) {
+        ExportFormatDialog(
+            onDismiss = { showExportDialog = false },
+            onSelect = { format ->
+                showExportDialog = false
+                onExport(format)
+            },
+        )
+    }
+}
+
+@Composable
+private fun ExportFormatDialog(
+    onDismiss: () -> Unit,
+    onSelect: (LibraryExportFormat) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.FileDownload, contentDescription = null) },
+        title = { Text(stringResource(R.string.export_dialog_title)) },
+        text = { Text(stringResource(R.string.export_dialog_description)) },
+        confirmButton = {
+            Button(onClick = { onSelect(LibraryExportFormat.JSON) }) {
+                Text(stringResource(R.string.export_json))
+            }
+        },
+        dismissButton = {
+            Button(onClick = { onSelect(LibraryExportFormat.CSV) }) {
+                Text(stringResource(R.string.export_csv))
+            }
+        },
+    )
 }
 
 @Composable

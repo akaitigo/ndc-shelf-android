@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NDC Shelf</string>
+    <string name="export_library">蔵書をエクスポート</string>
+    <string name="export_dialog_title">蔵書データを書き出す</string>
+    <string name="export_dialog_description">JSONは復元向けに全項目を保持します。CSVは表計算ソフトでの閲覧・編集に適しています。出力にはタイトル、読書状態、置き場所などの個人データが含まれます。</string>
+    <string name="export_json">JSONで保存</string>
+    <string name="export_csv">CSVで保存</string>
+    <string name="export_success">%1$d冊の蔵書を書き出しました</string>
+    <string name="export_failure">蔵書データを保存できませんでした</string>
 </resources>
