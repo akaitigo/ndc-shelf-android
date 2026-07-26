@@ -12,8 +12,10 @@ import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
 import dev.ndcshelf.app.data.repository.DefaultLibraryRepository
+import dev.ndcshelf.app.data.repository.RoomLocationRepository
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.LocationRepository
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
 import java.io.IOException
@@ -84,6 +86,8 @@ class AppContainer(application: Application) {
         database = database,
         metadataService = NdlBookMetadataService(),
     )
+
+    val locationRepository: LocationRepository = RoomLocationRepository(database)
 
     val databaseBackupManager = RoomDatabaseBackupManager(
         context = application,

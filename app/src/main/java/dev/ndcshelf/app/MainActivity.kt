@@ -14,6 +14,7 @@ class MainActivity : ComponentActivity() {
         MainViewModel.factory(
             repository = application.container.libraryRepository,
             databaseBackupManager = application.container.databaseBackupManager,
+            locationRepository = application.container.locationRepository,
         )
     }
 

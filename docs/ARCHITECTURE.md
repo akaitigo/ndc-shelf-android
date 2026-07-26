@@ -79,6 +79,9 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 erDiagram
     BOOK_WORK ||--o{ BOOK_EDITION : has
     BOOK_EDITION ||--o{ OWNED_COPY : owned_as
+    LOCATION_ROOM ||--o{ LOCATION_SHELF : contains
+    LOCATION_SHELF ||--o{ LOCATION_TIER : contains
+    LOCATION_TIER ||--o{ OWNED_COPY : stores
     BOOK_WORK {
         string id PK
         string title
@@ -95,11 +98,35 @@ erDiagram
         string id PK
         string editionId FK
         string location
+        string tierId FK
         string readingStatus
+    }
+    LOCATION_ROOM {
+        string id PK
+        string name UK
+        int sortOrder
+    }
+    LOCATION_SHELF {
+        string id PK
+        string roomId FK
+        string name
+        int sortOrder
+    }
+    LOCATION_TIER {
+        string id PK
+        string shelfId FK
+        string name
+        int sortOrder
     }
 ```
 
 `BookEdition.isbn13` は現在ユニークです。複数冊所蔵を正式に扱う段階では、既存Editionに新しいOwnedCopyを追加するユースケースを設けます。
+
+### 置き場所
+
+構造化した置き場所は`LocationRoom`→`LocationShelf`→`LocationTier`の3階層とし、`OwnedCopy.tierId`から段だけを参照します。表示時は親を結合して`部屋 / 本棚 / 段`とします。部屋名は全体、本棚名と段名は同一親内で完全一致を禁止し、表示区切りと曖昧になる`/`は使用できません。各階層は`sortOrder`の昇順とし、同値の場合は名前、IDの順で安定化します。並べ替え後は同一親の順序を0始まりの連番へ正規化します。
+
+旧`OwnedCopy.location`は互換用の原文として残します。v1からv2へのMigrationでは値を分割・推測せず、`tierId = NULL`のまま一字も変更しません。段を割り当てたコピーだけ構造化パスを表示し、未割り当ては旧文字列を表示します。使用中の部屋・本棚・段は、配下コピーの移動先または明示的な未設定化を指定しない限り削除しません。
 
 ### 手動補正の優先順位
 

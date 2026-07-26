@@ -23,6 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
@@ -58,8 +61,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
+import dev.ndcshelf.app.LocationMutationUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LocationLevel
+import dev.ndcshelf.app.domain.model.LocationTree
+import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.ReadingStatus
@@ -75,10 +82,18 @@ fun LibraryScreen(
     onClearBookEditState: () -> Unit,
     bookDeleteState: BookDeleteUiState,
     onClearBookDeleteState: () -> Unit,
+    locations: LocationTree,
+    locationMutationState: LocationMutationUiState,
+    onAddLocation: (LocationLevel, String?, String) -> Unit,
+    onRenameLocation: (LocationLevel, String, String) -> Unit,
+    onMoveLocation: (LocationLevel, String, MoveDirection) -> Unit,
+    onDeleteLocation: (LocationLevel, String, String?, Boolean) -> Unit,
+    onClearLocationState: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var selectedBook by remember { mutableStateOf<LibraryBook?>(null) }
+    var showLocationManager by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
@@ -131,6 +146,14 @@ fun LibraryScreen(
             )
             Spacer(Modifier.height(12.dp))
             LibrarySummary(books)
+            TextButton(
+                onClick = { showLocationManager = true },
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Icon(Icons.Rounded.LocationOn, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.location_manage_action))
+            }
             Spacer(Modifier.height(8.dp))
         }
 
@@ -174,6 +197,7 @@ fun LibraryScreen(
             book = book,
             editState = bookEditState,
             deleteState = bookDeleteState,
+            locations = locations,
             onDismiss = {
                 onClearBookEditState()
                 onClearBookDeleteState()
@@ -182,6 +206,22 @@ fun LibraryScreen(
             onClearErrors = onClearBookEditState,
             onSave = { draft -> onSaveBook(book.copyId, draft) },
             onDelete = { onDeleteBook(book.copyId) },
+        )
+    }
+
+    if (showLocationManager) {
+        LocationManagerSheet(
+            tree = locations,
+            mutationState = locationMutationState,
+            onDismiss = {
+                onClearLocationState()
+                showLocationManager = false
+            },
+            onAdd = onAddLocation,
+            onRename = onRenameLocation,
+            onMove = onMoveLocation,
+            onDelete = onDeleteLocation,
+            onClearState = onClearLocationState,
         )
     }
 
@@ -376,6 +416,7 @@ private fun EmptyLibrary(
 @Composable
 private fun EditBookSheet(
     book: LibraryBook,
+    locations: LocationTree,
     editState: BookEditUiState,
     deleteState: BookDeleteUiState,
     onDismiss: () -> Unit,
@@ -392,6 +433,7 @@ private fun EditBookSheet(
     var ndcCode by rememberSaveable(book.copyId) { mutableStateOf(book.ndcCode.orEmpty()) }
     var ndcEdition by rememberSaveable(book.copyId) { mutableStateOf(book.ndcEdition.orEmpty()) }
     var location by rememberSaveable(book.copyId) { mutableStateOf(book.location) }
+    var locationTierId by rememberSaveable(book.copyId) { mutableStateOf(book.locationTierId) }
     var status by remember(book.copyId) { mutableStateOf(book.readingStatus) }
     var showDeleteConfirmation by rememberSaveable(book.copyId) { mutableStateOf(false) }
     val saving = editState is BookEditUiState.Saving && editState.copyId == book.copyId
@@ -402,6 +444,7 @@ private fun EditBookSheet(
         ?.takeIf { it.copyId == book.copyId }
         ?.errors
         .orEmpty()
+    val unsetLocation = stringResource(R.string.location_unset_value)
 
     fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
 
@@ -413,6 +456,7 @@ private fun EditBookSheet(
         ndcCode = book.ndcCode.orEmpty()
         ndcEdition = book.ndcEdition.orEmpty()
         location = book.location
+        locationTierId = book.locationTierId
         status = book.readingStatus
         onClearErrors()
     }
@@ -512,16 +556,46 @@ private fun EditBookSheet(
             )
             OutlinedTextField(
                 value = location,
-                onValueChange = { location = it },
+                onValueChange = {
+                    location = it
+                    locationTierId = null
+                },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_location)) },
                 placeholder = { Text(stringResource(R.string.book_edit_location_example)) },
                 leadingIcon = { Icon(Icons.Rounded.LocationOn, contentDescription = null) },
                 isError = error(BookEditField.LOCATION) != null,
                 supportingText = error(BookEditField.LOCATION)?.let { message -> { Text(message) } },
-                enabled = !busy,
+                enabled = !busy && locationTierId == null,
                 singleLine = true,
             )
+            Text(stringResource(R.string.location_registered_tier), style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = locationTierId == null,
+                    onClick = {
+                        locationTierId = null
+                        location = unsetLocation
+                    },
+                    label = { Text(stringResource(R.string.location_unset_or_free)) },
+                    enabled = !busy,
+                )
+                locations.tiers.forEach { tier ->
+                    val path = locations.pathForTier(tier.id) ?: tier.name
+                    FilterChip(
+                        selected = locationTierId == tier.id,
+                        onClick = {
+                            locationTierId = tier.id
+                            location = path
+                        },
+                        label = { Text(path) },
+                        enabled = !busy,
+                    )
+                }
+            }
             Text(
                 text = stringResource(R.string.book_edit_reading_status),
                 style = MaterialTheme.typography.labelLarge,
@@ -558,6 +632,7 @@ private fun EditBookSheet(
                             ndcEdition = ndcEdition,
                             location = location,
                             readingStatus = status,
+                            locationTierId = locationTierId,
                         ),
                     )
                 },
@@ -631,4 +706,254 @@ private fun EditBookSheet(
             },
         )
     }
+}
+
+private data class LocationEditorTarget(
+    val level: LocationLevel,
+    val id: String? = null,
+    val parentId: String? = null,
+    val initialName: String = "",
+)
+
+private data class LocationDeleteTarget(
+    val level: LocationLevel,
+    val id: String,
+    val name: String,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LocationManagerSheet(
+    tree: LocationTree,
+    mutationState: LocationMutationUiState,
+    onDismiss: () -> Unit,
+    onAdd: (LocationLevel, String?, String) -> Unit,
+    onRename: (LocationLevel, String, String) -> Unit,
+    onMove: (LocationLevel, String, MoveDirection) -> Unit,
+    onDelete: (LocationLevel, String, String?, Boolean) -> Unit,
+    onClearState: () -> Unit,
+) {
+    var editor by remember { mutableStateOf<LocationEditorTarget?>(null) }
+    var deleteTarget by remember { mutableStateOf<LocationDeleteTarget?>(null) }
+    val busy = mutationState === LocationMutationUiState.Working
+
+    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(stringResource(R.string.location_manager_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.location_manager_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = { editor = LocationEditorTarget(LocationLevel.ROOM) },
+                enabled = !busy,
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = null)
+                Text(stringResource(R.string.location_add_room))
+            }
+            if (tree.rooms.isEmpty()) {
+                Text(stringResource(R.string.location_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            tree.rooms.forEach { room ->
+                LocationItemRow(
+                    name = room.name,
+                    detail = stringResource(R.string.location_level_room),
+                    enabled = !busy,
+                    onEdit = { editor = LocationEditorTarget(LocationLevel.ROOM, room.id, initialName = room.name) },
+                    onUp = { onMove(LocationLevel.ROOM, room.id, MoveDirection.UP) },
+                    onDown = { onMove(LocationLevel.ROOM, room.id, MoveDirection.DOWN) },
+                    onDelete = {
+                        deleteTarget = LocationDeleteTarget(LocationLevel.ROOM, room.id, room.name)
+                    },
+                )
+                TextButton(
+                    onClick = { editor = LocationEditorTarget(LocationLevel.SHELF, parentId = room.id) },
+                    enabled = !busy,
+                    modifier = Modifier.padding(start = 20.dp),
+                ) { Text(stringResource(R.string.location_add_shelf)) }
+                room.shelves.forEach { shelf ->
+                    Column(modifier = Modifier.padding(start = 20.dp)) {
+                        LocationItemRow(
+                            name = shelf.name,
+                            detail = stringResource(R.string.location_level_shelf),
+                            enabled = !busy,
+                            onEdit = { editor = LocationEditorTarget(LocationLevel.SHELF, shelf.id, initialName = shelf.name) },
+                            onUp = { onMove(LocationLevel.SHELF, shelf.id, MoveDirection.UP) },
+                            onDown = { onMove(LocationLevel.SHELF, shelf.id, MoveDirection.DOWN) },
+                            onDelete = {
+                                deleteTarget = LocationDeleteTarget(LocationLevel.SHELF, shelf.id, shelf.name)
+                            },
+                        )
+                        TextButton(
+                            onClick = { editor = LocationEditorTarget(LocationLevel.TIER, parentId = shelf.id) },
+                            enabled = !busy,
+                            modifier = Modifier.padding(start = 20.dp),
+                        ) { Text(stringResource(R.string.location_add_tier)) }
+                        shelf.tiers.forEach { tier ->
+                            LocationItemRow(
+                                name = tier.name,
+                                detail = stringResource(R.string.location_copy_count, tier.copyCount),
+                                enabled = !busy,
+                                modifier = Modifier.padding(start = 20.dp),
+                                onEdit = { editor = LocationEditorTarget(LocationLevel.TIER, tier.id, initialName = tier.name) },
+                                onUp = { onMove(LocationLevel.TIER, tier.id, MoveDirection.UP) },
+                                onDown = { onMove(LocationLevel.TIER, tier.id, MoveDirection.DOWN) },
+                                onDelete = {
+                                    deleteTarget = LocationDeleteTarget(LocationLevel.TIER, tier.id, tier.name)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            (mutationState as? LocationMutationUiState.Error)?.let { state ->
+                Text(state.message, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+
+    editor?.let { target ->
+        LocationNameDialog(
+            target = target,
+            onDismiss = { editor = null },
+            onConfirm = { name ->
+                if (target.id == null) onAdd(target.level, target.parentId, name)
+                else onRename(target.level, target.id, name)
+                editor = null
+            },
+        )
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.location_delete_title)) },
+            text = { Text(stringResource(R.string.location_delete_message, target.name)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete(target.level, target.id, null, false)
+                        deleteTarget = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text(stringResource(R.string.location_delete_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.location_cancel))
+                }
+            },
+        )
+    }
+
+    (mutationState as? LocationMutationUiState.InUse)?.let { state ->
+        var replacementTierId by remember(state.id) { mutableStateOf<String?>(null) }
+        val excludedTierIds = when (state.level) {
+            LocationLevel.ROOM -> tree.rooms.firstOrNull { it.id == state.id }
+                ?.shelves.orEmpty().flatMap { it.tiers }.map { it.id }.toSet()
+            LocationLevel.SHELF -> tree.rooms.flatMap { it.shelves }
+                .firstOrNull { it.id == state.id }?.tiers.orEmpty().map { it.id }.toSet()
+            LocationLevel.TIER -> setOf(state.id)
+        }
+        AlertDialog(
+            onDismissRequest = onClearState,
+            title = { Text(stringResource(R.string.location_in_use_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.location_in_use_message, state.copyCount))
+                    FilterChip(
+                        selected = replacementTierId == null,
+                        onClick = { replacementTierId = null },
+                        label = { Text(stringResource(R.string.location_unset_action)) },
+                    )
+                    tree.tiers.filterNot { it.id in excludedTierIds }.forEach { tier ->
+                        FilterChip(
+                            selected = replacementTierId == tier.id,
+                            onClick = { replacementTierId = tier.id },
+                            label = { Text(tree.pathForTier(tier.id).orEmpty()) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onDelete(state.level, state.id, replacementTierId, replacementTierId == null)
+                }) { Text(stringResource(R.string.location_move_delete)) }
+            },
+            dismissButton = { TextButton(onClick = onClearState) { Text(stringResource(R.string.location_cancel)) } },
+        )
+    }
+}
+
+@Composable
+private fun LocationItemRow(
+    name: String,
+    detail: String,
+    enabled: Boolean,
+    onEdit: () -> Unit,
+    onUp: () -> Unit,
+    onDown: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(name, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.labelSmall)
+        }
+        IconButton(onClick = onUp, enabled = enabled) {
+            Icon(Icons.Rounded.ArrowUpward, contentDescription = stringResource(R.string.location_move_up))
+        }
+        IconButton(onClick = onDown, enabled = enabled) {
+            Icon(Icons.Rounded.ArrowDownward, contentDescription = stringResource(R.string.location_move_down))
+        }
+        IconButton(onClick = onEdit, enabled = enabled) {
+            Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.location_rename))
+        }
+        IconButton(onClick = onDelete, enabled = enabled) {
+            Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.location_delete))
+        }
+    }
+}
+
+@Composable
+private fun LocationNameDialog(
+    target: LocationEditorTarget,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember(target) { mutableStateOf(target.initialName) }
+    val levelName = when (target.level) {
+        LocationLevel.ROOM -> stringResource(R.string.location_level_room)
+        LocationLevel.SHELF -> stringResource(R.string.location_level_shelf)
+        LocationLevel.TIER -> stringResource(R.string.location_level_tier)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(if (target.id == null) R.string.location_add_title else R.string.location_rename_title, levelName))
+        },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.location_name)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.location_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.location_cancel)) } },
+    )
 }

@@ -34,12 +34,18 @@ interface LibraryDao {
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
             copies.mediaType AS mediaType,
-            copies.location AS location,
+            CASE WHEN tiers.id IS NULL THEN copies.location
+                ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
+            END AS location,
+            copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
             copies.addedAt AS addedAt
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
+        LEFT JOIN location_tiers AS tiers ON tiers.id = copies.tierId
+        LEFT JOIN location_shelves AS shelves ON shelves.id = tiers.shelfId
+        LEFT JOIN location_rooms AS rooms ON rooms.id = shelves.roomId
         ORDER BY copies.addedAt DESC, copies.id ASC
         """,
     )
@@ -61,12 +67,18 @@ interface LibraryDao {
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
             copies.mediaType AS mediaType,
-            copies.location AS location,
+            CASE WHEN tiers.id IS NULL THEN copies.location
+                ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
+            END AS location,
+            copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
             copies.addedAt AS addedAt
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
+        LEFT JOIN location_tiers AS tiers ON tiers.id = copies.tierId
+        LEFT JOIN location_shelves AS shelves ON shelves.id = tiers.shelfId
+        LEFT JOIN location_rooms AS rooms ON rooms.id = shelves.roomId
         ORDER BY copies.addedAt DESC, copies.id ASC
         """,
     )
@@ -88,12 +100,18 @@ interface LibraryDao {
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
             copies.mediaType AS mediaType,
-            copies.location AS location,
+            CASE WHEN tiers.id IS NULL THEN copies.location
+                ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
+            END AS location,
+            copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
             copies.addedAt AS addedAt
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
+        LEFT JOIN location_tiers AS tiers ON tiers.id = copies.tierId
+        LEFT JOIN location_shelves AS shelves ON shelves.id = tiers.shelfId
+        LEFT JOIN location_rooms AS rooms ON rooms.id = shelves.roomId
         WHERE editions.isbn13 = :isbn13
         LIMIT 1
         """,
@@ -116,12 +134,18 @@ interface LibraryDao {
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
             copies.mediaType AS mediaType,
-            copies.location AS location,
+            CASE WHEN tiers.id IS NULL THEN copies.location
+                ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
+            END AS location,
+            copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
             copies.addedAt AS addedAt
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
+        LEFT JOIN location_tiers AS tiers ON tiers.id = copies.tierId
+        LEFT JOIN location_shelves AS shelves ON shelves.id = tiers.shelfId
+        LEFT JOIN location_rooms AS rooms ON rooms.id = shelves.roomId
         WHERE copies.id = :copyId
         LIMIT 1
         """,
@@ -170,7 +194,7 @@ interface LibraryDao {
     @Query(
         """
         UPDATE owned_copies
-        SET location = :location, readingStatus = :readingStatus
+        SET location = :location, tierId = :tierId, readingStatus = :readingStatus
         WHERE id = :copyId
         """,
     )
@@ -178,6 +202,7 @@ interface LibraryDao {
         copyId: String,
         location: String,
         readingStatus: String,
+        tierId: String? = null,
     )
 
     @Query("UPDATE book_works SET title = :title, primaryAuthor = :primaryAuthor WHERE id = :workId")

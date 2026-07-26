@@ -17,6 +17,8 @@ import dev.ndcshelf.app.domain.importer.LibraryImportCommitter
 import dev.ndcshelf.app.domain.importer.LibraryImportPlanner
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookEditField
+import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.BookEditValidationResult
 import dev.ndcshelf.app.domain.model.BookEditValidator
 import dev.ndcshelf.app.domain.model.ClassificationSource
@@ -158,6 +160,13 @@ class DefaultLibraryRepository(
             database.withTransaction {
                 val previous = dao.findOwnedByCopyId(copyId)?.toDomain()
                     ?: return@withTransaction UpdateBookResult.NotFound
+                if (edit.locationTierId != null &&
+                    database.locationDao().findTier(edit.locationTierId) == null
+                ) {
+                    return@withTransaction UpdateBookResult.Invalid(
+                        listOf(BookEditValidationError(BookEditField.LOCATION, "選択した場所が見つかりません")),
+                    )
+                }
                 val source = if (
                     edit.ndcCode != previous.ndcCode || edit.ndcEdition != previous.ndcEdition
                 ) {
@@ -181,6 +190,7 @@ class DefaultLibraryRepository(
                 dao.updateCopy(
                     copyId = previous.copyId,
                     location = edit.location,
+                    tierId = edit.locationTierId,
                     readingStatus = edit.readingStatus.name,
                 )
                 UpdateBookResult.Updated(
@@ -194,6 +204,7 @@ class DefaultLibraryRepository(
                         ndcEdition = edit.ndcEdition,
                         classificationSource = source,
                         location = edit.location,
+                        locationTierId = edit.locationTierId,
                         readingStatus = edit.readingStatus,
                     ),
                 )
@@ -232,6 +243,7 @@ class DefaultLibraryRepository(
                 dao.updateCopy(
                     copyId = previous.copyId,
                     location = previous.location,
+                    tierId = previous.locationTierId,
                     readingStatus = previous.readingStatus.name,
                 )
                 true
@@ -351,6 +363,7 @@ private fun LibraryBook.toCopyEntity() = OwnedCopyEntity(
     location = location,
     readingStatus = readingStatus.name,
     addedAt = addedAt,
+    tierId = locationTierId,
 )
 
 internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
@@ -372,6 +385,7 @@ internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     location = location,
     readingStatus = readingStatus.toEnumOrDefault(ReadingStatus.UNREAD),
     addedAt = addedAt,
+    locationTierId = locationTierId,
 )
 
 private inline fun <reified T : Enum<T>> String.toEnumOrDefault(default: T): T =

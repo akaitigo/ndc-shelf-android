@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -24,11 +25,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.R
 
 @Composable
 fun InsightsScreen(
@@ -43,6 +46,7 @@ fun InsightsScreen(
             .sortedBy { it.first.first }
     }
     val maxCount = classCounts.maxOfOrNull { it.second }?.coerceAtLeast(1) ?: 1
+    val classifiedBooks = remember(books) { books.filter { it.ndcCode != null } }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -138,6 +142,48 @@ fun InsightsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        if (classifiedBooks.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.insights_locations_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            items(
+                count = classifiedBooks.size,
+                key = { index -> classifiedBooks[index].copyId },
+            ) { index ->
+                val book = classifiedBooks[index]
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Rounded.LocationOn, contentDescription = null)
+                        Column {
+                            Text(book.title, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                stringResource(
+                                    R.string.insights_location_item,
+                                    book.ndcCode.orEmpty(),
+                                    book.location,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -12,6 +12,7 @@ data class BookEditDraft(
     val ndcEdition: String,
     val location: String,
     val readingStatus: ReadingStatus,
+    val locationTierId: String? = null,
 )
 
 data class ValidatedBookEdit(
@@ -23,6 +24,7 @@ data class ValidatedBookEdit(
     val ndcEdition: String?,
     val location: String,
     val readingStatus: ReadingStatus,
+    val locationTierId: String? = null,
 )
 
 data class BookEditValidationError(
@@ -91,6 +93,7 @@ class BookEditValidator(
                 ndcEdition = ndcEdition,
                 location = requireNotNull(location),
                 readingStatus = draft.readingStatus,
+                locationTierId = draft.locationTierId,
             ),
         )
     }

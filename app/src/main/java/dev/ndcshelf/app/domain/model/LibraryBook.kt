@@ -17,6 +17,7 @@ data class LibraryBook(
     val location: String,
     val readingStatus: ReadingStatus,
     val addedAt: Long,
+    val locationTierId: String? = null,
 ) {
     val ndcCategory: NdcCategory?
         get() = NdcCategory.fromCode(ndcCode)
