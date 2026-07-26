@@ -80,7 +80,9 @@ fun DataManagementScreen(
     val emptyReason = stringResource(R.string.data_management_empty_reason)
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(DATA_LIST_TAG),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = contentPadding.calculateTopPadding() + 20.dp,
@@ -319,6 +321,7 @@ private fun DataOperationCard(
             if (!enabled && disabledReason != null) {
                 Text(
                     text = disabledReason,
+                    modifier = Modifier.testTag("${testTag}_reason"),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (destructive) {
                         MaterialTheme.colorScheme.onErrorContainer
@@ -568,3 +571,4 @@ internal const val IMPORT_JSON_TAG = "data_import_json"
 internal const val IMPORT_CSV_TAG = "data_import_csv"
 internal const val BACKUP_TAG = "data_database_backup"
 internal const val RESTORE_TAG = "data_database_restore"
+internal const val DATA_LIST_TAG = "data_management_list"

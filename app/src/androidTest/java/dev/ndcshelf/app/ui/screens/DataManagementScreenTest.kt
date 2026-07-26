@@ -4,12 +4,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.LibraryImportUiState
@@ -25,14 +26,13 @@ class DataManagementScreenTest {
     fun emptyLibrary_disablesOnlyOperationsThatNeedCurrentData() {
         setContent(bookCount = 0)
 
-        composeRule.onNodeWithTag(EXPORT_JSON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EXPORT_CSV_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(BACKUP_TAG).performScrollTo().assertIsNotEnabled()
-        composeRule.onNodeWithTag(IMPORT_JSON_TAG).performScrollTo().assertIsEnabled()
-        composeRule.onNodeWithTag(IMPORT_CSV_TAG).performScrollTo().assertIsEnabled()
-        composeRule.onNodeWithTag(RESTORE_TAG).performScrollTo().assertIsEnabled()
-        composeRule.onAllNodesWithText("本棚が空のため書き出すデータがありません")
-            .assertCountEquals(3)
+        val emptyReason = "本棚が空のため書き出すデータがありません"
+        assertButton(EXPORT_JSON_TAG, enabled = false, reason = emptyReason)
+        assertButton(EXPORT_CSV_TAG, enabled = false, reason = emptyReason)
+        assertButton(BACKUP_TAG, enabled = false, reason = emptyReason)
+        assertButton(IMPORT_JSON_TAG, enabled = true)
+        assertButton(IMPORT_CSV_TAG, enabled = true)
+        assertButton(RESTORE_TAG, enabled = true)
     }
 
     @Test
@@ -81,6 +81,18 @@ class DataManagementScreenTest {
                     contentPadding = PaddingValues(0.dp),
                 )
             }
+        }
+    }
+
+    private fun assertButton(tag: String, enabled: Boolean, reason: String? = null) {
+        composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(hasTestTag(tag))
+        val node = composeRule.onNodeWithTag(tag)
+        if (enabled) {
+            node.assertIsEnabled()
+        } else {
+            node.assertIsNotEnabled()
+            val reasonNode = composeRule.onNodeWithTag("${tag}_reason").assertIsDisplayed()
+            if (reason != null) reasonNode.assertTextEquals(reason)
         }
     }
 }
