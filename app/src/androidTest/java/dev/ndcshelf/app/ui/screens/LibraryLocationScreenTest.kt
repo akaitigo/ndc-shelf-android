@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsEnabled
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
@@ -45,6 +46,24 @@ class LibraryLocationScreenTest {
 
         composeRule.onNodeWithText("登録済みの段").assertIsDisplayed()
         composeRule.onNodeWithText("書斎 / 本棚A / 上段").assertIsDisplayed()
+    }
+
+    @Test
+    fun bookEditorShowsNeighborsAndAccessibleMoveActions() {
+        val books = listOf(
+            book().copy(copyId = "left", title = "左の本", shelfOrderKey = "20"),
+            book().copy(copyId = "middle", title = "中央の本", shelfOrderKey = "40"),
+            book().copy(copyId = "right", title = "右の本", shelfOrderKey = "60"),
+        )
+        setLibraryContent(books)
+
+        composeRule.onNodeWithText("中央の本").performClick()
+
+        composeRule.onNodeWithText("左: 左の本").assertIsDisplayed()
+        composeRule.onNodeWithText("右: 右の本").assertIsDisplayed()
+        composeRule.onNodeWithText("左へ移動").assertIsEnabled()
+        composeRule.onNodeWithText("右へ移動").assertIsEnabled()
+        composeRule.onNodeWithText("棚へ入れる位置").assertIsDisplayed()
     }
 
     private fun setLibraryContent(books: List<LibraryBook>) {

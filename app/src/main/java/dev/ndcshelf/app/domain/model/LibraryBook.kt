@@ -18,6 +18,7 @@ data class LibraryBook(
     val readingStatus: ReadingStatus,
     val addedAt: Long,
     val locationTierId: String? = null,
+    val shelfOrderKey: String? = null,
 ) {
     val ndcCategory: NdcCategory?
         get() = NdcCategory.fromCode(ndcCode)

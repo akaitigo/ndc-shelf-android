@@ -141,7 +141,13 @@ class RoomLocationRepository(
             ) {
                 return@withTransaction LocationMutationResult.InvalidDestination
             }
-            if (count > 0) dao.reassignCopies(tierIds, replacementTierId, UNSET_LOCATION)
+            if (count > 0) {
+                if (replacementTierId == null) {
+                    dao.unsetCopies(tierIds, UNSET_LOCATION)
+                } else {
+                    appendCopiesToTier(tierIds, replacementTierId)
+                }
+            }
             val deleted = when (level) {
                 LocationLevel.ROOM -> dao.deleteRoom(id)
                 LocationLevel.SHELF -> dao.deleteShelf(id)
@@ -168,6 +174,24 @@ class RoomLocationRepository(
             }
             LocationLevel.TIER -> if (dao.findTier(id) == null) null else listOf(id)
         }
+
+    private suspend fun appendCopiesToTier(sourceTierIds: List<String>, targetTierId: String) {
+        val targetCopies = dao.getOrderedCopies(targetTierId)
+        var previousKey = targetCopies.lastOrNull()?.shelfOrderKey
+        if (targetCopies.any { it.shelfOrderKey == null }) {
+            previousKey = null
+            targetCopies.forEach { copy ->
+                val key = FractionalOrderKey.between(previousKey, null, copy.id)
+                check(dao.updateCopyOrder(copy.id, key) == 1)
+                previousKey = key
+            }
+        }
+        dao.getCopiesInTiers(sourceTierIds).forEach { copy ->
+            val key = FractionalOrderKey.between(previousKey, null, copy.id)
+            check(dao.reassignCopy(copy.id, targetTierId, key, UNSET_LOCATION) == 1)
+            previousKey = key
+        }
+    }
 
     private suspend fun <T> moveAmong(
         siblings: List<T>,

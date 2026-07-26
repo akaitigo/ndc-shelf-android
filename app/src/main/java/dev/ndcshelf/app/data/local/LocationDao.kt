@@ -9,6 +9,24 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LocationDao {
+    @Query(
+        """
+        SELECT * FROM owned_copies
+        WHERE tierId = :tierId AND id != :excludingCopyId
+        ORDER BY shelfOrderKey IS NULL, shelfOrderKey, addedAt, id
+        """,
+    )
+    suspend fun getOrderedCopies(
+        tierId: String,
+        excludingCopyId: String = "",
+    ): List<OwnedCopyEntity>
+
+    @Query("UPDATE owned_copies SET shelfOrderKey = :orderKey WHERE id = :copyId")
+    suspend fun updateCopyOrder(copyId: String, orderKey: String): Int
+
+    @Query("SELECT * FROM owned_copies WHERE tierId IN (:tierIds) ORDER BY addedAt, id")
+    suspend fun getCopiesInTiers(tierIds: List<String>): List<OwnedCopyEntity>
+
     @Query("SELECT * FROM location_rooms ORDER BY sortOrder, name, id")
     fun observeRooms(): Flow<List<LocationRoomEntity>>
 
@@ -100,12 +118,28 @@ interface LocationDao {
     @Query("SELECT COUNT(*) FROM owned_copies WHERE tierId IN (:tierIds)")
     suspend fun countCopiesInTiers(tierIds: List<String>): Int
 
-    @Query("UPDATE owned_copies SET tierId = :replacementTierId, location = :fallback WHERE tierId IN (:tierIds)")
-    suspend fun reassignCopies(
-        tierIds: List<String>,
-        replacementTierId: String?,
-        fallback: String,
+    @Query(
+        """
+        UPDATE owned_copies
+        SET tierId = NULL, shelfOrderKey = NULL, location = :fallback
+        WHERE tierId IN (:tierIds)
+        """,
     )
+    suspend fun unsetCopies(tierIds: List<String>, fallback: String)
+
+    @Query(
+        """
+        UPDATE owned_copies
+        SET tierId = :tierId, shelfOrderKey = :orderKey, location = :fallback
+        WHERE id = :copyId
+        """,
+    )
+    suspend fun reassignCopy(
+        copyId: String,
+        tierId: String,
+        orderKey: String,
+        fallback: String,
+    ): Int
 
     @Query("DELETE FROM location_rooms WHERE id = :id")
     suspend fun deleteRoom(id: String): Int

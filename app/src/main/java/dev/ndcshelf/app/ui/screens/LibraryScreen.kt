@@ -62,11 +62,13 @@ import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
+import dev.ndcshelf.app.ShelfMoveUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.MoveDirection
+import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.ReadingStatus
@@ -89,6 +91,9 @@ fun LibraryScreen(
     onMoveLocation: (LocationLevel, String, MoveDirection) -> Unit,
     onDeleteLocation: (LocationLevel, String, String?, Boolean) -> Unit,
     onClearLocationState: () -> Unit,
+    shelfMoveState: ShelfMoveUiState = ShelfMoveUiState.Idle,
+    onMoveBookWithinTier: (String, ShelfMoveDirection) -> Unit = { _, _ -> },
+    onClearShelfMoveState: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -198,14 +203,19 @@ fun LibraryScreen(
             editState = bookEditState,
             deleteState = bookDeleteState,
             locations = locations,
+            allBooks = books,
+            shelfMoveState = shelfMoveState,
             onDismiss = {
                 onClearBookEditState()
                 onClearBookDeleteState()
+                onClearShelfMoveState()
                 selectedBook = null
             },
             onClearErrors = onClearBookEditState,
             onSave = { draft -> onSaveBook(book.copyId, draft) },
             onDelete = { onDeleteBook(book.copyId) },
+            onMoveWithinTier = { direction -> onMoveBookWithinTier(book.copyId, direction) },
+            onClearShelfMoveState = onClearShelfMoveState,
         )
     }
 
@@ -417,12 +427,16 @@ private fun EmptyLibrary(
 private fun EditBookSheet(
     book: LibraryBook,
     locations: LocationTree,
+    allBooks: List<LibraryBook>,
+    shelfMoveState: ShelfMoveUiState,
     editState: BookEditUiState,
     deleteState: BookDeleteUiState,
     onDismiss: () -> Unit,
     onClearErrors: () -> Unit,
     onSave: (BookEditDraft) -> Unit,
     onDelete: () -> Unit,
+    onMoveWithinTier: (ShelfMoveDirection) -> Unit,
+    onClearShelfMoveState: () -> Unit,
 ) {
     var title by rememberSaveable(book.copyId) { mutableStateOf(book.title) }
     var primaryAuthor by rememberSaveable(book.copyId) { mutableStateOf(book.primaryAuthor) }
@@ -434,17 +448,41 @@ private fun EditBookSheet(
     var ndcEdition by rememberSaveable(book.copyId) { mutableStateOf(book.ndcEdition.orEmpty()) }
     var location by rememberSaveable(book.copyId) { mutableStateOf(book.location) }
     var locationTierId by rememberSaveable(book.copyId) { mutableStateOf(book.locationTierId) }
+    var insertAfterCopyId by rememberSaveable(book.copyId) { mutableStateOf<String?>(null) }
+    var insertAtStart by rememberSaveable(book.copyId) { mutableStateOf(false) }
+    var positionSpecified by rememberSaveable(book.copyId) { mutableStateOf(false) }
     var status by remember(book.copyId) { mutableStateOf(book.readingStatus) }
     var showDeleteConfirmation by rememberSaveable(book.copyId) { mutableStateOf(false) }
     val saving = editState is BookEditUiState.Saving && editState.copyId == book.copyId
     val deleting = deleteState is BookDeleteUiState.Deleting &&
         deleteState.copyId == book.copyId
     val busy = saving || deleting
+    val moving = shelfMoveState is ShelfMoveUiState.Moving && shelfMoveState.copyId == book.copyId
     val errors = (editState as? BookEditUiState.Invalid)
         ?.takeIf { it.copyId == book.copyId }
         ?.errors
         .orEmpty()
     val unsetLocation = stringResource(R.string.location_unset_value)
+    val orderedTierBooks = remember(allBooks, book.locationTierId) {
+        allBooks.filter { it.locationTierId == book.locationTierId && it.locationTierId != null }
+            .sortedWith(
+                compareBy<LibraryBook> { it.shelfOrderKey == null }
+                    .thenBy { it.shelfOrderKey }
+                    .thenBy { it.addedAt }
+                    .thenBy { it.copyId },
+            )
+    }
+    val currentShelfIndex = orderedTierBooks.indexOfFirst { it.copyId == book.copyId }
+    val leftNeighbor = orderedTierBooks.getOrNull(currentShelfIndex - 1)
+    val rightNeighbor = orderedTierBooks.getOrNull(currentShelfIndex + 1)
+    val targetTierBooks = allBooks.filter {
+        it.locationTierId == locationTierId && it.copyId != book.copyId
+    }.sortedWith(
+        compareBy<LibraryBook> { it.shelfOrderKey == null }
+            .thenBy { it.shelfOrderKey }
+            .thenBy { it.addedAt }
+            .thenBy { it.copyId },
+    )
 
     fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
 
@@ -457,6 +495,9 @@ private fun EditBookSheet(
         ndcEdition = book.ndcEdition.orEmpty()
         location = book.location
         locationTierId = book.locationTierId
+        insertAfterCopyId = null
+        insertAtStart = false
+        positionSpecified = false
         status = book.readingStatus
         onClearErrors()
     }
@@ -578,6 +619,7 @@ private fun EditBookSheet(
                     selected = locationTierId == null,
                     onClick = {
                         locationTierId = null
+                        positionSpecified = true
                         location = unsetLocation
                     },
                     label = { Text(stringResource(R.string.location_unset_or_free)) },
@@ -585,16 +627,94 @@ private fun EditBookSheet(
                 )
                 locations.tiers.forEach { tier ->
                     val path = locations.pathForTier(tier.id) ?: tier.name
+                    val candidates = allBooks.filter {
+                        it.locationTierId == tier.id && it.copyId != book.copyId
+                    }.sortedWith(
+                        compareBy<LibraryBook> { it.shelfOrderKey == null }
+                            .thenBy { it.shelfOrderKey }
+                            .thenBy { it.addedAt }
+                            .thenBy { it.copyId },
+                    )
                     FilterChip(
                         selected = locationTierId == tier.id,
                         onClick = {
                             locationTierId = tier.id
                             location = path
+                            positionSpecified = true
+                            insertAtStart = candidates.isEmpty()
+                            insertAfterCopyId = candidates.lastOrNull()?.copyId
                         },
                         label = { Text(path) },
                         enabled = !busy,
                     )
                 }
+            }
+            if (locationTierId != null) {
+                Text(
+                    stringResource(R.string.shelf_order_insert_title),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = positionSpecified && insertAtStart,
+                        onClick = {
+                            positionSpecified = true
+                            insertAtStart = true
+                            insertAfterCopyId = null
+                        },
+                        label = { Text(stringResource(R.string.shelf_order_insert_start)) },
+                        enabled = !busy,
+                    )
+                    targetTierBooks.forEach { candidate ->
+                        FilterChip(
+                            selected = positionSpecified && insertAfterCopyId == candidate.copyId,
+                            onClick = {
+                                positionSpecified = true
+                                insertAtStart = false
+                                insertAfterCopyId = candidate.copyId
+                            },
+                            label = {
+                                Text(stringResource(R.string.shelf_order_insert_after, candidate.title))
+                            },
+                            enabled = !busy,
+                        )
+                    }
+                }
+            }
+            if (book.locationTierId != null) {
+                Text(stringResource(R.string.shelf_order_title), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    stringResource(
+                        R.string.shelf_order_left_neighbor,
+                        leftNeighbor?.title ?: stringResource(R.string.shelf_order_edge),
+                    ),
+                )
+                Text(
+                    stringResource(
+                        R.string.shelf_order_right_neighbor,
+                        rightNeighbor?.title ?: stringResource(R.string.shelf_order_edge),
+                    ),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            onClearShelfMoveState()
+                            onMoveWithinTier(ShelfMoveDirection.LEFT)
+                        },
+                        enabled = leftNeighbor != null && !moving,
+                    ) { Text(stringResource(R.string.shelf_order_move_left)) }
+                    Button(
+                        onClick = {
+                            onClearShelfMoveState()
+                            onMoveWithinTier(ShelfMoveDirection.RIGHT)
+                        },
+                        enabled = rightNeighbor != null && !moving,
+                    ) { Text(stringResource(R.string.shelf_order_move_right)) }
+                }
+                (shelfMoveState as? ShelfMoveUiState.Error)?.let { Text(it.message) }
             }
             Text(
                 text = stringResource(R.string.book_edit_reading_status),
@@ -633,6 +753,9 @@ private fun EditBookSheet(
                             location = location,
                             readingStatus = status,
                             locationTierId = locationTierId,
+                            locationInsertAfterCopyId = insertAfterCopyId,
+                            locationInsertAtStart = insertAtStart,
+                            locationPositionSpecified = positionSpecified,
                         ),
                     )
                 },
