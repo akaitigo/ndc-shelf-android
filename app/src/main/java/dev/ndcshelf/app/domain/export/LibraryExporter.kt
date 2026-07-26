@@ -152,7 +152,7 @@ object LibraryExporter {
 
     private val FORMULA_PREFIXES = setOf('=', '+', '-', '@')
 
-    private val CSV_COLUMNS = listOf(
+    val CSV_COLUMNS = listOf(
         "copyId",
         "workId",
         "editionId",

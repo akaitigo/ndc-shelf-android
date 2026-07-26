@@ -74,7 +74,7 @@ fun LibraryScreen(
     books: List<LibraryBook>,
     onUpdateCopy: (String, String, ReadingStatus) -> Unit,
     onExport: (LibraryExportFormat) -> Unit,
-    onImportJson: () -> Unit,
+    onImport: (LibraryExportFormat) -> Unit,
     importState: LibraryImportUiState,
     onSelectImportPolicy: (ImportConflictPolicy) -> Unit,
     onConfirmImport: () -> Unit,
@@ -84,6 +84,7 @@ fun LibraryScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var selectedBook by remember { mutableStateOf<LibraryBook?>(null) }
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var showImportDialog by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
@@ -108,7 +109,7 @@ fun LibraryScreen(
                 )
                 Row {
                     IconButton(
-                        onClick = onImportJson,
+                        onClick = { showImportDialog = true },
                         enabled = importState !is LibraryImportUiState.Loading &&
                             importState !is LibraryImportUiState.Applying,
                     ) {
@@ -204,6 +205,16 @@ fun LibraryScreen(
             onSelect = { format ->
                 showExportDialog = false
                 onExport(format)
+            },
+        )
+    }
+
+    if (showImportDialog) {
+        ImportFormatDialog(
+            onDismiss = { showImportDialog = false },
+            onSelect = { format ->
+                showImportDialog = false
+                onImport(format)
             },
         )
     }
@@ -319,7 +330,12 @@ private fun ImportPreviewDialog(
         icon = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
         title = { Text(stringResource(R.string.import_preview_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 if (state.staleRecalculated) {
                     Text(
                         text = stringResource(R.string.import_stale_notice),
@@ -337,6 +353,27 @@ private fun ImportPreviewDialog(
                     ),
                     fontWeight = FontWeight.Bold,
                 )
+                if (state.warnings.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.import_warning_title),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    state.warnings.forEach { warning ->
+                        Text(
+                            text = if (warning.field == null) {
+                                warning.reason
+                            } else {
+                                stringResource(
+                                    R.string.import_error_root,
+                                    warning.field,
+                                    warning.reason,
+                                )
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
                 Column(Modifier.selectableGroup()) {
                     ImportPolicyOption(
                         selected = state.conflictPolicy == ImportConflictPolicy.SKIP_EXISTING,
@@ -370,9 +407,33 @@ private fun ImportPreviewDialog(
 @Composable
 private fun importFailureMessage(failure: ImportFailure): String = when (failure) {
     ImportFailure.JSON_READ -> stringResource(R.string.import_read_failure)
+    ImportFailure.CSV_READ -> stringResource(R.string.import_csv_read_failure)
     ImportFailure.PREVIEW -> stringResource(R.string.import_preview_failure)
     ImportFailure.APPLY -> stringResource(R.string.import_apply_failure)
     ImportFailure.STALE_RESELECT -> stringResource(R.string.import_stale_reselect)
+}
+
+@Composable
+private fun ImportFormatDialog(
+    onDismiss: () -> Unit,
+    onSelect: (LibraryExportFormat) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
+        title = { Text(stringResource(R.string.import_dialog_title)) },
+        text = { Text(stringResource(R.string.import_dialog_description)) },
+        confirmButton = {
+            Button(onClick = { onSelect(LibraryExportFormat.JSON) }) {
+                Text(stringResource(R.string.import_json))
+            }
+        },
+        dismissButton = {
+            Button(onClick = { onSelect(LibraryExportFormat.CSV) }) {
+                Text(stringResource(R.string.import_csv))
+            }
+        },
+    )
 }
 
 @Composable

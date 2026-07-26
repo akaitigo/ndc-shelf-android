@@ -96,6 +96,22 @@ class MainViewModelImportTest {
     }
 
     @Test
+    fun `CSV is previewed and unknown columns remain visible as warnings`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(emptyList())
+        val viewModel = viewModel(repository)
+        val source = """copyId,workId,editionId,title,primaryAuthor,isbn13,classificationSource,mediaType,location,readingStatus,addedAt,notes
+            |copy-1,work-1,edition-1,本の題名,著者,9784820418078,NDL,PHYSICAL,本棚A,READING,1700000000000,ignored
+        """.trimMargin().toByteArray()
+
+        viewModel.loadCsvImport(ByteArrayInputStream(source))
+
+        val preview = viewModel.importState.value as LibraryImportUiState.Preview
+        assertEquals(1, preview.addedCount)
+        assertTrue(preview.warnings.any { it.field == "notes" })
+        assertEquals(1, repository.previewCalls)
+    }
+
+    @Test
     fun `stale preview is recalculated before another confirmation`() = runTest(dispatcher) {
         val repository = FakeLibraryRepository(emptyList()).apply {
             nextApplyResult = ImportApplyResult.StalePreview

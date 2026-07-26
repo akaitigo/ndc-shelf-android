@@ -105,6 +105,24 @@ fun NdcShelfApp(viewModel: MainViewModel) {
             }
         }
     }
+    val csvImporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            val input = try {
+                context.contentResolver.openInputStream(uri)
+            } catch (_: Exception) {
+                null
+            }
+            if (input == null) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(resources.getString(R.string.import_open_failure))
+                }
+            } else {
+                viewModel.loadCsvImport(input)
+            }
+        }
+    }
 
     LaunchedEffect(importState) {
         val result = importState as? LibraryImportUiState.Success ?: return@LaunchedEffect
@@ -153,7 +171,16 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 books = books,
                 onUpdateCopy = viewModel::updateCopy,
                 onExport = ::requestExport,
-                onImportJson = { jsonImporter.launch(arrayOf("application/json", "text/json")) },
+                onImport = { format ->
+                    when (format) {
+                        LibraryExportFormat.JSON -> jsonImporter.launch(
+                            arrayOf("application/json", "text/json"),
+                        )
+                        LibraryExportFormat.CSV -> csvImporter.launch(
+                            arrayOf("text/csv", "text/comma-separated-values"),
+                        )
+                    }
+                },
                 importState = importState,
                 onSelectImportPolicy = viewModel::selectImportConflictPolicy,
                 onConfirmImport = viewModel::confirmImport,

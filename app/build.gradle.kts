@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.apache.commons.csv)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
