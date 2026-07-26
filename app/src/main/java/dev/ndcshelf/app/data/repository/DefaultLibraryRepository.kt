@@ -27,9 +27,15 @@ import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.BookEditValidationResult
 import dev.ndcshelf.app.domain.model.BookEditValidator
 import dev.ndcshelf.app.domain.model.BookstoreBook
+import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
+import dev.ndcshelf.app.domain.model.ManualBookDraft
+import dev.ndcshelf.app.domain.model.ManualBookValidationResult
+import dev.ndcshelf.app.domain.model.ManualBookValidator
+import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
+import dev.ndcshelf.app.domain.model.NdlReconciliationCandidate
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanAttempt
 import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
@@ -42,6 +48,9 @@ import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
 import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.ManualBookResult
+import dev.ndcshelf.app.domain.repository.ManualReconciliationApplyResult
+import dev.ndcshelf.app.domain.repository.ManualReconciliationLookupResult
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
@@ -62,6 +71,7 @@ class DefaultLibraryRepository(
 ) : LibraryRepository {
     private val dao = database.libraryDao()
     private val bookEditValidator = BookEditValidator()
+    private val manualBookValidator = ManualBookValidator(nowMillis)
     private val importPlanner = LibraryImportPlanner()
     private val importCommitter = LibraryImportCommitter(
         readCurrentBooks = { dao.getLibrary().map(LibraryBookRow::toDomain) },
@@ -128,8 +138,8 @@ class DefaultLibraryRepository(
                 is AddBookResult.Failure -> ScanAttemptOutcome.FAILURE
             }
             val isbn = when (result) {
-                is AddBookResult.Added -> result.book.isbn13
-                is AddBookResult.Duplicate -> result.book.isbn13
+                is AddBookResult.Added -> result.book.isbn13.orEmpty()
+                is AddBookResult.Duplicate -> result.book.isbn13.orEmpty()
                 is AddBookResult.InvalidIsbn -> result.rawValue.trim().take(MAX_RECORDED_ISBN_LENGTH)
                 is AddBookResult.NotFound -> result.isbn13
                 is AddBookResult.Failure -> result.isbn13
@@ -320,6 +330,232 @@ class DefaultLibraryRepository(
         )
     }
 
+    override suspend fun addManualBook(draft: ManualBookDraft): ManualBookResult {
+        val validated = when (val result = manualBookValidator.validate(draft)) {
+            is ManualBookValidationResult.Invalid -> return ManualBookResult.Invalid(result.errors)
+            is ManualBookValidationResult.Valid -> result.book
+        }
+        return try {
+            database.withTransaction {
+                validated.isbn13?.let { isbn13 ->
+                    dao.findEditionByIsbn(isbn13)?.let { edition ->
+                        val work = dao.findWorkById(edition.workId)
+                            ?: return@withTransaction ManualBookResult.Failure
+                        return@withTransaction ManualBookResult.Duplicate(
+                            isbn13 = isbn13,
+                            title = work.title,
+                            copyCount = dao.countCopiesForEdition(edition.id),
+                        )
+                    }
+                }
+
+                val workId = idFactory()
+                val editionId = idFactory()
+                val copyId = idFactory()
+                val addedAt = nowMillis()
+                val classificationSource = if (validated.ndcCode == null) {
+                    ClassificationSource.UNKNOWN
+                } else {
+                    ClassificationSource.MANUAL
+                }
+                dao.insertWork(
+                    BookWorkEntity(workId, validated.title, validated.primaryAuthor),
+                )
+                dao.insertEdition(
+                    BookEditionEntity(
+                        id = editionId,
+                        workId = workId,
+                        isbn13 = validated.isbn13,
+                        publisher = validated.publisher,
+                        publishedYear = validated.publishedYear,
+                        coverUrl = null,
+                        ndcCode = validated.ndcCode,
+                        ndcEdition = validated.ndcEdition,
+                        classificationSource = classificationSource.name,
+                        bibliographicSource = BibliographicSource.MANUAL.name,
+                    ),
+                )
+                dao.insertCopy(
+                    OwnedCopyEntity(
+                        id = copyId,
+                        editionId = editionId,
+                        mediaType = validated.mediaType.name,
+                        location = "未設定",
+                        readingStatus = ReadingStatus.UNREAD.name,
+                        addedAt = addedAt,
+                        copyLabel = "1冊目",
+                    ),
+                )
+                ManualBookResult.Added(
+                    LibraryBook(
+                        copyId = copyId,
+                        workId = workId,
+                        editionId = editionId,
+                        title = validated.title,
+                        primaryAuthor = validated.primaryAuthor,
+                        isbn13 = validated.isbn13,
+                        publisher = validated.publisher,
+                        publishedYear = validated.publishedYear,
+                        coverUrl = null,
+                        ndcCode = validated.ndcCode,
+                        ndcEdition = validated.ndcEdition,
+                        classificationSource = classificationSource,
+                        mediaType = validated.mediaType,
+                        location = "未設定",
+                        readingStatus = ReadingStatus.UNREAD,
+                        addedAt = addedAt,
+                        copyLabel = "1冊目",
+                        bibliographicSource = BibliographicSource.MANUAL,
+                    ),
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            ManualBookResult.Failure
+        }
+    }
+
+    override suspend fun previewManualReconciliation(
+        copyId: String,
+        rawIsbn: String,
+    ): ManualReconciliationLookupResult {
+        val isbn13 = Isbn.normalizeToIsbn13(rawIsbn)
+            ?: return ManualReconciliationLookupResult.InvalidIsbn(rawIsbn)
+        val current = dao.findOwnedByCopyId(copyId)?.toDomain()
+            ?: return ManualReconciliationLookupResult.NotManual
+        if (current.bibliographicSource != BibliographicSource.MANUAL) {
+            return ManualReconciliationLookupResult.NotManual
+        }
+        val lookup = try {
+            metadataService.findByIsbn(isbn13)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            return ManualReconciliationLookupResult.Failure(AddBookFailure.NETWORK)
+        }
+        val metadata = when (lookup) {
+            is BookMetadataLookupResult.Found -> lookup.metadata
+            BookMetadataLookupResult.NotFound -> return ManualReconciliationLookupResult.NotFound(isbn13)
+            is BookMetadataLookupResult.Failure -> return ManualReconciliationLookupResult.Failure(
+                lookup.reason.toAddBookFailure(),
+            )
+        }
+        val existing = dao.findEditionByIsbn(isbn13)?.takeIf { it.id != current.editionId }
+        val candidate = if (
+            existing == null || existing.bibliographicSource == BibliographicSource.MANUAL.name
+        ) {
+            val classificationSource = if (metadata.ndcCode == null) {
+                ClassificationSource.UNKNOWN
+            } else {
+                ClassificationSource.NDL
+            }
+            NdlReconciliationCandidate(
+                isbn13 = isbn13,
+                title = metadata.title,
+                primaryAuthor = metadata.authors.joinToString("・").ifBlank { "著者不明" },
+                publisher = metadata.publisher,
+                publishedYear = metadata.publishedYear,
+                coverUrl = metadata.coverUrl,
+                ndcCode = metadata.ndcCode,
+                ndcEdition = metadata.ndcEdition,
+                classificationSource = classificationSource,
+            )
+        } else {
+            val work = dao.findWorkById(existing.workId)
+                ?: return ManualReconciliationLookupResult.Failure(AddBookFailure.SAVE)
+            NdlReconciliationCandidate(
+                isbn13 = isbn13,
+                title = work.title,
+                primaryAuthor = work.primaryAuthor,
+                publisher = existing.publisher,
+                publishedYear = existing.publishedYear,
+                coverUrl = existing.coverUrl,
+                ndcCode = existing.ndcCode,
+                ndcEdition = existing.ndcEdition,
+                classificationSource = existing.classificationSource.toEnumOrDefault(
+                    ClassificationSource.UNKNOWN,
+                ),
+            )
+        }
+        return ManualReconciliationLookupResult.Ready(
+            ManualReconciliationPreview(
+                current = current,
+                candidate = candidate,
+                existingEditionId = existing?.id,
+                existingCopyCount = existing?.let { dao.countCopiesForEdition(it.id) } ?: 0,
+            ),
+        )
+    }
+
+    override suspend fun confirmManualReconciliation(
+        preview: ManualReconciliationPreview,
+    ): ManualReconciliationApplyResult = try {
+        database.withTransaction {
+            val current = dao.findOwnedByCopyId(preview.current.copyId)?.toDomain()
+                ?: return@withTransaction ManualReconciliationApplyResult.Conflict
+            if (current != preview.current ||
+                current.bibliographicSource != BibliographicSource.MANUAL
+            ) {
+                return@withTransaction ManualReconciliationApplyResult.Conflict
+            }
+            val isbnEdition = dao.findEditionByIsbn(preview.candidate.isbn13)
+            val targetId = isbnEdition?.id?.takeIf { it != current.editionId }
+            if (targetId != preview.existingEditionId) {
+                return@withTransaction ManualReconciliationApplyResult.Conflict
+            }
+            if (targetId != null) {
+                val target = requireNotNull(isbnEdition)
+                if (target.bibliographicSource == BibliographicSource.MANUAL.name) {
+                    dao.updateWork(
+                        target.workId,
+                        preview.candidate.title,
+                        preview.candidate.primaryAuthor,
+                    )
+                    check(
+                        dao.reconcileManualEdition(
+                            editionId = target.id,
+                            isbn13 = preview.candidate.isbn13,
+                            publisher = preview.candidate.publisher,
+                            publishedYear = preview.candidate.publishedYear,
+                            coverUrl = preview.candidate.coverUrl,
+                            ndcCode = preview.candidate.ndcCode,
+                            ndcEdition = preview.candidate.ndcEdition,
+                            classificationSource = preview.candidate.classificationSource.name,
+                        ) == 1,
+                    )
+                }
+                check(dao.moveCopiesToEdition(current.editionId, targetId) > 0)
+                dao.deleteWishlistByEditionId(targetId)
+                check(dao.deleteEditionById(current.editionId) == 1)
+                if (dao.countEditionsForWork(current.workId) == 0) dao.deleteWorkById(current.workId)
+            } else {
+                dao.updateWork(
+                    current.workId,
+                    preview.candidate.title,
+                    preview.candidate.primaryAuthor,
+                )
+                check(
+                    dao.reconcileManualEdition(
+                        editionId = current.editionId,
+                        isbn13 = preview.candidate.isbn13,
+                        publisher = preview.candidate.publisher,
+                        publishedYear = preview.candidate.publishedYear,
+                        coverUrl = preview.candidate.coverUrl,
+                        ndcCode = preview.candidate.ndcCode,
+                        ndcEdition = preview.candidate.ndcEdition,
+                        classificationSource = preview.candidate.classificationSource.name,
+                    ) == 1,
+                )
+            }
+            ManualReconciliationApplyResult.Applied
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        ManualReconciliationApplyResult.Failure
+    }
+
     override suspend fun addAnotherCopy(
         rawIsbn: String,
         copyLabel: String,
@@ -494,7 +730,7 @@ class DefaultLibraryRepository(
             editionId = edition.id,
             title = work.title,
             primaryAuthor = work.primaryAuthor,
-            isbn13 = edition.isbn13,
+            isbn13 = edition.isbn13 ?: return null,
             publisher = edition.publisher,
             publishedYear = edition.publishedYear,
             coverUrl = edition.coverUrl,
@@ -692,7 +928,7 @@ class DefaultLibraryRepository(
                 return@withTransaction RestoreDeletedBookResult.Conflict
             }
             val existingEdition = dao.findEditionById(book.editionId)
-            val isbnEdition = dao.findEditionByIsbn(book.isbn13)
+            val isbnEdition = book.isbn13?.let { dao.findEditionByIsbn(it) }
             if (existingEdition != null && existingEdition != expectedEdition) {
                 return@withTransaction RestoreDeletedBookResult.Conflict
             }
@@ -724,7 +960,7 @@ class DefaultLibraryRepository(
 
     private suspend fun writeImportedBooks(books: List<LibraryBook>) {
         val resolved = books.map { book ->
-            dao.findEditionByIsbn(book.isbn13)?.let { existing ->
+            book.isbn13?.let { dao.findEditionByIsbn(it) }?.let { existing ->
                 book.copy(workId = existing.workId, editionId = existing.id)
             } ?: book
         }
@@ -810,6 +1046,7 @@ private fun LibraryBook.toEditionEntity() = BookEditionEntity(
     ndcCode = ndcCode,
     ndcEdition = ndcEdition,
     classificationSource = classificationSource.name,
+    bibliographicSource = bibliographicSource.name,
 )
 
 private fun BookstoreBook.toWorkEntity() = BookWorkEntity(
@@ -821,13 +1058,14 @@ private fun BookstoreBook.toWorkEntity() = BookWorkEntity(
 private fun BookstoreBook.toEditionEntity() = BookEditionEntity(
     id = editionId,
     workId = workId,
-    isbn13 = isbn13,
+    isbn13 = requireNotNull(isbn13) { "Wishlist edition must have an ISBN" },
     publisher = publisher,
     publishedYear = publishedYear,
     coverUrl = coverUrl,
     ndcCode = ndcCode,
     ndcEdition = ndcEdition,
     classificationSource = classificationSource.name,
+    bibliographicSource = BibliographicSource.NDL.name,
 )
 
 private fun LibraryBook.toCopyEntity() = OwnedCopyEntity(
@@ -857,6 +1095,7 @@ internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     classificationSource = classificationSource.toEnumOrDefault(
         ClassificationSource.UNKNOWN,
     ),
+    bibliographicSource = bibliographicSource.toEnumOrDefault(BibliographicSource.NDL),
     mediaType = mediaType.toEnumOrDefault(MediaType.PHYSICAL),
     location = location,
     readingStatus = readingStatus.toEnumOrDefault(ReadingStatus.UNREAD),
@@ -871,7 +1110,7 @@ internal fun WishlistBookRow.toDomain(): BookstoreBook = BookstoreBook(
     editionId = editionId,
     title = title,
     primaryAuthor = primaryAuthor,
-    isbn13 = isbn13,
+    isbn13 = requireNotNull(isbn13) { "Wishlist edition must have an ISBN" },
     publisher = publisher,
     publishedYear = publishedYear,
     coverUrl = coverUrl,

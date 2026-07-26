@@ -27,7 +27,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -79,10 +81,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.BookstoreUiState
+import dev.ndcshelf.app.ManualRegistrationUiState
 import dev.ndcshelf.app.ScanFailure
 import dev.ndcshelf.app.ScanSessionUiState
 import dev.ndcshelf.app.ScanUiState
 import dev.ndcshelf.app.domain.model.BookstoreBook
+import dev.ndcshelf.app.domain.model.ManualBookDraft
+import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
@@ -99,6 +104,7 @@ fun ScanScreen(
     wishlist: List<BookstoreBook>,
     scanSessions: List<ScanSession>,
     scanSessionState: ScanSessionUiState,
+    manualRegistrationState: ManualRegistrationUiState,
     onSubmitIsbn: (String) -> Unit,
     onLookupBookstore: (String) -> Unit,
     onCameraError: (String) -> Unit,
@@ -108,6 +114,8 @@ fun ScanScreen(
     onClearState: () -> Unit,
     onClearBookstoreState: () -> Unit,
     onAddDuplicateCopy: (String) -> Unit = {},
+    onAddManualBook: (ManualBookDraft) -> Unit,
+    onClearManualRegistrationState: () -> Unit,
     onChangePurchaseState: (PurchaseTransition) -> Unit,
     onSelectWishlistItem: (BookstoreBook) -> Unit,
     onStartScanSession: () -> Unit,
@@ -151,6 +159,8 @@ fun ScanScreen(
     }
     var mode by rememberSaveable { mutableStateOf(ScanMode.LIBRARY) }
     var wishlistQuery by rememberSaveable { mutableStateOf("") }
+    var showManualRegistration by rememberSaveable { mutableStateOf(false) }
+    var manualInitialIsbn by rememberSaveable { mutableStateOf("") }
     val visibleWishlist = remember(wishlist, wishlistQuery) {
         wishlist.filter { it.matches(wishlistQuery) }
     }
@@ -351,6 +361,10 @@ fun ScanScreen(
                     onRetry = onRetry,
                     onClear = onClearState,
                     onAddDuplicateCopy = onAddDuplicateCopy,
+                    onOpenManualRegistration = { isbn ->
+                        manualInitialIsbn = isbn.orEmpty()
+                        showManualRegistration = true
+                    },
                 )
             } else {
                 BookstoreResultCard(
@@ -372,6 +386,16 @@ fun ScanScreen(
                 },
                 onSubmit = if (mode == ScanMode.LIBRARY) onSubmitIsbn else onLookupBookstore,
             )
+            if (mode == ScanMode.LIBRARY) {
+                TextButton(
+                    onClick = {
+                        manualInitialIsbn = ""
+                        showManualRegistration = true
+                    },
+                ) {
+                    Text(stringResource(R.string.manual_registration_open))
+                }
+            }
         }
 
         if (mode == ScanMode.BOOKSTORE) {
@@ -428,6 +452,18 @@ fun ScanScreen(
                 )
             }
         }
+    }
+
+    if (showManualRegistration) {
+        ManualRegistrationDialog(
+            initialIsbn = manualInitialIsbn,
+            state = manualRegistrationState,
+            onSubmit = onAddManualBook,
+            onDismiss = {
+                showManualRegistration = false
+                onClearManualRegistrationState()
+            },
+        )
     }
 }
 
@@ -702,6 +738,7 @@ private fun ScanResultCard(
     onRetry: () -> Unit,
     onClear: () -> Unit,
     onAddDuplicateCopy: (String) -> Unit,
+    onOpenManualRegistration: (String?) -> Unit,
 ) {
     when (state) {
         ScanUiState.Idle -> {
@@ -803,6 +840,11 @@ private fun ScanResultCard(
                             Text(stringResource(R.string.scan_retry))
                         }
                     }
+                    if (state.failure in MANUAL_REGISTRATION_FAILURES) {
+                        TextButton(onClick = { onOpenManualRegistration(state.isbn13) }) {
+                            Text(stringResource(R.string.manual_registration_open_short))
+                        }
+                    }
                     IconButton(onClick = onClear) {
                         Icon(Icons.Rounded.Close, contentDescription = "閉じる")
                     }
@@ -811,6 +853,171 @@ private fun ScanResultCard(
         }
     }
 }
+
+@Composable
+private fun ManualRegistrationDialog(
+    initialIsbn: String,
+    state: ManualRegistrationUiState,
+    onSubmit: (ManualBookDraft) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by rememberSaveable { mutableStateOf("") }
+    var author by rememberSaveable { mutableStateOf("") }
+    var isbn by rememberSaveable(initialIsbn) { mutableStateOf(initialIsbn) }
+    var publisher by rememberSaveable { mutableStateOf("") }
+    var year by rememberSaveable { mutableStateOf("") }
+    var ndcCode by rememberSaveable { mutableStateOf("") }
+    var ndcEdition by rememberSaveable { mutableStateOf("") }
+    var mediaType by rememberSaveable { mutableStateOf(MediaType.PHYSICAL) }
+    val invalid = state as? ManualRegistrationUiState.Invalid
+
+    AlertDialog(
+        onDismissRequest = { if (state !== ManualRegistrationUiState.Saving) onDismiss() },
+        title = { Text(stringResource(R.string.manual_registration_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    stringResource(R.string.manual_registration_description),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(stringResource(R.string.book_edit_book_title)) },
+                    isError = invalid?.errors?.any { it.field.name == "TITLE" } == true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = author,
+                    onValueChange = { author = it },
+                    label = { Text(stringResource(R.string.manual_registration_author)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = isbn,
+                    onValueChange = { isbn = it },
+                    label = { Text(stringResource(R.string.manual_registration_isbn)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = publisher,
+                    onValueChange = { publisher = it },
+                    label = { Text(stringResource(R.string.book_edit_publisher)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = year,
+                    onValueChange = { year = it },
+                    label = { Text(stringResource(R.string.book_edit_published_year)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = ndcCode,
+                    onValueChange = { ndcCode = it },
+                    label = { Text(stringResource(R.string.book_edit_ndc_code)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = ndcEdition,
+                    onValueChange = { ndcEdition = it },
+                    label = { Text(stringResource(R.string.book_edit_ndc_edition)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MediaType.entries.forEach { type ->
+                        FilterChip(
+                            selected = mediaType == type,
+                            onClick = { mediaType = type },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (type == MediaType.PHYSICAL) {
+                                            R.string.manual_registration_physical
+                                        } else {
+                                            R.string.manual_registration_digital
+                                        },
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
+                when (state) {
+                    is ManualRegistrationUiState.Invalid -> Text(
+                        state.errors.joinToString("\n") { it.reason },
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is ManualRegistrationUiState.Duplicate -> Text(
+                        stringResource(
+                            R.string.manual_registration_duplicate,
+                            state.title,
+                            state.copyCount,
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    ManualRegistrationUiState.Error -> Text(
+                        stringResource(R.string.manual_registration_error),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is ManualRegistrationUiState.Added -> Text(
+                        stringResource(R.string.manual_registration_added, state.title),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    else -> Unit
+                }
+            }
+        },
+        confirmButton = {
+            if (state is ManualRegistrationUiState.Added) {
+                Button(onClick = onDismiss) { Text(stringResource(R.string.import_close)) }
+            } else {
+                Button(
+                    enabled = state !== ManualRegistrationUiState.Saving,
+                    onClick = {
+                        onSubmit(
+                            ManualBookDraft(
+                                title = title,
+                                primaryAuthor = author,
+                                isbn = isbn,
+                                publisher = publisher,
+                                publishedYear = year,
+                                ndcCode = ndcCode,
+                                ndcEdition = ndcEdition,
+                                mediaType = mediaType,
+                            ),
+                        )
+                    },
+                ) {
+                    Text(stringResource(R.string.manual_registration_save))
+                }
+            }
+        },
+        dismissButton = {
+            if (state !is ManualRegistrationUiState.Added) {
+                TextButton(
+                    enabled = state !== ManualRegistrationUiState.Saving,
+                    onClick = onDismiss,
+                ) { Text(stringResource(R.string.import_cancel)) }
+            }
+        },
+    )
+}
+
+private val MANUAL_REGISTRATION_FAILURES = setOf(
+    ScanFailure.NOT_FOUND,
+    ScanFailure.OFFLINE,
+    ScanFailure.TIMEOUT,
+    ScanFailure.RATE_LIMITED,
+    ScanFailure.SERVICE_UNAVAILABLE,
+    ScanFailure.NETWORK,
+    ScanFailure.REQUEST_REJECTED,
+    ScanFailure.INVALID_RESPONSE,
+)
 
 @Composable
 internal fun BookstoreResultCard(

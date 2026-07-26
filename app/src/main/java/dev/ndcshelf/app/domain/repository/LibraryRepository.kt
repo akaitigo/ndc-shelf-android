@@ -9,6 +9,9 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.ManualBookDraft
+import dev.ndcshelf.app.domain.model.ManualBookValidationError
+import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
 import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ScanSession
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +25,18 @@ interface LibraryRepository {
     fun observeScanSessions(): Flow<List<ScanSession>> = emptyFlow()
 
     suspend fun addFromIsbn(rawIsbn: String): AddBookResult
+
+    suspend fun addManualBook(draft: ManualBookDraft): ManualBookResult =
+        ManualBookResult.Failure
+
+    suspend fun previewManualReconciliation(
+        copyId: String,
+        rawIsbn: String,
+    ): ManualReconciliationLookupResult = ManualReconciliationLookupResult.Failure(AddBookFailure.SAVE)
+
+    suspend fun confirmManualReconciliation(
+        preview: ManualReconciliationPreview,
+    ): ManualReconciliationApplyResult = ManualReconciliationApplyResult.Failure
 
     suspend fun startScanSession(): String? = null
 
@@ -67,6 +82,31 @@ interface LibraryRepository {
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+sealed interface ManualBookResult {
+    data class Added(val book: LibraryBook) : ManualBookResult
+    data class Duplicate(
+        val isbn13: String,
+        val title: String,
+        val copyCount: Int,
+    ) : ManualBookResult
+    data class Invalid(val errors: List<ManualBookValidationError>) : ManualBookResult
+    data object Failure : ManualBookResult
+}
+
+sealed interface ManualReconciliationLookupResult {
+    data class Ready(val preview: ManualReconciliationPreview) : ManualReconciliationLookupResult
+    data class InvalidIsbn(val rawValue: String) : ManualReconciliationLookupResult
+    data class NotFound(val isbn13: String) : ManualReconciliationLookupResult
+    data class Failure(val reason: AddBookFailure) : ManualReconciliationLookupResult
+    data object NotManual : ManualReconciliationLookupResult
+}
+
+sealed interface ManualReconciliationApplyResult {
+    data object Applied : ManualReconciliationApplyResult
+    data object Conflict : ManualReconciliationApplyResult
+    data object Failure : ManualReconciliationApplyResult
 }
 
 sealed interface ScanUndoResult {

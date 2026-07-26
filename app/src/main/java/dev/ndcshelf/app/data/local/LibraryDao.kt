@@ -74,6 +74,7 @@ interface LibraryDao {
             editions.ndcCode AS ndcCode,
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
+            editions.bibliographicSource AS bibliographicSource,
             wishlist.status AS status,
             wishlist.createdAt AS createdAt,
             wishlist.updatedAt AS updatedAt,
@@ -100,6 +101,7 @@ interface LibraryDao {
             editions.ndcCode AS ndcCode,
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
+            editions.bibliographicSource AS bibliographicSource,
             wishlist.status AS status,
             wishlist.createdAt AS createdAt,
             wishlist.updatedAt AS updatedAt,
@@ -131,6 +133,7 @@ interface LibraryDao {
             editions.ndcCode AS ndcCode,
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
+            editions.bibliographicSource AS bibliographicSource,
             copies.mediaType AS mediaType,
             CASE WHEN tiers.id IS NULL THEN copies.location
                 ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
@@ -166,6 +169,7 @@ interface LibraryDao {
             editions.ndcCode AS ndcCode,
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
+            editions.bibliographicSource AS bibliographicSource,
             copies.mediaType AS mediaType,
             CASE WHEN tiers.id IS NULL THEN copies.location
                 ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
@@ -201,6 +205,7 @@ interface LibraryDao {
             editions.ndcCode AS ndcCode,
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
+            editions.bibliographicSource AS bibliographicSource,
             copies.mediaType AS mediaType,
             CASE WHEN tiers.id IS NULL THEN copies.location
                 ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
@@ -237,6 +242,7 @@ interface LibraryDao {
             editions.ndcCode AS ndcCode,
             editions.ndcEdition AS ndcEdition,
             editions.classificationSource AS classificationSource,
+            editions.bibliographicSource AS bibliographicSource,
             copies.mediaType AS mediaType,
             CASE WHEN tiers.id IS NULL THEN copies.location
                 ELSE rooms.name || ' / ' || shelves.name || ' / ' || tiers.name
@@ -366,6 +372,34 @@ interface LibraryDao {
         ndcEdition: String?,
         classificationSource: String,
     )
+
+    @Query(
+        """
+        UPDATE book_editions
+        SET isbn13 = :isbn13,
+            publisher = :publisher,
+            publishedYear = :publishedYear,
+            coverUrl = :coverUrl,
+            ndcCode = :ndcCode,
+            ndcEdition = :ndcEdition,
+            classificationSource = :classificationSource,
+            bibliographicSource = 'NDL'
+        WHERE id = :editionId AND bibliographicSource = 'MANUAL'
+        """,
+    )
+    suspend fun reconcileManualEdition(
+        editionId: String,
+        isbn13: String,
+        publisher: String?,
+        publishedYear: Int?,
+        coverUrl: String?,
+        ndcCode: String?,
+        ndcEdition: String?,
+        classificationSource: String,
+    ): Int
+
+    @Query("UPDATE owned_copies SET editionId = :targetEditionId WHERE editionId = :sourceEditionId")
+    suspend fun moveCopiesToEdition(sourceEditionId: String, targetEditionId: String): Int
 
     @Query("DELETE FROM owned_copies WHERE id = :copyId")
     suspend fun deleteCopyById(copyId: String): Int

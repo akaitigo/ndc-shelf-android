@@ -15,7 +15,7 @@ enum class LibraryExportFormat(
 }
 
 object LibraryExporter {
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 3
     private val utf8Bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
     fun write(
@@ -67,6 +67,7 @@ object LibraryExporter {
             appendJsonField("ndcCode", book.ndcCode)
             appendJsonField("ndcEdition", book.ndcEdition)
             appendJsonField("classificationSource", book.classificationSource.name)
+            appendJsonField("bibliographicSource", book.bibliographicSource.name)
             appendJsonField("mediaType", book.mediaType.name)
             appendJsonField("location", book.location)
             appendJsonField("readingStatus", book.readingStatus.name)
@@ -127,13 +128,14 @@ object LibraryExporter {
                     book.editionId,
                     book.title,
                     book.primaryAuthor,
-                    book.isbn13,
+                    book.isbn13.orEmpty(),
                     book.publisher.orEmpty(),
                     book.publishedYear?.toString().orEmpty(),
                     book.coverUrl.orEmpty(),
                     book.ndcCode.orEmpty(),
                     book.ndcEdition.orEmpty(),
                     book.classificationSource.name,
+                    book.bibliographicSource.name,
                     book.mediaType.name,
                     book.location,
                     book.readingStatus.name,
@@ -167,6 +169,7 @@ object LibraryExporter {
         "ndcCode",
         "ndcEdition",
         "classificationSource",
+        "bibliographicSource",
         "mediaType",
         "location",
         "readingStatus",

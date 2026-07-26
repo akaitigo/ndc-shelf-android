@@ -19,6 +19,8 @@ import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
+import dev.ndcshelf.app.domain.model.BibliographicSource
+import dev.ndcshelf.app.domain.model.ManualBookDraft
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.AddBookFailure
@@ -26,6 +28,9 @@ import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
 import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
+import dev.ndcshelf.app.domain.repository.ManualBookResult
+import dev.ndcshelf.app.domain.repository.ManualReconciliationApplyResult
+import dev.ndcshelf.app.domain.repository.ManualReconciliationLookupResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -533,6 +538,123 @@ class DefaultLibraryRepositoryIntegrationTest {
         assertTrue(database.libraryDao().getAllWorks().isEmpty())
         assertTrue(database.libraryDao().getAllEditions().isEmpty())
         assertTrue(database.libraryDao().getAllCopies().isEmpty())
+    }
+
+    @Test
+    fun manualTitleOnlyRegistration_worksOfflineAndPersistsStableIdsAndSource() = runBlocking {
+        var metadataCalls = 0
+        val repository = repository(
+            ids = listOf("manual-work", "manual-edition", "manual-copy"),
+            service = BookMetadataService {
+                metadataCalls += 1
+                BookMetadataLookupResult.NotFound
+            },
+        )
+
+        val result = repository.addManualBook(
+            ManualBookDraft(title = " 郷土資料 ", mediaType = MediaType.DIGITAL),
+        ) as ManualBookResult.Added
+
+        assertEquals(0, metadataCalls)
+        assertEquals("manual-work", result.book.workId)
+        assertEquals("manual-edition", result.book.editionId)
+        assertEquals("manual-copy", result.book.copyId)
+        assertNull(result.book.isbn13)
+        assertEquals(BibliographicSource.MANUAL, result.book.bibliographicSource)
+        assertEquals(MediaType.DIGITAL, result.book.mediaType)
+        assertEquals(result.book, database.libraryDao().findOwnedByCopyId("manual-copy")?.toDomain())
+    }
+
+    @Test
+    fun manualRegistrationWithExistingIsbn_reportsDuplicateWithoutWriting() = runBlocking {
+        val repository = repository(
+            ids = listOf("work", "edition", "copy"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        repository.addFromIsbn(ISBN)
+
+        val result = repository.addManualBook(ManualBookDraft(title = "別タイトル", isbn = ISBN))
+            as ManualBookResult.Duplicate
+
+        assertEquals(ISBN, result.isbn13)
+        assertEquals(1, result.copyCount)
+        assertEquals(1, database.libraryDao().getAllWorks().size)
+        assertEquals(1, database.libraryDao().getAllCopies().size)
+    }
+
+    @Test
+    fun laterNdlReconciliation_requiresPreviewAndPreservesIdsUntilConfirmation() = runBlocking {
+        val repository = repository(
+            ids = listOf("manual-work", "manual-edition", "manual-copy"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val manual = (repository.addManualBook(ManualBookDraft(title = "仮題"))
+            as ManualBookResult.Added).book
+
+        val lookup = repository.previewManualReconciliation(manual.copyId, ISBN)
+            as ManualReconciliationLookupResult.Ready
+        assertEquals("仮題", database.libraryDao().findWorkById(manual.workId)?.title)
+        assertNull(database.libraryDao().findEditionById(manual.editionId)?.isbn13)
+
+        assertSame(
+            ManualReconciliationApplyResult.Applied,
+            repository.confirmManualReconciliation(lookup.preview),
+        )
+        val reconciled = requireNotNull(database.libraryDao().findOwnedByCopyId(manual.copyId)).toDomain()
+        assertEquals(manual.workId, reconciled.workId)
+        assertEquals(manual.editionId, reconciled.editionId)
+        assertEquals(ISBN, reconciled.isbn13)
+        assertEquals("題名", reconciled.title)
+        assertEquals(BibliographicSource.NDL, reconciled.bibliographicSource)
+    }
+
+    @Test
+    fun reconciliationWithExistingIsbn_mergesCopiesOnlyAfterConfirmation() = runBlocking {
+        val repository = repository(
+            ids = listOf(
+                "ndl-work", "ndl-edition", "ndl-copy",
+                "manual-work", "manual-edition", "manual-copy",
+            ),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val ndl = (repository.addFromIsbn(ISBN) as AddBookResult.Added).book
+        val manual = (repository.addManualBook(ManualBookDraft(title = "仮題"))
+            as ManualBookResult.Added).book
+
+        val preview = (repository.previewManualReconciliation(manual.copyId, ISBN)
+            as ManualReconciliationLookupResult.Ready).preview
+        assertEquals(ndl.editionId, preview.existingEditionId)
+        assertEquals(2, database.libraryDao().getAllEditions().size)
+
+        assertSame(
+            ManualReconciliationApplyResult.Applied,
+            repository.confirmManualReconciliation(preview),
+        )
+        val copies = database.libraryDao().getAllCopies()
+        assertEquals(2, copies.size)
+        assertTrue(copies.all { it.editionId == ndl.editionId })
+        assertNull(database.libraryDao().findEditionById(manual.editionId))
+        assertNull(database.libraryDao().findWorkById(manual.workId))
+    }
+
+    @Test
+    fun reconciliationRejectsStalePreviewWithoutOverwritingConcurrentEdit() = runBlocking {
+        val repository = repository(
+            ids = listOf("manual-work", "manual-edition", "manual-copy"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val manual = (repository.addManualBook(ManualBookDraft(title = "仮題"))
+            as ManualBookResult.Added).book
+        val preview = (repository.previewManualReconciliation(manual.copyId, ISBN)
+            as ManualReconciliationLookupResult.Ready).preview
+        database.libraryDao().updateWork(manual.workId, "並行編集", "著者不明")
+
+        assertSame(
+            ManualReconciliationApplyResult.Conflict,
+            repository.confirmManualReconciliation(preview),
+        )
+        assertEquals("並行編集", database.libraryDao().findWorkById(manual.workId)?.title)
+        assertNull(database.libraryDao().findEditionById(manual.editionId)?.isbn13)
     }
 
     private fun repository(

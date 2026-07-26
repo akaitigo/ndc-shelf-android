@@ -33,6 +33,39 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `current backup preserves multiple manual editions without ISBN`() {
+        val base = sampleSnapshot()
+        val snapshot = base.copy(
+            works = base.works + listOf(
+                BookWorkEntity("manual-work-1", "手動本A", "著者不明"),
+                BookWorkEntity("manual-work-2", "手動本B", "著者不明"),
+            ),
+            editions = base.editions + listOf(
+                BookEditionEntity(
+                    "manual-edition-1", "manual-work-1", null, null, null, null,
+                    null, null, "UNKNOWN", "MANUAL",
+                ),
+                BookEditionEntity(
+                    "manual-edition-2", "manual-work-2", null, null, null, null,
+                    null, null, "UNKNOWN", "MANUAL",
+                ),
+            ),
+            copies = base.copies + listOf(
+                OwnedCopyEntity(
+                    "manual-copy-1", "manual-edition-1", "PHYSICAL", "未設定", "UNREAD", 2,
+                ),
+                OwnedCopyEntity(
+                    "manual-copy-2", "manual-edition-2", "DIGITAL", "未設定", "UNREAD", 3,
+                ),
+            ),
+        )
+
+        val preview = codec.decode(codec.encode(snapshot, "0.3.0", 4).first.inputStream())
+
+        assertEquals(snapshot, preview.snapshot)
+    }
+
+    @Test
     fun `changed payload is rejected by checksum`() {
         val (archive, _) = codec.encode(sampleSnapshot(), "0.1.2", 1)
         val entries = unzip(archive).toMutableMap()

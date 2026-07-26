@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.domain.importer
 
 import dev.ndcshelf.app.domain.model.ClassificationSource
+import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
@@ -32,6 +33,7 @@ data class UnvalidatedLibraryBook(
     val ndcCode: String?,
     val ndcEdition: String?,
     val classificationSource: String?,
+    val bibliographicSource: String? = "NDL",
     val mediaType: String?,
     val location: String?,
     val readingStatus: String?,
@@ -113,13 +115,15 @@ class LibraryImportPlanner(
         val updates = mutableListOf<LibraryBook>()
         var skippedCount = 0
         val existingByCopyId = existingBooks.associateBy(LibraryBook::copyId)
-        val existingByIsbn = existingBooks.groupBy(LibraryBook::isbn13)
+        val existingByIsbn = existingBooks.filter { it.isbn13 != null }
+            .groupBy { requireNotNull(it.isbn13) }
         val existingByWorkId = existingBooks.groupBy(LibraryBook::workId)
         val existingByEditionId = existingBooks.groupBy(LibraryBook::editionId)
-        val inputEditionByIsbn = normalized.groupBy(LibraryBook::isbn13)
+        val inputEditionByIsbn = normalized.filter { it.isbn13 != null }
+            .groupBy { requireNotNull(it.isbn13) }
             .mapValues { (_, copies) -> copies.first() }
 
-        normalized.groupBy(LibraryBook::isbn13).forEach { (_, copies) ->
+        normalized.filter { it.isbn13 != null }.groupBy(LibraryBook::isbn13).forEach { (_, copies) ->
             if (copies.map { it.sharedEditionFingerprint() }.distinct().size > 1) {
                 val book = copies.last()
                 errors.addCapped(recordError(
@@ -142,8 +146,9 @@ class LibraryImportPlanner(
                 return@forEachIndexed
             }
 
-            val existingEdition = existingByIsbn[rawBook.isbn13]?.firstOrNull()
-            val sharedEdition = existingEdition ?: inputEditionByIsbn.getValue(rawBook.isbn13)
+            val existingEdition = rawBook.isbn13?.let { existingByIsbn[it]?.firstOrNull() }
+            val sharedEdition = existingEdition ?: rawBook.isbn13?.let(inputEditionByIsbn::getValue)
+                ?: rawBook
             if (byCopyId == null && existingEdition != null &&
                 existingEdition.sharedEditionFingerprint() != rawBook.sharedEditionFingerprint()
             ) {
@@ -219,7 +224,7 @@ class LibraryImportPlanner(
             limits.maxTextLength,
             errors,
         )
-        val rawIsbn = requiredText(
+        val rawIsbn = optionalText(
             recordNumber,
             "isbn13",
             record.isbn13,
@@ -277,6 +282,15 @@ class LibraryImportPlanner(
             record.classificationSource,
             errors,
         )
+        val bibliographicSource = enumValue<BibliographicSource>(
+            recordNumber,
+            "bibliographicSource",
+            record.bibliographicSource,
+            errors,
+        )
+        if (isbn13 == null && bibliographicSource != BibliographicSource.MANUAL) {
+            errors.addCapped(recordError(recordNumber, "isbn13", "ISBNなしは手動書誌だけ登録できます"))
+        }
         val mediaType = enumValue<MediaType>(
             recordNumber,
             "mediaType",
@@ -306,13 +320,14 @@ class LibraryImportPlanner(
             editionId = requireNotNull(editionId),
             title = requireNotNull(title),
             primaryAuthor = requireNotNull(author),
-            isbn13 = requireNotNull(isbn13),
+            isbn13 = isbn13,
             publisher = publisher,
             publishedYear = publishedYear,
             coverUrl = coverUrl,
             ndcCode = ndcCode,
             ndcEdition = ndcEdition,
             classificationSource = requireNotNull(classificationSource),
+            bibliographicSource = requireNotNull(bibliographicSource),
             mediaType = requireNotNull(mediaType),
             location = requireNotNull(location),
             readingStatus = requireNotNull(readingStatus),
@@ -513,6 +528,7 @@ class LibraryImportPlanner(
         ndcCode,
         ndcEdition,
         classificationSource,
+        bibliographicSource,
     )
 
     private fun LibraryBook.sharedEditionFingerprint(): List<Any?> = listOf(
@@ -525,6 +541,7 @@ class LibraryImportPlanner(
         ndcCode,
         ndcEdition,
         classificationSource,
+        bibliographicSource,
     )
 
     private companion object {

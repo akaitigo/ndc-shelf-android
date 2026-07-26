@@ -3,6 +3,7 @@ package dev.ndcshelf.app.domain.importer
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.domain.model.ClassificationSource
+import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
@@ -31,6 +32,25 @@ class LibraryCsvImporterTest {
 
         assertEquals(listOf(original.copy(location = "+書斎\n本棚A")), planned.preview.additions)
         assertEquals(emptyList<ImportValidationError>(), parsed.warnings)
+    }
+
+    @Test
+    fun `exported CSV round trip preserves manual source without ISBN`() = runBlocking {
+        val manual = sampleBook("手動本", "未設定").copy(
+            isbn13 = null,
+            coverUrl = null,
+            bibliographicSource = BibliographicSource.MANUAL,
+        )
+        val exported = LibraryExporter.export(listOf(manual), LibraryExportFormat.CSV)
+
+        val parsed = importer().parse(exported.inputStream()) as LibraryCsvParseResult.Valid
+        val planned = planner().preview(
+            parsed.batch,
+            existingBooks = emptyList(),
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+
+        assertEquals(listOf(manual), planned.preview.additions)
     }
 
     @Test

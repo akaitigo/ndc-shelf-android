@@ -39,9 +39,11 @@ class V02ReleaseFixtureTest {
             exportedAt = json.exportedAt,
         )
         assertTrue(exportedCsv.toString(Charsets.UTF_8).contains("'=匿名サンプル図書A"))
-        val reparsedCsv = LibraryCsvImporter(
+        val csvParseResult = LibraryCsvImporter(
             newCopyId = { error("Fixture includes every copyId") },
-        ).parse(exportedCsv.inputStream()) as LibraryCsvParseResult.Valid
+        ).parse(exportedCsv.inputStream())
+        assertTrue(csvParseResult.toString(), csvParseResult is LibraryCsvParseResult.Valid)
+        val reparsedCsv = csvParseResult as LibraryCsvParseResult.Valid
         val csvBooks = plan(reparsedCsv)
         assertEquals(jsonBooks, csvBooks)
     }
