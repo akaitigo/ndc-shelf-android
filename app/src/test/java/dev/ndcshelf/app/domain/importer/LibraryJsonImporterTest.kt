@@ -1,0 +1,188 @@
+package dev.ndcshelf.app.domain.importer
+
+import dev.ndcshelf.app.domain.export.LibraryExportFormat
+import dev.ndcshelf.app.domain.export.LibraryExporter
+import dev.ndcshelf.app.domain.model.ClassificationSource
+import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.MediaType
+import dev.ndcshelf.app.domain.model.ReadingStatus
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
+
+class LibraryJsonImporterTest {
+    @Test
+    fun `export import and re-export round trip preserves every field`() = runBlocking {
+        val originalBook = sampleBook()
+        val exported = LibraryExporter.export(
+            books = listOf(originalBook),
+            format = LibraryExportFormat.JSON,
+            exportedAt = EXPORTED_AT,
+        )
+
+        val parsed = LibraryJsonImporter().parse(ByteArrayInputStream(exported))
+            as LibraryJsonParseResult.Valid
+        val planned = LibraryImportPlanner(nowMillis = { NOW }).preview(
+            batch = parsed.batch,
+            existingBooks = emptyList(),
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+        val reExported = LibraryExporter.export(
+            books = planned.preview.additions,
+            format = LibraryExportFormat.JSON,
+            exportedAt = parsed.exportedAt,
+        )
+
+        assertEquals(listOf(originalBook), planned.preview.additions)
+        assertArrayEquals(exported, reExported)
+    }
+
+    @Test
+    fun `UTF-8 BOM is accepted`() = runBlocking {
+        val exported = LibraryExporter.export(
+            books = emptyList(),
+            format = LibraryExportFormat.JSON,
+            exportedAt = EXPORTED_AT,
+        )
+        val withBom = UTF8_BOM + exported
+
+        val result = LibraryJsonImporter().parse(ByteArrayInputStream(withBom))
+
+        assertEquals(0, (result as LibraryJsonParseResult.Valid).batch.records.size)
+    }
+
+    @Test
+    fun `future schema version is rejected without exposing input`() = runBlocking {
+        val source = validJson().replace("\"schemaVersion\": 1", "\"schemaVersion\": 999")
+
+        val result = parse(source) as LibraryJsonParseResult.Invalid
+
+        assertTrue(
+            result.errors.any {
+                it.field == "schemaVersion" && it.reason.contains("新しいスキーマバージョン999")
+            },
+        )
+        assertTrue(result.errors.none { it.reason.contains("本の題名") })
+    }
+
+    @Test
+    fun `book count mismatch unknown fields and missing optional fields are rejected`() = runBlocking {
+        val source = validJson()
+            .replace("\"bookCount\": 1", "\"bookCount\": 2")
+            .replace("  \"books\":", "  \"unexpected\": true,\n  \"books\":")
+            .replace("      \"publisher\": null,\n", "")
+
+        val result = parse(source) as LibraryJsonParseResult.Invalid
+
+        assertTrue(result.errors.any { it.field == "bookCount" && it.reason.contains("一致") })
+        assertTrue(result.errors.any { it.field == "unexpected" && it.reason.contains("未知") })
+        assertTrue(
+            result.errors.any {
+                it.recordNumber == 1 && it.field == "publisher" && it.reason.contains("項目")
+            },
+        )
+    }
+
+    @Test
+    fun `wrong field types and malformed syntax are rejected with locations`() = runBlocking {
+        val wrongType = validJson().replace("\"publishedYear\": 2024", "\"publishedYear\": \"2024\"")
+        val typedResult = parse(wrongType) as LibraryJsonParseResult.Invalid
+        val malformedResult = parse("{not-json") as LibraryJsonParseResult.Invalid
+
+        assertTrue(
+            typedResult.errors.any {
+                it.recordNumber == 1 && it.field == "publishedYear" && it.reason.contains("整数")
+            },
+        )
+        assertTrue(malformedResult.errors.any { it.reason.contains("構文") })
+    }
+
+    @Test
+    fun `unknown field names are truncated before display`() = runBlocking {
+        val longField = "x".repeat(1_000)
+        val source = validJson().replace(
+            "  \"books\":",
+            "  \"$longField\": true,\n  \"books\":",
+        )
+
+        val result = parse(source) as LibraryJsonParseResult.Invalid
+        val field = result.errors.first { it.reason.contains("未知") }.field.orEmpty()
+
+        assertTrue(field.endsWith("…"))
+        assertEquals(81, field.length)
+    }
+
+    @Test
+    fun `oversized deeply nested and malformed UTF-8 inputs are rejected`() = runBlocking {
+        val smallImporter = LibraryJsonImporter(LibraryImportLimits(maxSourceBytes = 8))
+        val oversized = smallImporter.parse(ByteArrayInputStream("123456789".toByteArray()))
+            as LibraryJsonParseResult.Invalid
+        val deeplyNested = LibraryJsonImporter().parse(
+            ByteArrayInputStream(("[".repeat(65) + "]".repeat(65)).toByteArray()),
+        ) as LibraryJsonParseResult.Invalid
+        val malformedUtf8 = LibraryJsonImporter().parse(
+            ByteArrayInputStream(byteArrayOf(0xC3.toByte(), 0x28)),
+        ) as LibraryJsonParseResult.Invalid
+
+        assertTrue(oversized.errors.any { it.reason.contains("8バイト") })
+        assertTrue(deeplyNested.errors.any { it.reason.contains("64段") })
+        assertTrue(malformedUtf8.errors.any { it.reason.contains("UTF-8") })
+    }
+
+    @Test
+    fun `unknown enum is rejected by the shared import planner`() = runBlocking {
+        val source = validJson().replace(
+            "\"readingStatus\": \"READING\"",
+            "\"readingStatus\": \"FUTURE_VALUE\"",
+        )
+        val parsed = parse(source) as LibraryJsonParseResult.Valid
+
+        val result = LibraryImportPlanner(nowMillis = { NOW }).preview(
+            parsed.batch,
+            existingBooks = emptyList(),
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Invalid
+
+        assertTrue(result.errors.any { it.recordNumber == 1 && it.field == "readingStatus" })
+    }
+
+    private suspend fun parse(source: String): LibraryJsonParseResult =
+        LibraryJsonImporter().parse(
+            ByteArrayInputStream(source.toByteArray(StandardCharsets.UTF_8)),
+        )
+
+    private fun validJson(): String = LibraryExporter.export(
+        books = listOf(sampleBook()),
+        format = LibraryExportFormat.JSON,
+        exportedAt = EXPORTED_AT,
+    ).toString(StandardCharsets.UTF_8)
+
+    private fun sampleBook() = LibraryBook(
+        copyId = "copy-1",
+        workId = "work-1",
+        editionId = "edition-1",
+        title = "本の題名 \"特装版\"\n第二行",
+        primaryAuthor = "著者",
+        isbn13 = "9784820418078",
+        publisher = null,
+        publishedYear = 2024,
+        coverUrl = "https://ndlsearch.ndl.go.jp/thumbnail/9784820418078.jpg",
+        ndcCode = "014.45",
+        ndcEdition = "NDC10",
+        classificationSource = ClassificationSource.NDL,
+        mediaType = MediaType.PHYSICAL,
+        location = "書斎 / 本棚A",
+        readingStatus = ReadingStatus.READING,
+        addedAt = 1_700_000_000_000L,
+    )
+
+    private companion object {
+        const val EXPORTED_AT = 1_722_345_678_901L
+        const val NOW = 1_800_000_000_000L
+        val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
+    }
+}

@@ -3,19 +3,35 @@ package dev.ndcshelf.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import dev.ndcshelf.app.domain.importer.ImportApplyResult
+import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
+import dev.ndcshelf.app.domain.importer.ImportPreviewResult
+import dev.ndcshelf.app.domain.importer.ImportValidationError
+import dev.ndcshelf.app.domain.importer.LibraryImportBatch
+import dev.ndcshelf.app.domain.importer.LibraryImportPreview
+import dev.ndcshelf.app.domain.importer.LibraryJsonImporter
+import dev.ndcshelf.app.domain.importer.LibraryJsonParseResult
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.InputStream
 
 class MainViewModel(
     private val repository: LibraryRepository,
+    private val importIoDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val importComputationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
@@ -26,8 +42,14 @@ class MainViewModel(
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
+    private val _importState = MutableStateFlow<LibraryImportUiState>(LibraryImportUiState.Idle)
+    val importState: StateFlow<LibraryImportUiState> = _importState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
+    private val jsonImporter = LibraryJsonImporter()
+    private var importBatch: LibraryImportBatch? = null
+    private var importPreview: LibraryImportPreview? = null
+    private var importJob: Job? = null
 
     fun submitIsbn(rawIsbn: String) {
         if (_scanState.value is ScanUiState.Loading) return
@@ -89,6 +111,135 @@ class MainViewModel(
         }
     }
 
+    fun loadJsonImport(input: InputStream) {
+        importJob?.cancel()
+        importBatch = null
+        importPreview = null
+        importJob = viewModelScope.launch {
+            _importState.value = LibraryImportUiState.Loading
+            try {
+                when (
+                    val parsed = withContext(importIoDispatcher) {
+                        input.use { stream -> jsonImporter.parse(stream) }
+                    }
+                ) {
+                    is LibraryJsonParseResult.Invalid -> {
+                        _importState.value = LibraryImportUiState.Invalid(parsed.errors)
+                    }
+
+                    is LibraryJsonParseResult.Valid -> {
+                        importBatch = parsed.batch
+                        previewImport(parsed.batch, ImportConflictPolicy.SKIP_EXISTING)
+                    }
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                _importState.value = LibraryImportUiState.Error(ImportFailure.JSON_READ)
+            }
+        }
+    }
+
+    fun selectImportConflictPolicy(policy: ImportConflictPolicy) {
+        val batch = importBatch ?: return
+        val current = _importState.value as? LibraryImportUiState.Preview
+        if (current?.conflictPolicy == policy) return
+        importJob?.cancel()
+        importJob = viewModelScope.launch {
+            _importState.value = LibraryImportUiState.Loading
+            try {
+                previewImport(batch, policy)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                _importState.value = LibraryImportUiState.Error(ImportFailure.PREVIEW)
+            }
+        }
+    }
+
+    fun confirmImport() {
+        val preview = importPreview ?: return
+        if (_importState.value !is LibraryImportUiState.Preview) return
+        importJob?.cancel()
+        importJob = viewModelScope.launch {
+            _importState.value = LibraryImportUiState.Applying
+            when (val result = repository.applyImport(preview)) {
+                is ImportApplyResult.Applied -> {
+                    clearPreparedImport()
+                    _importState.value = LibraryImportUiState.Success(
+                        addedCount = result.addedCount,
+                        updatedCount = result.updatedCount,
+                        skippedCount = result.skippedCount,
+                    )
+                }
+
+                is ImportApplyResult.Failure -> {
+                    _importState.value = LibraryImportUiState.Error(ImportFailure.APPLY)
+                }
+
+                ImportApplyResult.StalePreview -> {
+                    val batch = importBatch
+                    if (batch == null) {
+                        _importState.value = LibraryImportUiState.Error(
+                            ImportFailure.STALE_RESELECT,
+                        )
+                    } else {
+                        previewImport(
+                            batch = batch,
+                            policy = preview.conflictPolicy,
+                            staleRecalculated = true,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun dismissImport() {
+        importJob?.cancel()
+        clearPreparedImport()
+        _importState.value = LibraryImportUiState.Idle
+    }
+
+    fun consumeImportSuccess() {
+        if (_importState.value is LibraryImportUiState.Success) {
+            _importState.value = LibraryImportUiState.Idle
+        }
+    }
+
+    private suspend fun previewImport(
+        batch: LibraryImportBatch,
+        policy: ImportConflictPolicy,
+        staleRecalculated: Boolean = false,
+    ) {
+        when (
+            val result = withContext(importComputationDispatcher) {
+                repository.previewImport(batch, policy)
+            }
+        ) {
+            is ImportPreviewResult.Invalid -> {
+                importPreview = null
+                _importState.value = LibraryImportUiState.Invalid(result.errors)
+            }
+
+            is ImportPreviewResult.Valid -> {
+                importPreview = result.preview
+                _importState.value = LibraryImportUiState.Preview(
+                    addedCount = result.preview.additions.size,
+                    updatedCount = result.preview.updates.size,
+                    skippedCount = result.preview.skippedCount,
+                    conflictPolicy = result.preview.conflictPolicy,
+                    staleRecalculated = staleRecalculated,
+                )
+            }
+        }
+    }
+
+    private fun clearPreparedImport() {
+        importBatch = null
+        importPreview = null
+    }
+
     companion object {
         private const val RESCAN_GUARD_MILLIS = 4_000L
 
@@ -119,4 +270,39 @@ sealed interface ScanUiState {
     ) : ScanUiState
 
     data class Error(val message: String) : ScanUiState
+}
+
+sealed interface LibraryImportUiState {
+    data object Idle : LibraryImportUiState
+
+    data object Loading : LibraryImportUiState
+
+    data object Applying : LibraryImportUiState
+
+    data class Invalid(val errors: List<ImportValidationError>) : LibraryImportUiState
+
+    data class Preview(
+        val addedCount: Int,
+        val updatedCount: Int,
+        val skippedCount: Int,
+        val conflictPolicy: ImportConflictPolicy,
+        val staleRecalculated: Boolean = false,
+    ) : LibraryImportUiState {
+        val changeCount: Int = addedCount + updatedCount
+    }
+
+    data class Success(
+        val addedCount: Int,
+        val updatedCount: Int,
+        val skippedCount: Int,
+    ) : LibraryImportUiState
+
+    data class Error(val failure: ImportFailure) : LibraryImportUiState
+}
+
+enum class ImportFailure {
+    JSON_READ,
+    PREVIEW,
+    APPLY,
+    STALE_RESELECT,
 }
