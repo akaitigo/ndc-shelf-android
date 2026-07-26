@@ -31,6 +31,10 @@ class AppInfoScreenTest {
         composeRule.onNodeWithText("バックアップとファイル")
             .performScrollTo()
             .assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Androidのクラウドバックアップから全データを除外しています。",
+            substring = true,
+        ).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("国立国会図書館サーチ")
             .performScrollTo()
             .assertIsDisplayed()

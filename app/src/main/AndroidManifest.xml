@@ -8,6 +8,7 @@
         android:name="android.hardware.camera.any"
         android:required="false" />
 
+    <!-- Keep allowBackup enabled only for the D2D paths permitted by the referenced rules. -->
     <application
         android:name=".NdcShelfApplication"
         android:allowBackup="true"

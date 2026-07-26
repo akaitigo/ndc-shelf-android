@@ -126,7 +126,7 @@
     <string name="info_privacy_network_body">ISBNを登録したとき、そのISBNをHTTPSで国立国会図書館サーチへ送信し、書誌情報とNDCを取得します。表紙を表示するときも同サービスへ画像を要求します。各通信先にはIPアドレスなど通常の通信情報が伝わります。ML Kitはカメラ画像・バーコード値・認識結果をGoogleへ送りませんが、端末・アプリ情報、性能、API利用イベント、エラーコード等を診断と利用分析のためGoogleへ送信します。通信時はHTTPSで暗号化されます。</string>
     <string name="info_mlkit_data_link">ML Kitのデータ開示</string>
     <string name="info_privacy_backup_title">バックアップとファイル</string>
-    <string name="info_privacy_backup_body">JSON、CSV、完全バックアップは、選択した保存先にだけ書き出し、アプリが独自にアップロードすることはありません。これらのファイルは暗号化されません。また現在は、端末移行とAndroidの自動バックアップ対象にRoomデータベースを含めています。転送先、保存期間、暗号化はAndroidと利用中のバックアップサービスの設定に従います。</string>
+    <string name="info_privacy_backup_body">Androidのクラウドバックアップから全データを除外しています。Android 9以降の端末間転送ではRoomデータベースだけを移行対象にし、Android 8.1以前ではOS移行も対象外です。JSON、CSV、完全バックアップは、選択した保存先にだけ書き出し、アプリが独自にアップロードすることはありません。これらのファイルは暗号化されないため、保存先の保護が必要です。</string>
     <string name="info_source_title">データ出典</string>
     <string name="info_source_ndl_title">国立国会図書館サーチ</string>
     <string name="info_source_ndl_body">本アプリは国立国会図書館サーチのAPIを利用しています。書誌情報とNDCの一部は同サービスおよび各メタデータ提供機関に由来し、内容と利用条件は提供元ごとに異なります。</string>
