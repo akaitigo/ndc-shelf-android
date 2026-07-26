@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -65,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
+import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.ImportFailure
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.R
@@ -85,6 +87,11 @@ fun LibraryScreen(
     onDeleteBook: (String) -> Unit,
     onExport: (LibraryExportFormat) -> Unit,
     onImport: (LibraryExportFormat) -> Unit,
+    databaseBackupState: DatabaseBackupUiState,
+    onCreateDatabaseBackup: () -> Unit,
+    onSelectDatabaseBackup: () -> Unit,
+    onConfirmDatabaseRestore: () -> Unit,
+    onDismissDatabaseBackup: () -> Unit,
     importState: LibraryImportUiState,
     bookEditState: BookEditUiState,
     onClearBookEditState: () -> Unit,
@@ -99,6 +106,7 @@ fun LibraryScreen(
     var selectedBook by remember { mutableStateOf<LibraryBook?>(null) }
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
+    var showDatabaseBackupDialog by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
@@ -131,6 +139,17 @@ fun LibraryScreen(
                     fontWeight = FontWeight.Bold,
                 )
                 Row {
+                    IconButton(
+                        onClick = { showDatabaseBackupDialog = true },
+                        enabled = databaseBackupState !is DatabaseBackupUiState.Creating &&
+                            databaseBackupState !is DatabaseBackupUiState.Inspecting &&
+                            databaseBackupState !is DatabaseBackupUiState.Restoring,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.SettingsBackupRestore,
+                            contentDescription = stringResource(R.string.database_backup_manage),
+                        )
+                    }
                     IconButton(
                         onClick = { showImportDialog = true },
                         enabled = importState !is LibraryImportUiState.Loading &&
@@ -251,6 +270,46 @@ fun LibraryScreen(
         )
     }
 
+    if (showDatabaseBackupDialog) {
+        DatabaseBackupDialog(
+            onDismiss = { showDatabaseBackupDialog = false },
+            onCreate = {
+                showDatabaseBackupDialog = false
+                onCreateDatabaseBackup()
+            },
+            onRestore = {
+                showDatabaseBackupDialog = false
+                onSelectDatabaseBackup()
+            },
+        )
+    }
+
+    when (databaseBackupState) {
+        DatabaseBackupUiState.Idle,
+        is DatabaseBackupUiState.Created,
+        is DatabaseBackupUiState.Restored,
+        -> Unit
+
+        DatabaseBackupUiState.Creating -> DatabaseBackupProgressDialog(
+            message = stringResource(R.string.database_backup_creating),
+        )
+        DatabaseBackupUiState.Inspecting -> DatabaseBackupProgressDialog(
+            message = stringResource(R.string.database_backup_inspecting),
+        )
+        DatabaseBackupUiState.Restoring -> DatabaseBackupProgressDialog(
+            message = stringResource(R.string.database_backup_restoring),
+        )
+        is DatabaseBackupUiState.Preview -> DatabaseRestorePreviewDialog(
+            state = databaseBackupState,
+            onConfirm = onConfirmDatabaseRestore,
+            onDismiss = onDismissDatabaseBackup,
+        )
+        is DatabaseBackupUiState.Error -> DatabaseBackupErrorDialog(
+            state = databaseBackupState,
+            onDismiss = onDismissDatabaseBackup,
+        )
+    }
+
     when (importState) {
         LibraryImportUiState.Idle,
         is LibraryImportUiState.Success,
@@ -289,6 +348,110 @@ fun LibraryScreen(
             onDismiss = onDismissImport,
         )
     }
+}
+
+@Composable
+private fun DatabaseBackupDialog(
+    onDismiss: () -> Unit,
+    onCreate: () -> Unit,
+    onRestore: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null) },
+        title = { Text(stringResource(R.string.database_backup_dialog_title)) },
+        text = { Text(stringResource(R.string.database_backup_dialog_description)) },
+        confirmButton = {
+            Button(onClick = onCreate) {
+                Text(stringResource(R.string.database_backup_create))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onRestore) {
+                Text(stringResource(R.string.database_backup_restore_select))
+            }
+        },
+    )
+}
+
+@Composable
+private fun DatabaseBackupProgressDialog(message: String) {
+    AlertDialog(
+        onDismissRequest = {},
+        icon = { CircularProgressIndicator() },
+        title = { Text(message) },
+        confirmButton = {},
+    )
+}
+
+@Composable
+private fun DatabaseRestorePreviewDialog(
+    state: DatabaseBackupUiState.Preview,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val date = remember(state.metadata.createdAt) {
+        java.text.DateFormat.getDateTimeInstance().format(java.util.Date(state.metadata.createdAt))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null) },
+        title = { Text(stringResource(R.string.database_restore_preview_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(
+                        R.string.database_restore_preview_metadata,
+                        date,
+                        state.metadata.appVersion,
+                        state.metadata.databaseVersion,
+                        state.metadata.copyCount,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(stringResource(R.string.database_restore_preview_warning))
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text(stringResource(R.string.database_restore_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.import_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun DatabaseBackupErrorDialog(
+    state: DatabaseBackupUiState.Error,
+    onDismiss: () -> Unit,
+) {
+    val message = when (state.failure) {
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.READ_FAILED -> R.string.database_backup_error_read
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.WRITE_FAILED -> R.string.database_backup_error_write
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.TOO_LARGE -> R.string.database_backup_error_too_large
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INVALID_ARCHIVE -> R.string.database_backup_error_archive
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.CHECKSUM_MISMATCH -> R.string.database_backup_error_checksum
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.UNSUPPORTED_FORMAT -> R.string.database_backup_error_format
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.NEWER_DATABASE -> R.string.database_backup_error_newer
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INTEGRITY_FAILED -> R.string.database_backup_error_integrity
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INSUFFICIENT_SPACE -> R.string.database_backup_error_space
+        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.RESTORE_FAILED -> R.string.database_backup_error_restore
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.database_backup_error_title)) },
+        text = { Text(stringResource(message)) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.import_close))
+            }
+        },
+    )
 }
 
 @Composable

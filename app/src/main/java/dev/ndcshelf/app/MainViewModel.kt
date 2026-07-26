@@ -3,6 +3,12 @@ package dev.ndcshelf.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import dev.ndcshelf.app.domain.backup.DatabaseBackupFailure
+import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
+import dev.ndcshelf.app.domain.backup.DatabaseBackupManager
+import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
+import dev.ndcshelf.app.domain.backup.DatabaseBackupPreview
+import dev.ndcshelf.app.domain.backup.DatabaseRestoreResult
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportPreviewResult
@@ -33,11 +39,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
+import java.io.OutputStream
 
 class MainViewModel(
     private val repository: LibraryRepository,
     private val importIoDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val importComputationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val databaseBackupManager: DatabaseBackupManager? = null,
 ) : ViewModel() {
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
@@ -54,6 +62,8 @@ class MainViewModel(
     val bookEditState: StateFlow<BookEditUiState> = _bookEditState.asStateFlow()
     private val _bookDeleteState = MutableStateFlow<BookDeleteUiState>(BookDeleteUiState.Idle)
     val bookDeleteState: StateFlow<BookDeleteUiState> = _bookDeleteState.asStateFlow()
+    private val _databaseBackupState = MutableStateFlow<DatabaseBackupUiState>(DatabaseBackupUiState.Idle)
+    val databaseBackupState: StateFlow<DatabaseBackupUiState> = _databaseBackupState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
@@ -62,6 +72,71 @@ class MainViewModel(
     private var importPreview: LibraryImportPreview? = null
     private var importWarnings: List<ImportValidationError> = emptyList()
     private var importJob: Job? = null
+    private var databaseBackupPreview: DatabaseBackupPreview? = null
+    private var databaseBackupJob: Job? = null
+
+    fun createDatabaseBackup(output: OutputStream) {
+        val manager = databaseBackupManager ?: return
+        if (_databaseBackupState.value.isBusy) return
+        databaseBackupJob?.cancel()
+        databaseBackupJob = viewModelScope.launch {
+            _databaseBackupState.value = DatabaseBackupUiState.Creating
+            val result = withContext(importIoDispatcher) { manager.createBackup(output) }
+            _databaseBackupState.value = when (result) {
+                is dev.ndcshelf.app.domain.backup.DatabaseBackupCreateResult.Success -> {
+                    DatabaseBackupUiState.Created(result.metadata.copyCount)
+                }
+                is dev.ndcshelf.app.domain.backup.DatabaseBackupCreateResult.Failure -> {
+                    DatabaseBackupUiState.Error(result.reason)
+                }
+            }
+        }
+    }
+
+    fun loadDatabaseBackup(input: InputStream) {
+        val manager = databaseBackupManager ?: return
+        if (_databaseBackupState.value.isBusy) return
+        databaseBackupPreview = null
+        databaseBackupJob?.cancel()
+        databaseBackupJob = viewModelScope.launch {
+            _databaseBackupState.value = DatabaseBackupUiState.Inspecting
+            val result = withContext(importIoDispatcher) { manager.inspectBackup(input) }
+            _databaseBackupState.value = when (result) {
+                is DatabaseBackupInspectResult.Valid -> {
+                    databaseBackupPreview = result.preview
+                    DatabaseBackupUiState.Preview(result.preview.metadata)
+                }
+                is DatabaseBackupInspectResult.Invalid -> DatabaseBackupUiState.Error(result.reason)
+            }
+        }
+    }
+
+    fun confirmDatabaseRestore() {
+        val manager = databaseBackupManager ?: return
+        val preview = databaseBackupPreview ?: return
+        if (_databaseBackupState.value !is DatabaseBackupUiState.Preview) return
+        databaseBackupJob?.cancel()
+        databaseBackupJob = viewModelScope.launch {
+            _databaseBackupState.value = DatabaseBackupUiState.Restoring
+            val result = withContext(importIoDispatcher) { manager.restoreBackup(preview) }
+            _databaseBackupState.value = when (result) {
+                is DatabaseRestoreResult.Success -> {
+                    databaseBackupPreview = null
+                    DatabaseBackupUiState.Restored(
+                        restoredCopyCount = result.restoredCopyCount,
+                        automaticBackupName = result.automaticBackupName,
+                    )
+                }
+                is DatabaseRestoreResult.Failure -> DatabaseBackupUiState.Error(result.reason)
+            }
+        }
+    }
+
+    fun dismissDatabaseBackup() {
+        if (_databaseBackupState.value.isBusy) return
+        databaseBackupPreview = null
+        _databaseBackupState.value = DatabaseBackupUiState.Idle
+    }
 
     fun submitIsbn(rawIsbn: String) {
         if (_scanState.value is ScanUiState.Loading) return
@@ -357,16 +432,41 @@ class MainViewModel(
     companion object {
         private const val RESCAN_GUARD_MILLIS = 4_000L
 
-        fun factory(repository: LibraryRepository): ViewModelProvider.Factory =
+        fun factory(
+            repository: LibraryRepository,
+            databaseBackupManager: DatabaseBackupManager,
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     require(modelClass.isAssignableFrom(MainViewModel::class.java))
-                    return MainViewModel(repository) as T
+                    return MainViewModel(
+                        repository = repository,
+                        databaseBackupManager = databaseBackupManager,
+                    ) as T
                 }
             }
     }
 }
+
+sealed interface DatabaseBackupUiState {
+    data object Idle : DatabaseBackupUiState
+    data object Creating : DatabaseBackupUiState
+    data class Created(val copyCount: Int) : DatabaseBackupUiState
+    data object Inspecting : DatabaseBackupUiState
+    data class Preview(val metadata: DatabaseBackupMetadata) : DatabaseBackupUiState
+    data object Restoring : DatabaseBackupUiState
+    data class Restored(
+        val restoredCopyCount: Int,
+        val automaticBackupName: String,
+    ) : DatabaseBackupUiState
+    data class Error(val failure: DatabaseBackupFailure) : DatabaseBackupUiState
+}
+
+private val DatabaseBackupUiState.isBusy: Boolean
+    get() = this === DatabaseBackupUiState.Creating ||
+        this === DatabaseBackupUiState.Inspecting ||
+        this === DatabaseBackupUiState.Restoring
 
 sealed interface ScanUiState {
     data object Idle : ScanUiState

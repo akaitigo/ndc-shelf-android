@@ -11,7 +11,10 @@ import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels {
         val application = application as NdcShelfApplication
-        MainViewModel.factory(application.container.libraryRepository)
+        MainViewModel.factory(
+            repository = application.container.libraryRepository,
+            databaseBackupManager = application.container.databaseBackupManager,
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
