@@ -10,15 +10,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -27,11 +24,8 @@ import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,7 +39,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,20 +52,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
-import dev.ndcshelf.app.DatabaseBackupUiState
-import dev.ndcshelf.app.ImportFailure
-import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.R
-import dev.ndcshelf.app.domain.export.LibraryExportFormat
-import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
-import dev.ndcshelf.app.domain.importer.ImportValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditField
@@ -85,28 +71,14 @@ fun LibraryScreen(
     books: List<LibraryBook>,
     onSaveBook: (String, BookEditDraft) -> Unit,
     onDeleteBook: (String) -> Unit,
-    onExport: (LibraryExportFormat) -> Unit,
-    onImport: (LibraryExportFormat) -> Unit,
-    databaseBackupState: DatabaseBackupUiState,
-    onCreateDatabaseBackup: () -> Unit,
-    onSelectDatabaseBackup: () -> Unit,
-    onConfirmDatabaseRestore: () -> Unit,
-    onDismissDatabaseBackup: () -> Unit,
-    importState: LibraryImportUiState,
     bookEditState: BookEditUiState,
     onClearBookEditState: () -> Unit,
     bookDeleteState: BookDeleteUiState,
     onClearBookDeleteState: () -> Unit,
-    onSelectImportPolicy: (ImportConflictPolicy) -> Unit,
-    onConfirmImport: () -> Unit,
-    onDismissImport: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var selectedBook by remember { mutableStateOf<LibraryBook?>(null) }
-    var showExportDialog by rememberSaveable { mutableStateOf(false) }
-    var showImportDialog by rememberSaveable { mutableStateOf(false) }
-    var showDatabaseBackupDialog by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
@@ -128,48 +100,11 @@ fun LibraryScreen(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "My Library",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Row {
-                    IconButton(
-                        onClick = { showDatabaseBackupDialog = true },
-                        enabled = databaseBackupState !is DatabaseBackupUiState.Creating &&
-                            databaseBackupState !is DatabaseBackupUiState.Inspecting &&
-                            databaseBackupState !is DatabaseBackupUiState.Restoring,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SettingsBackupRestore,
-                            contentDescription = stringResource(R.string.database_backup_manage),
-                        )
-                    }
-                    IconButton(
-                        onClick = { showImportDialog = true },
-                        enabled = importState !is LibraryImportUiState.Loading &&
-                            importState !is LibraryImportUiState.Applying,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.FileUpload,
-                            contentDescription = stringResource(R.string.import_library),
-                        )
-                    }
-                    IconButton(
-                        onClick = { showExportDialog = true },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.FileDownload,
-                            contentDescription = stringResource(R.string.export_library),
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "My Library",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 text = "${books.size}冊の本を、ちゃんと見つけられる場所。",
                 style = MaterialTheme.typography.bodyMedium,
@@ -250,431 +185,6 @@ fun LibraryScreen(
         )
     }
 
-    if (showExportDialog) {
-        ExportFormatDialog(
-            onDismiss = { showExportDialog = false },
-            onSelect = { format ->
-                showExportDialog = false
-                onExport(format)
-            },
-        )
-    }
-
-    if (showImportDialog) {
-        ImportFormatDialog(
-            onDismiss = { showImportDialog = false },
-            onSelect = { format ->
-                showImportDialog = false
-                onImport(format)
-            },
-        )
-    }
-
-    if (showDatabaseBackupDialog) {
-        DatabaseBackupDialog(
-            onDismiss = { showDatabaseBackupDialog = false },
-            onCreate = {
-                showDatabaseBackupDialog = false
-                onCreateDatabaseBackup()
-            },
-            onRestore = {
-                showDatabaseBackupDialog = false
-                onSelectDatabaseBackup()
-            },
-        )
-    }
-
-    when (databaseBackupState) {
-        DatabaseBackupUiState.Idle,
-        is DatabaseBackupUiState.Created,
-        is DatabaseBackupUiState.Restored,
-        -> Unit
-
-        DatabaseBackupUiState.Creating -> DatabaseBackupProgressDialog(
-            message = stringResource(R.string.database_backup_creating),
-        )
-        DatabaseBackupUiState.Inspecting -> DatabaseBackupProgressDialog(
-            message = stringResource(R.string.database_backup_inspecting),
-        )
-        DatabaseBackupUiState.Restoring -> DatabaseBackupProgressDialog(
-            message = stringResource(R.string.database_backup_restoring),
-        )
-        is DatabaseBackupUiState.Preview -> DatabaseRestorePreviewDialog(
-            state = databaseBackupState,
-            onConfirm = onConfirmDatabaseRestore,
-            onDismiss = onDismissDatabaseBackup,
-        )
-        is DatabaseBackupUiState.Error -> DatabaseBackupErrorDialog(
-            state = databaseBackupState,
-            onDismiss = onDismissDatabaseBackup,
-        )
-    }
-
-    when (importState) {
-        LibraryImportUiState.Idle,
-        is LibraryImportUiState.Success,
-        -> Unit
-
-        LibraryImportUiState.Loading -> ImportProgressDialog(
-            message = stringResource(R.string.import_loading),
-            onCancel = onDismissImport,
-        )
-
-        LibraryImportUiState.Applying -> ImportProgressDialog(
-            message = stringResource(R.string.import_applying),
-            onCancel = onDismissImport,
-        )
-
-        is LibraryImportUiState.Invalid -> ImportErrorDialog(
-            errors = importState.errors,
-            onDismiss = onDismissImport,
-        )
-
-        is LibraryImportUiState.Error -> ImportErrorDialog(
-            errors = listOf(
-                ImportValidationError(
-                    recordNumber = null,
-                    field = null,
-                    reason = importFailureMessage(importState.failure),
-                ),
-            ),
-            onDismiss = onDismissImport,
-        )
-
-        is LibraryImportUiState.Preview -> ImportPreviewDialog(
-            state = importState,
-            onSelectPolicy = onSelectImportPolicy,
-            onConfirm = onConfirmImport,
-            onDismiss = onDismissImport,
-        )
-    }
-}
-
-@Composable
-private fun DatabaseBackupDialog(
-    onDismiss: () -> Unit,
-    onCreate: () -> Unit,
-    onRestore: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null) },
-        title = { Text(stringResource(R.string.database_backup_dialog_title)) },
-        text = { Text(stringResource(R.string.database_backup_dialog_description)) },
-        confirmButton = {
-            Button(onClick = onCreate) {
-                Text(stringResource(R.string.database_backup_create))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onRestore) {
-                Text(stringResource(R.string.database_backup_restore_select))
-            }
-        },
-    )
-}
-
-@Composable
-private fun DatabaseBackupProgressDialog(message: String) {
-    AlertDialog(
-        onDismissRequest = {},
-        icon = { CircularProgressIndicator() },
-        title = { Text(message) },
-        confirmButton = {},
-    )
-}
-
-@Composable
-private fun DatabaseRestorePreviewDialog(
-    state: DatabaseBackupUiState.Preview,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val date = remember(state.metadata.createdAt) {
-        java.text.DateFormat.getDateTimeInstance().format(java.util.Date(state.metadata.createdAt))
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null) },
-        title = { Text(stringResource(R.string.database_restore_preview_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    stringResource(
-                        R.string.database_restore_preview_metadata,
-                        date,
-                        state.metadata.appVersion,
-                        state.metadata.databaseVersion,
-                        state.metadata.copyCount,
-                    ),
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(stringResource(R.string.database_restore_preview_warning))
-            }
-        },
-        confirmButton = {
-            Button(onClick = onConfirm) {
-                Text(stringResource(R.string.database_restore_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.import_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun DatabaseBackupErrorDialog(
-    state: DatabaseBackupUiState.Error,
-    onDismiss: () -> Unit,
-) {
-    val message = when (state.failure) {
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.READ_FAILED -> R.string.database_backup_error_read
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.WRITE_FAILED -> R.string.database_backup_error_write
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.TOO_LARGE -> R.string.database_backup_error_too_large
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INVALID_ARCHIVE -> R.string.database_backup_error_archive
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.CHECKSUM_MISMATCH -> R.string.database_backup_error_checksum
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.UNSUPPORTED_FORMAT -> R.string.database_backup_error_format
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.NEWER_DATABASE -> R.string.database_backup_error_newer
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INTEGRITY_FAILED -> R.string.database_backup_error_integrity
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INSUFFICIENT_SPACE -> R.string.database_backup_error_space
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.RESTORE_FAILED -> R.string.database_backup_error_restore
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.database_backup_error_title)) },
-        text = { Text(stringResource(message)) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.import_close))
-            }
-        },
-    )
-}
-
-@Composable
-private fun ImportProgressDialog(
-    message: String,
-    onCancel: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        icon = { CircularProgressIndicator() },
-        title = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onCancel) {
-                Text(stringResource(R.string.import_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun ImportErrorDialog(
-    errors: List<ImportValidationError>,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.import_error_title)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                errors.forEach { error ->
-                    val text = when {
-                        error.recordNumber != null && error.field != null -> stringResource(
-                            R.string.import_error_location,
-                            error.recordNumber,
-                            error.field,
-                            error.reason,
-                        )
-                        error.field != null -> stringResource(
-                            R.string.import_error_root,
-                            error.field,
-                            error.reason,
-                        )
-                        else -> stringResource(R.string.import_error_general, error.reason)
-                    }
-                    Text(text = text, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.import_close))
-            }
-        },
-    )
-}
-
-@Composable
-private fun ImportPreviewDialog(
-    state: LibraryImportUiState.Preview,
-    onSelectPolicy: (ImportConflictPolicy) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
-        title = { Text(stringResource(R.string.import_preview_title)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (state.staleRecalculated) {
-                    Text(
-                        text = stringResource(R.string.import_stale_notice),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                Text(stringResource(R.string.import_preview_description))
-                Text(
-                    text = stringResource(
-                        R.string.import_preview_counts,
-                        state.addedCount,
-                        state.updatedCount,
-                        state.skippedCount,
-                    ),
-                    fontWeight = FontWeight.Bold,
-                )
-                if (state.warnings.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.import_warning_title),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    state.warnings.forEach { warning ->
-                        Text(
-                            text = if (warning.field == null) {
-                                warning.reason
-                            } else {
-                                stringResource(
-                                    R.string.import_error_root,
-                                    warning.field,
-                                    warning.reason,
-                                )
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-                Column(Modifier.selectableGroup()) {
-                    ImportPolicyOption(
-                        selected = state.conflictPolicy == ImportConflictPolicy.SKIP_EXISTING,
-                        label = stringResource(R.string.import_policy_skip),
-                        onClick = { onSelectPolicy(ImportConflictPolicy.SKIP_EXISTING) },
-                    )
-                    ImportPolicyOption(
-                        selected = state.conflictPolicy == ImportConflictPolicy.UPDATE_EXISTING,
-                        label = stringResource(R.string.import_policy_update),
-                        onClick = { onSelectPolicy(ImportConflictPolicy.UPDATE_EXISTING) },
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                enabled = state.changeCount > 0,
-            ) {
-                Text(stringResource(R.string.import_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.import_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun importFailureMessage(failure: ImportFailure): String = when (failure) {
-    ImportFailure.JSON_READ -> stringResource(R.string.import_read_failure)
-    ImportFailure.CSV_READ -> stringResource(R.string.import_csv_read_failure)
-    ImportFailure.PREVIEW -> stringResource(R.string.import_preview_failure)
-    ImportFailure.APPLY -> stringResource(R.string.import_apply_failure)
-    ImportFailure.STALE_RESELECT -> stringResource(R.string.import_stale_reselect)
-}
-
-@Composable
-private fun ImportFormatDialog(
-    onDismiss: () -> Unit,
-    onSelect: (LibraryExportFormat) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
-        title = { Text(stringResource(R.string.import_dialog_title)) },
-        text = { Text(stringResource(R.string.import_dialog_description)) },
-        confirmButton = {
-            Button(onClick = { onSelect(LibraryExportFormat.JSON) }) {
-                Text(stringResource(R.string.import_json))
-            }
-        },
-        dismissButton = {
-            Button(onClick = { onSelect(LibraryExportFormat.CSV) }) {
-                Text(stringResource(R.string.import_csv))
-            }
-        },
-    )
-}
-
-@Composable
-private fun ImportPolicyOption(
-    selected: Boolean,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(
-                selected = selected,
-                onClick = onClick,
-                role = Role.RadioButton,
-            )
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Spacer(Modifier.width(8.dp))
-        Text(label)
-    }
-}
-
-@Composable
-private fun ExportFormatDialog(
-    onDismiss: () -> Unit,
-    onSelect: (LibraryExportFormat) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Rounded.FileDownload, contentDescription = null) },
-        title = { Text(stringResource(R.string.export_dialog_title)) },
-        text = { Text(stringResource(R.string.export_dialog_description)) },
-        confirmButton = {
-            Button(onClick = { onSelect(LibraryExportFormat.JSON) }) {
-                Text(stringResource(R.string.export_json))
-            }
-        },
-        dismissButton = {
-            Button(onClick = { onSelect(LibraryExportFormat.CSV) }) {
-                Text(stringResource(R.string.export_csv))
-            }
-        },
-    )
 }
 
 @Composable

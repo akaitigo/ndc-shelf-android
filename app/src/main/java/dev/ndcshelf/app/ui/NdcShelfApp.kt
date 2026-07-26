@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Analytics
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -38,19 +39,16 @@ import dev.ndcshelf.app.BookEditFailure
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.LibraryImportUiState
+import dev.ndcshelf.app.LibraryExportUiState
 import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
-import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import dev.ndcshelf.app.ui.screens.DataManagementScreen
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -67,30 +65,27 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val bookEditState by viewModel.bookEditState.collectAsStateWithLifecycle()
     val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
     val databaseBackupState by viewModel.databaseBackupState.collectAsStateWithLifecycle()
+    val libraryExportState by viewModel.libraryExportState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
-        if (uri == null) return
-        val booksToExport = books.toList()
-        scope.launch {
-            val succeeded = try {
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
-                        LibraryExporter.write(booksToExport, format, output)
-                    } ?: throw IOException("保存先を開けませんでした")
-                }
-                true
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Exception) {
-                false
+        if (uri == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
             }
-            val message = if (succeeded) {
-                resources.getString(R.string.export_success, booksToExport.size)
-            } else {
-                resources.getString(R.string.export_failure)
+            return
+        }
+        val output = try {
+            context.contentResolver.openOutputStream(uri, "wt")
+        } catch (_: Exception) {
+            null
+        }
+        if (output == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.export_failure))
             }
-            snackbarHostState.showSnackbar(message)
+        } else {
+            viewModel.exportLibrary(format, output)
         }
     }
 
@@ -103,7 +98,11 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val jsonImporter = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri != null) {
+        if (uri == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
+            }
+        } else {
             val input = try {
                 context.contentResolver.openInputStream(uri)
             } catch (_: Exception) {
@@ -121,7 +120,11 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val csvImporter = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri != null) {
+        if (uri == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
+            }
+        } else {
             val input = try {
                 context.contentResolver.openInputStream(uri)
             } catch (_: Exception) {
@@ -139,7 +142,11 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val databaseBackupCreator = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
-        if (uri != null) {
+        if (uri == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
+            }
+        } else {
             val output = try {
                 context.contentResolver.openOutputStream(uri, "wt")
             } catch (_: Exception) {
@@ -159,7 +166,11 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val databaseBackupRestorer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri != null) {
+        if (uri == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
+            }
+        } else {
             val input = try {
                 context.contentResolver.openInputStream(uri)
             } catch (_: Exception) {
@@ -188,6 +199,19 @@ fun NdcShelfApp(viewModel: MainViewModel) {
             ),
         )
         viewModel.consumeImportSuccess()
+    }
+
+    LaunchedEffect(libraryExportState) {
+        val message = when (val state = libraryExportState) {
+            is LibraryExportUiState.Success -> resources.getString(
+                R.string.export_success,
+                state.bookCount,
+            )
+            LibraryExportUiState.Error -> resources.getString(R.string.export_failure)
+            else -> return@LaunchedEffect
+        }
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeLibraryExportResult()
     }
 
     LaunchedEffect(bookEditState) {
@@ -319,34 +343,10 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 books = books,
                 onSaveBook = viewModel::saveBookEdit,
                 onDeleteBook = viewModel::deleteBook,
-                onExport = ::requestExport,
-                onImport = { format ->
-                    when (format) {
-                        LibraryExportFormat.JSON -> jsonImporter.launch(
-                            arrayOf("application/json", "text/json"),
-                        )
-                        LibraryExportFormat.CSV -> csvImporter.launch(
-                            arrayOf("text/csv", "text/comma-separated-values"),
-                        )
-                    }
-                },
-                databaseBackupState = databaseBackupState,
-                onCreateDatabaseBackup = ::requestDatabaseBackup,
-                onSelectDatabaseBackup = {
-                    databaseBackupRestorer.launch(
-                        arrayOf("application/zip", "application/octet-stream"),
-                    )
-                },
-                onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
-                onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
-                importState = importState,
                 bookEditState = bookEditState,
                 onClearBookEditState = viewModel::clearBookEditState,
                 bookDeleteState = bookDeleteState,
                 onClearBookDeleteState = viewModel::clearBookDeleteState,
-                onSelectImportPolicy = viewModel::selectImportConflictPolicy,
-                onConfirmImport = viewModel::confirmImport,
-                onDismissImport = viewModel::dismissImport,
                 contentPadding = contentPadding,
             )
 
@@ -362,6 +362,33 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 books = books,
                 contentPadding = contentPadding,
             )
+
+            AppDestination.DATA -> DataManagementScreen(
+                bookCount = books.size,
+                exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
+                importState = importState,
+                databaseBackupState = databaseBackupState,
+                onExportJson = { requestExport(LibraryExportFormat.JSON) },
+                onExportCsv = { requestExport(LibraryExportFormat.CSV) },
+                onImportJson = {
+                    jsonImporter.launch(arrayOf("application/json", "text/json"))
+                },
+                onImportCsv = {
+                    csvImporter.launch(arrayOf("text/csv", "text/comma-separated-values"))
+                },
+                onCreateDatabaseBackup = ::requestDatabaseBackup,
+                onSelectDatabaseBackup = {
+                    databaseBackupRestorer.launch(
+                        arrayOf("application/zip", "application/octet-stream"),
+                    )
+                },
+                onSelectImportPolicy = viewModel::selectImportConflictPolicy,
+                onConfirmImport = viewModel::confirmImport,
+                onDismissImport = viewModel::dismissImport,
+                onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
+                onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
+                contentPadding = contentPadding,
+            )
         }
     }
 }
@@ -373,4 +400,5 @@ private enum class AppDestination(
     LIBRARY("本棚", Icons.AutoMirrored.Rounded.LibraryBooks),
     SCAN("スキャン", Icons.Rounded.QrCodeScanner),
     INSIGHTS("分類", Icons.Rounded.Analytics),
+    DATA("データ", Icons.Rounded.Storage),
 }
