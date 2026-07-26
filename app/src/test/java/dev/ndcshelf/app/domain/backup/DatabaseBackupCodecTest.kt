@@ -6,6 +6,7 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
+import dev.ndcshelf.app.data.local.WishlistItemEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -162,6 +163,14 @@ class DatabaseBackupCodecTest {
         rooms = listOf(LocationRoomEntity("room-1", "書斎", 0)),
         shelves = listOf(LocationShelfEntity("shelf-1", "room-1", "本棚", 0)),
         tiers = listOf(LocationTierEntity("tier-1", "shelf-1", "上段", 0)),
+        wishlistItems = listOf(
+            WishlistItemEntity(
+                editionId = "edition-1",
+                status = "RESERVED",
+                createdAt = 1_600_000_000_000,
+                updatedAt = 1_700_000_000_000,
+            ),
+        ),
     )
 
     private fun unzip(archive: ByteArray): Map<String, ByteArray> {

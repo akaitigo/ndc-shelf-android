@@ -7,16 +7,29 @@ import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditValidationError
+import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.PurchaseTransition
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 interface LibraryRepository {
     fun observeLibrary(): Flow<List<LibraryBook>>
+
+    fun observeWishlist(): Flow<List<BookstoreBook>> = emptyFlow()
 
     suspend fun addFromIsbn(rawIsbn: String): AddBookResult
 
     suspend fun addAnotherCopy(rawIsbn: String, copyLabel: String): AddBookResult =
         AddBookResult.Failure(AddBookFailure.SAVE)
+
+    suspend fun lookupBookstore(rawIsbn: String): BookstoreLookupResult =
+        BookstoreLookupResult.Failure(AddBookFailure.SAVE)
+
+    suspend fun changePurchaseState(
+        book: BookstoreBook,
+        transition: PurchaseTransition,
+    ): BookstoreChangeResult = BookstoreChangeResult.Failure
 
     suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult
 
@@ -37,6 +50,19 @@ interface LibraryRepository {
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+sealed interface BookstoreLookupResult {
+    data class Found(val book: BookstoreBook) : BookstoreLookupResult
+    data class InvalidIsbn(val rawValue: String) : BookstoreLookupResult
+    data class NotFound(val isbn13: String) : BookstoreLookupResult
+    data class Failure(val reason: AddBookFailure, val isbn13: String? = null) : BookstoreLookupResult
+}
+
+sealed interface BookstoreChangeResult {
+    data class Updated(val book: BookstoreBook) : BookstoreChangeResult
+    data object Conflict : BookstoreChangeResult
+    data object Failure : BookstoreChangeResult
 }
 
 enum class ShelfMoveDirection { LEFT, RIGHT }

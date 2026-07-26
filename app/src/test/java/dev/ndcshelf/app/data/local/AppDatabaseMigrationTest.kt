@@ -194,6 +194,39 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version4DataIsPreservedAndWishlistTableIsUsable() {
+        migrationHelper.createDatabase(V4_DATABASE, 4).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '本A', '著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition-1', 'work-1', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-1', 'edition-1', 'PHYSICAL', '棚', 'UNREAD', 42, NULL, NULL, '保存用')",
+            )
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V4_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query("SELECT copyLabel FROM owned_copies WHERE id = 'copy-1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("保存用", cursor.getString(0))
+        }
+        migrated.execSQL("INSERT INTO wishlist_items VALUES ('edition-1', 'WANTED', 10, 10)")
+        migrated.query("SELECT status FROM wishlist_items WHERE editionId = 'edition-1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("WANTED", cursor.getString(0))
+        }
+        migrated.close()
+    }
+
+    @Test
     fun malformedExistingSchema_isRejectedInsteadOfBeingDestructivelyRecreated() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(CORRUPT_DATABASE)
@@ -269,6 +302,7 @@ class AppDatabaseMigrationTest {
         const val V1_DATABASE = "migration-v1"
         const val V2_DATABASE = "migration-v2"
         const val V3_DATABASE = "migration-v3"
+        const val V4_DATABASE = "migration-v4"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

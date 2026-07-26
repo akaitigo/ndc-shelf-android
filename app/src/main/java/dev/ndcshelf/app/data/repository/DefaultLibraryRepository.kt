@@ -6,6 +6,8 @@ import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.LibraryBookRow
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.WishlistBookRow
+import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.remote.BookMetadataFailure
 import dev.ndcshelf.app.data.remote.BookMetadataLookupResult
 import dev.ndcshelf.app.data.remote.BookMetadataService
@@ -21,12 +23,17 @@ import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.BookEditValidationResult
 import dev.ndcshelf.app.domain.model.BookEditValidator
+import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.PurchaseStatus
+import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.AddBookFailure
+import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
+import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
@@ -57,6 +64,9 @@ class DefaultLibraryRepository(
     override fun observeLibrary(): Flow<List<LibraryBook>> =
         dao.observeLibrary().map { rows -> rows.map(LibraryBookRow::toDomain) }
 
+    override fun observeWishlist(): Flow<List<BookstoreBook>> =
+        dao.observeWishlist().map { rows -> rows.map(WishlistBookRow::toDomain) }
+
     override suspend fun addFromIsbn(rawIsbn: String): AddBookResult {
         val isbn13 = Isbn.normalizeToIsbn13(rawIsbn)
             ?: return AddBookResult.InvalidIsbn(rawIsbn)
@@ -66,6 +76,19 @@ class DefaultLibraryRepository(
                 existing.toDomain(),
                 dao.countCopiesForEdition(existing.editionId),
             )
+        }
+
+        findLocalBookstoreBook(isbn13)?.let { local ->
+            return when (val changed = changePurchaseState(local, PurchaseTransition.PURCHASED)) {
+                is BookstoreChangeResult.Updated -> {
+                    val copy = dao.findOwnedByIsbn(isbn13)?.toDomain()
+                        ?: return AddBookResult.Failure(AddBookFailure.SAVE, isbn13)
+                    AddBookResult.Added(copy)
+                }
+                BookstoreChangeResult.Conflict,
+                BookstoreChangeResult.Failure,
+                -> AddBookResult.Failure(AddBookFailure.SAVE, isbn13)
+            }
         }
 
         val lookup = try {
@@ -204,6 +227,146 @@ class DefaultLibraryRepository(
         } catch (_: Exception) {
             AddBookResult.Failure(AddBookFailure.SAVE, isbn13)
         }
+    }
+
+    override suspend fun lookupBookstore(rawIsbn: String): BookstoreLookupResult {
+        val isbn13 = Isbn.normalizeToIsbn13(rawIsbn)
+            ?: return BookstoreLookupResult.InvalidIsbn(rawIsbn)
+        findLocalBookstoreBook(isbn13)?.let { return BookstoreLookupResult.Found(it) }
+
+        val lookup = try {
+            metadataService.findByIsbn(isbn13)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            return BookstoreLookupResult.Failure(AddBookFailure.NETWORK, isbn13)
+        }
+        return when (lookup) {
+            is BookMetadataLookupResult.Found -> {
+                val metadata = lookup.metadata
+                BookstoreLookupResult.Found(
+                    BookstoreBook(
+                        workId = idFactory(),
+                        editionId = idFactory(),
+                        title = metadata.title,
+                        primaryAuthor = metadata.authors.joinToString("・").ifBlank { "著者不明" },
+                        isbn13 = isbn13,
+                        publisher = metadata.publisher,
+                        publishedYear = metadata.publishedYear,
+                        coverUrl = metadata.coverUrl,
+                        ndcCode = metadata.ndcCode,
+                        ndcEdition = metadata.ndcEdition,
+                        classificationSource = if (metadata.ndcCode == null) {
+                            ClassificationSource.UNKNOWN
+                        } else {
+                            ClassificationSource.NDL
+                        },
+                        purchaseStatus = null,
+                        ownedCopyCount = 0,
+                    ),
+                )
+            }
+            BookMetadataLookupResult.NotFound -> BookstoreLookupResult.NotFound(isbn13)
+            is BookMetadataLookupResult.Failure -> BookstoreLookupResult.Failure(
+                lookup.reason.toAddBookFailure(),
+                isbn13,
+            )
+        }
+    }
+
+    override suspend fun changePurchaseState(
+        book: BookstoreBook,
+        transition: PurchaseTransition,
+    ): BookstoreChangeResult = try {
+        database.withTransaction {
+            val existingEdition = dao.findEditionByIsbn(book.isbn13)
+            val editionId: String
+            val workId: String
+            if (existingEdition == null) {
+                if (book.purchaseStatus != null || book.ownedCopyCount != 0) {
+                    return@withTransaction BookstoreChangeResult.Conflict
+                }
+                dao.insertWork(book.toWorkEntity())
+                dao.insertEdition(book.toEditionEntity())
+                editionId = book.editionId
+                workId = book.workId
+            } else {
+                editionId = existingEdition.id
+                workId = existingEdition.workId
+            }
+            val previous = dao.findWishlistByEditionId(editionId)
+            val persistedStatus = previous?.status?.let { rawStatus ->
+                PurchaseStatus.entries.firstOrNull { it.name == rawStatus }
+                    ?: return@withTransaction BookstoreChangeResult.Conflict
+            }
+            val currentCopyCount = dao.countCopiesForEdition(editionId)
+            if (persistedStatus != book.purchaseStatus ||
+                currentCopyCount != book.ownedCopyCount
+            ) {
+                return@withTransaction BookstoreChangeResult.Conflict
+            }
+            val now = nowMillis()
+            val status = when (transition) {
+                PurchaseTransition.WANTED -> PurchaseStatus.WANTED
+                PurchaseTransition.RESERVED -> PurchaseStatus.RESERVED
+                PurchaseTransition.PURCHASED -> null
+            }
+            if (status != null) {
+                dao.upsertWishlistItem(
+                    WishlistItemEntity(
+                        editionId = editionId,
+                        status = status.name,
+                        createdAt = previous?.createdAt ?: now,
+                        updatedAt = now,
+                    ),
+                )
+            } else {
+                dao.insertCopy(
+                    OwnedCopyEntity(
+                        id = idFactory(),
+                        editionId = editionId,
+                        mediaType = MediaType.PHYSICAL.name,
+                        location = "未設定",
+                        readingStatus = ReadingStatus.UNREAD.name,
+                        addedAt = now,
+                        copyLabel = "${currentCopyCount + 1}冊目",
+                    ),
+                )
+                dao.deleteWishlistByEditionId(editionId)
+            }
+            val local = findLocalBookstoreBook(book.isbn13)
+                ?: return@withTransaction BookstoreChangeResult.Conflict
+            BookstoreChangeResult.Updated(
+                local.copy(workId = workId, editionId = editionId),
+            )
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        BookstoreChangeResult.Failure
+    }
+
+    private suspend fun findLocalBookstoreBook(isbn13: String): BookstoreBook? {
+        dao.findWishlistByIsbn(isbn13)?.let { return it.toDomain() }
+        val edition = dao.findEditionByIsbn(isbn13) ?: return null
+        val work = dao.findWorkById(edition.workId) ?: return null
+        return BookstoreBook(
+            workId = work.id,
+            editionId = edition.id,
+            title = work.title,
+            primaryAuthor = work.primaryAuthor,
+            isbn13 = edition.isbn13,
+            publisher = edition.publisher,
+            publishedYear = edition.publishedYear,
+            coverUrl = edition.coverUrl,
+            ndcCode = edition.ndcCode,
+            ndcEdition = edition.ndcEdition,
+            classificationSource = edition.classificationSource.toEnumOrDefault(
+                ClassificationSource.UNKNOWN,
+            ),
+            purchaseStatus = null,
+            ownedCopyCount = dao.countCopiesForEdition(edition.id),
+        )
     }
 
     override suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult {
@@ -361,7 +524,9 @@ class DefaultLibraryRepository(
             val book = dao.findOwnedByCopyId(copyId)?.toDomain()
                 ?: return@withTransaction DeleteBookResult.NotFound
             check(dao.deleteCopyById(copyId) == 1)
-            if (dao.countCopiesForEdition(book.editionId) == 0) {
+            if (dao.countCopiesForEdition(book.editionId) == 0 &&
+                dao.findWishlistByEditionId(book.editionId) == null
+            ) {
                 check(dao.deleteEditionById(book.editionId) == 1)
             }
             if (dao.countEditionsForWork(book.workId) == 0) {
@@ -419,13 +584,21 @@ class DefaultLibraryRepository(
         importCommitter.commit(preview)
 
     private suspend fun writeImportedBooks(books: List<LibraryBook>) {
+        val resolved = books.map { book ->
+            dao.findEditionByIsbn(book.isbn13)?.let { existing ->
+                book.copy(workId = existing.workId, editionId = existing.id)
+            } ?: book
+        }
         dao.upsertWorks(
-            books.distinctBy(LibraryBook::workId).map(LibraryBook::toWorkEntity),
+            resolved.distinctBy(LibraryBook::workId).map(LibraryBook::toWorkEntity),
         )
         dao.upsertEditions(
-            books.distinctBy(LibraryBook::editionId).map(LibraryBook::toEditionEntity),
+            resolved.distinctBy(LibraryBook::editionId).map(LibraryBook::toEditionEntity),
         )
-        dao.upsertCopies(books.map(LibraryBook::toCopyEntity))
+        dao.upsertCopies(resolved.map(LibraryBook::toCopyEntity))
+        resolved.map(LibraryBook::editionId).distinct().forEach { editionId ->
+            dao.deleteWishlistByEditionId(editionId)
+        }
     }
 
     private suspend fun resolveShelfOrderKey(
@@ -500,6 +673,24 @@ private fun LibraryBook.toEditionEntity() = BookEditionEntity(
     classificationSource = classificationSource.name,
 )
 
+private fun BookstoreBook.toWorkEntity() = BookWorkEntity(
+    id = workId,
+    title = title,
+    primaryAuthor = primaryAuthor,
+)
+
+private fun BookstoreBook.toEditionEntity() = BookEditionEntity(
+    id = editionId,
+    workId = workId,
+    isbn13 = isbn13,
+    publisher = publisher,
+    publishedYear = publishedYear,
+    coverUrl = coverUrl,
+    ndcCode = ndcCode,
+    ndcEdition = ndcEdition,
+    classificationSource = classificationSource.name,
+)
+
 private fun LibraryBook.toCopyEntity() = OwnedCopyEntity(
     id = copyId,
     editionId = editionId,
@@ -534,6 +725,24 @@ internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     locationTierId = locationTierId,
     shelfOrderKey = shelfOrderKey,
     copyLabel = copyLabel,
+)
+
+internal fun WishlistBookRow.toDomain(): BookstoreBook = BookstoreBook(
+    workId = workId,
+    editionId = editionId,
+    title = title,
+    primaryAuthor = primaryAuthor,
+    isbn13 = isbn13,
+    publisher = publisher,
+    publishedYear = publishedYear,
+    coverUrl = coverUrl,
+    ndcCode = ndcCode,
+    ndcEdition = ndcEdition,
+    classificationSource = classificationSource.toEnumOrDefault(ClassificationSource.UNKNOWN),
+    purchaseStatus = status.toEnumOrDefault(PurchaseStatus.WANTED),
+    ownedCopyCount = ownedCopyCount,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
 )
 
 private inline fun <reified T : Enum<T>> String.toEnumOrDefault(default: T): T =

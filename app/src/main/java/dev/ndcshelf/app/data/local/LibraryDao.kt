@@ -18,6 +18,65 @@ interface LibraryDao {
     @Query("SELECT * FROM owned_copies ORDER BY id")
     suspend fun getAllCopies(): List<OwnedCopyEntity>
 
+    @Query("SELECT * FROM wishlist_items ORDER BY editionId")
+    suspend fun getAllWishlistItems(): List<WishlistItemEntity>
+
+    @Query(
+        """
+        SELECT
+            works.id AS workId,
+            editions.id AS editionId,
+            works.title AS title,
+            works.primaryAuthor AS primaryAuthor,
+            editions.isbn13 AS isbn13,
+            editions.publisher AS publisher,
+            editions.publishedYear AS publishedYear,
+            editions.coverUrl AS coverUrl,
+            editions.ndcCode AS ndcCode,
+            editions.ndcEdition AS ndcEdition,
+            editions.classificationSource AS classificationSource,
+            wishlist.status AS status,
+            wishlist.createdAt AS createdAt,
+            wishlist.updatedAt AS updatedAt,
+            (SELECT COUNT(*) FROM owned_copies WHERE editionId = editions.id) AS ownedCopyCount
+        FROM wishlist_items AS wishlist
+        INNER JOIN book_editions AS editions ON editions.id = wishlist.editionId
+        INNER JOIN book_works AS works ON works.id = editions.workId
+        ORDER BY wishlist.updatedAt DESC, wishlist.editionId ASC
+        """,
+    )
+    fun observeWishlist(): Flow<List<WishlistBookRow>>
+
+    @Query(
+        """
+        SELECT
+            works.id AS workId,
+            editions.id AS editionId,
+            works.title AS title,
+            works.primaryAuthor AS primaryAuthor,
+            editions.isbn13 AS isbn13,
+            editions.publisher AS publisher,
+            editions.publishedYear AS publishedYear,
+            editions.coverUrl AS coverUrl,
+            editions.ndcCode AS ndcCode,
+            editions.ndcEdition AS ndcEdition,
+            editions.classificationSource AS classificationSource,
+            wishlist.status AS status,
+            wishlist.createdAt AS createdAt,
+            wishlist.updatedAt AS updatedAt,
+            (SELECT COUNT(*) FROM owned_copies WHERE editionId = editions.id) AS ownedCopyCount
+        FROM wishlist_items AS wishlist
+        INNER JOIN book_editions AS editions ON editions.id = wishlist.editionId
+        INNER JOIN book_works AS works ON works.id = editions.workId
+        WHERE editions.isbn13 = :isbn13
+        LIMIT 1
+        """,
+    )
+    suspend fun findWishlistByIsbn(isbn13: String): WishlistBookRow?
+
+    @Query("SELECT * FROM wishlist_items WHERE editionId = :editionId LIMIT 1")
+    suspend fun findWishlistByEditionId(editionId: String): WishlistItemEntity?
+
     @Query(
         """
         SELECT
@@ -182,6 +241,12 @@ interface LibraryDao {
     suspend fun insertCopy(copy: OwnedCopyEntity)
 
     @Upsert
+    suspend fun upsertWishlistItem(item: WishlistItemEntity)
+
+    @Upsert
+    suspend fun upsertWishlistItems(items: List<WishlistItemEntity>)
+
+    @Upsert
     suspend fun upsertWorks(works: List<BookWorkEntity>)
 
     @Upsert
@@ -192,6 +257,9 @@ interface LibraryDao {
 
     @Query("DELETE FROM owned_copies")
     suspend fun deleteAllCopies()
+
+    @Query("DELETE FROM wishlist_items")
+    suspend fun deleteAllWishlistItems()
 
     @Query("DELETE FROM book_editions")
     suspend fun deleteAllEditions()
@@ -247,6 +315,9 @@ interface LibraryDao {
 
     @Query("SELECT COUNT(*) FROM owned_copies WHERE editionId = :editionId")
     suspend fun countCopiesForEdition(editionId: String): Int
+
+    @Query("DELETE FROM wishlist_items WHERE editionId = :editionId")
+    suspend fun deleteWishlistByEditionId(editionId: String): Int
 
     @Query("DELETE FROM book_editions WHERE id = :editionId")
     suspend fun deleteEditionById(editionId: String): Int

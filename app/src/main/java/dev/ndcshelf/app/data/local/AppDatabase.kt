@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 4
+const val APP_DATABASE_VERSION = 5
 
 @Database(
     entities = [
@@ -15,6 +15,7 @@ const val APP_DATABASE_VERSION = 4
         LocationShelfEntity::class,
         LocationTierEntity::class,
         OwnedCopyEntity::class,
+        WishlistItemEntity::class,
     ],
     version = APP_DATABASE_VERSION,
     exportSchema = true,
@@ -24,12 +25,37 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME = "ndc-shelf.db"
 
         // Register every manual migration here so production and migration tests use one graph.
-        val MIGRATIONS: List<Migration> = listOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val MIGRATIONS: List<Migration> = listOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+        )
     }
 
     abstract fun libraryDao(): LibraryDao
 
     abstract fun locationDao(): LocationDao
+}
+
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS wishlist_items (
+                editionId TEXT NOT NULL PRIMARY KEY,
+                status TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                FOREIGN KEY(editionId) REFERENCES book_editions(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_wishlist_items_status ON wishlist_items(status)",
+        )
+    }
 }
 
 private val MIGRATION_3_4 = object : Migration(3, 4) {

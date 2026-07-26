@@ -8,6 +8,7 @@ import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
 import dev.ndcshelf.app.domain.backup.DatabaseBackupPreview
@@ -90,19 +91,22 @@ class RoomDatabaseBackupManagerTest {
     private suspend fun insert(snapshot: DatabaseSnapshot) {
         database.libraryDao().upsertWorks(snapshot.works)
         database.libraryDao().upsertEditions(snapshot.editions)
+        database.libraryDao().upsertWishlistItems(snapshot.wishlistItems)
         database.libraryDao().upsertCopies(snapshot.copies)
     }
 
     private suspend fun clear() {
         database.libraryDao().deleteAllCopies()
+        database.libraryDao().deleteAllWishlistItems()
         database.libraryDao().deleteAllEditions()
         database.libraryDao().deleteAllWorks()
     }
 
     private suspend fun readSnapshot() = DatabaseSnapshot(
-        database.libraryDao().getAllWorks(),
-        database.libraryDao().getAllEditions(),
-        database.libraryDao().getAllCopies(),
+        works = database.libraryDao().getAllWorks(),
+        editions = database.libraryDao().getAllEditions(),
+        copies = database.libraryDao().getAllCopies(),
+        wishlistItems = database.libraryDao().getAllWishlistItems(),
     )
 
     private fun sampleSnapshot(prefix: String) = DatabaseSnapshot(
@@ -128,6 +132,14 @@ class RoomDatabaseBackupManagerTest {
                 location = "未設定",
                 readingStatus = "UNREAD",
                 addedAt = 1,
+            ),
+        ),
+        wishlistItems = listOf(
+            WishlistItemEntity(
+                editionId = "$prefix-edition",
+                status = "WANTED",
+                createdAt = 1,
+                updatedAt = 1,
             ),
         ),
     )

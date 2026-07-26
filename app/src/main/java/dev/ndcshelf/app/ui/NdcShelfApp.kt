@@ -66,6 +66,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val books by viewModel.books.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val bookstoreState by viewModel.bookstoreState.collectAsStateWithLifecycle()
+    val wishlist by viewModel.wishlist.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val bookEditState by viewModel.bookEditState.collectAsStateWithLifecycle()
     val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
@@ -383,11 +385,19 @@ fun NdcShelfApp(viewModel: MainViewModel) {
 
             AppDestination.SCAN -> ScanScreen(
                 scanState = scanState,
+                bookstoreState = bookstoreState,
+                wishlist = wishlist,
                 onSubmitIsbn = viewModel::submitIsbn,
+                onLookupBookstore = viewModel::lookupBookstore,
                 onCameraError = viewModel::reportCameraError,
+                onBookstoreCameraError = viewModel::reportBookstoreCameraError,
                 onRetry = viewModel::retryScan,
+                onRetryBookstore = viewModel::retryBookstoreLookup,
                 onClearState = viewModel::clearScanState,
+                onClearBookstoreState = viewModel::clearBookstoreState,
                 onAddDuplicateCopy = viewModel::addDuplicateCopy,
+                onChangePurchaseState = viewModel::changePurchaseState,
+                onSelectWishlistItem = viewModel::selectWishlistItem,
                 contentPadding = contentPadding,
             )
 

@@ -6,12 +6,17 @@ import dev.ndcshelf.app.domain.importer.ImportPreviewResult
 import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.PurchaseStatus
+import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
+import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
@@ -104,6 +109,24 @@ class MainViewModelScanTest {
         assertEquals(ScanUiState.Added(ISBN, "題名"), viewModel.scanState.value)
     }
 
+    @Test
+    fun bookstoreLookupAndPurchaseTransitionExposeCurrentStatus() = runTest(dispatcher) {
+        val candidate = bookstoreBook(PurchaseStatus.WANTED, ownedCount = 1)
+        val purchased = candidate.copy(purchaseStatus = null, ownedCopyCount = 2)
+        val repository = FakeRepository(ArrayDeque()).apply {
+            bookstoreLookupResult = BookstoreLookupResult.Found(candidate)
+            bookstoreChangeResult = BookstoreChangeResult.Updated(purchased)
+        }
+        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
+
+        viewModel.lookupBookstore(ISBN)
+
+        assertEquals(BookstoreUiState.Result(candidate), viewModel.bookstoreState.value)
+        viewModel.changePurchaseState(PurchaseTransition.PURCHASED)
+        assertEquals(PurchaseTransition.PURCHASED, repository.requestedTransition)
+        assertEquals(BookstoreUiState.Result(purchased), viewModel.bookstoreState.value)
+    }
+
     private class FakeRepository(
         private val results: ArrayDeque<AddBookResult>,
     ) : LibraryRepository {
@@ -111,6 +134,10 @@ class MainViewModelScanTest {
         var lookupCount = 0
         var anotherCopyResult: AddBookResult = AddBookResult.Failure(AddBookFailure.SAVE, ISBN)
         var requestedCopyLabel: String? = null
+        var bookstoreLookupResult: BookstoreLookupResult =
+            BookstoreLookupResult.Failure(AddBookFailure.SAVE)
+        var bookstoreChangeResult: BookstoreChangeResult = BookstoreChangeResult.Failure
+        var requestedTransition: PurchaseTransition? = null
 
         override fun observeLibrary(): Flow<List<LibraryBook>> = books
 
@@ -122,6 +149,17 @@ class MainViewModelScanTest {
         override suspend fun addAnotherCopy(rawIsbn: String, copyLabel: String): AddBookResult {
             requestedCopyLabel = copyLabel
             return anotherCopyResult
+        }
+
+        override suspend fun lookupBookstore(rawIsbn: String): BookstoreLookupResult =
+            bookstoreLookupResult
+
+        override suspend fun changePurchaseState(
+            book: BookstoreBook,
+            transition: PurchaseTransition,
+        ): BookstoreChangeResult {
+            requestedTransition = transition
+            return bookstoreChangeResult
         }
 
         override suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult =
@@ -166,6 +204,22 @@ class MainViewModelScanTest {
             location = "棚",
             readingStatus = ReadingStatus.UNREAD,
             addedAt = 1,
+        )
+
+        fun bookstoreBook(status: PurchaseStatus?, ownedCount: Int) = BookstoreBook(
+            workId = "work",
+            editionId = "edition",
+            title = "題名",
+            primaryAuthor = "著者",
+            isbn13 = ISBN,
+            publisher = "出版社",
+            publishedYear = 2024,
+            coverUrl = null,
+            ndcCode = "014.45",
+            ndcEdition = "NDC10",
+            classificationSource = ClassificationSource.NDL,
+            purchaseStatus = status,
+            ownedCopyCount = ownedCount,
         )
     }
 }
