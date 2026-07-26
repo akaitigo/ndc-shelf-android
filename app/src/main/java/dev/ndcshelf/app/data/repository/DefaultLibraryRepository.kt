@@ -7,6 +7,13 @@ import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.LibraryBookRow
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
+import dev.ndcshelf.app.domain.importer.ImportApplyResult
+import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
+import dev.ndcshelf.app.domain.importer.ImportPreviewResult
+import dev.ndcshelf.app.domain.importer.LibraryImportBatch
+import dev.ndcshelf.app.domain.importer.LibraryImportCommitter
+import dev.ndcshelf.app.domain.importer.LibraryImportPlanner
+import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
@@ -24,6 +31,12 @@ class DefaultLibraryRepository(
     private val metadataService: NdlBookMetadataService,
 ) : LibraryRepository {
     private val dao = database.libraryDao()
+    private val importPlanner = LibraryImportPlanner()
+    private val importCommitter = LibraryImportCommitter(
+        readCurrentBooks = { dao.getLibrary().map(LibraryBookRow::toDomain) },
+        runInTransaction = { block -> database.withTransaction { block() } },
+        writeBooks = ::writeImportedBooks,
+    )
 
     override fun observeLibrary(): Flow<List<LibraryBook>> =
         dao.observeLibrary().map { rows -> rows.map(LibraryBookRow::toDomain) }
@@ -123,9 +136,60 @@ class DefaultLibraryRepository(
             readingStatus = readingStatus.name,
         )
     }
+
+    override suspend fun previewImport(
+        batch: LibraryImportBatch,
+        conflictPolicy: ImportConflictPolicy,
+    ): ImportPreviewResult = importPlanner.preview(
+        batch = batch,
+        existingBooks = dao.getLibrary().map(LibraryBookRow::toDomain),
+        conflictPolicy = conflictPolicy,
+    )
+
+    override suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult =
+        importCommitter.commit(preview)
+
+    private suspend fun writeImportedBooks(books: List<LibraryBook>) {
+        dao.upsertWorks(
+            books.distinctBy(LibraryBook::workId).map { book ->
+                BookWorkEntity(
+                    id = book.workId,
+                    title = book.title,
+                    primaryAuthor = book.primaryAuthor,
+                )
+            },
+        )
+        dao.upsertEditions(
+            books.distinctBy(LibraryBook::editionId).map { book ->
+                BookEditionEntity(
+                    id = book.editionId,
+                    workId = book.workId,
+                    isbn13 = book.isbn13,
+                    publisher = book.publisher,
+                    publishedYear = book.publishedYear,
+                    coverUrl = book.coverUrl,
+                    ndcCode = book.ndcCode,
+                    ndcEdition = book.ndcEdition,
+                    classificationSource = book.classificationSource.name,
+                )
+            },
+        )
+        dao.upsertCopies(
+            books.map { book ->
+                OwnedCopyEntity(
+                    id = book.copyId,
+                    editionId = book.editionId,
+                    mediaType = book.mediaType.name,
+                    location = book.location,
+                    readingStatus = book.readingStatus.name,
+                    addedAt = book.addedAt,
+                )
+            },
+        )
+    }
 }
 
-private fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
+internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     copyId = copyId,
     workId = workId,
     editionId = editionId,

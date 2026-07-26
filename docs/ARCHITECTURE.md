@@ -9,6 +9,8 @@ NDC Shelfは、最初のリリースでは単一のAndroidアプリモジュー�
 | パッケージ | 責務 |
 | --- | --- |
 | `domain/model` | UIや保存方法に依存しない蔵書モデル |
+| `domain/export` | バージョン付きJSONと安全なCSVの逐次出力 |
+| `domain/importer` | 形式非依存の入力検証、競合解決、プレビュー、原子反映 |
 | `domain/repository` | ユースケースから見たデータ操作の契約 |
 | `data/local` | RoomのEntity、DAO、Database |
 | `data/remote` | NDL Search SRUクライアントとXML解析 |
@@ -37,6 +39,29 @@ sequenceDiagram
         R-->>V: Duplicate
     end
 ```
+
+## インポートフロー
+
+```mermaid
+sequenceDiagram
+    participant P as JSON / CSV Parser
+    participant I as Import Planner
+    participant R as Repository
+    participant D as Room
+    P->>I: 未検証レコード + 入力サイズ
+    I->>R: 正規化済みプレビュー
+    R-->>I: 追加 / 更新 / スキップ件数
+    Note over I,D: ユーザー確定まではDBを変更しない
+    I->>R: 確定済みプレビュー
+    R->>D: 現在状態を再照合
+    alt 状態が一致
+        R->>D: 単一トランザクションでupsert
+    else 状態が変化
+        R-->>I: StalePreview（再確認要求）
+    end
+```
+
+形式パーサーとUIは必ず共通インポート基盤を経由します。詳細な上限、競合方針、ロールバック条件は[IMPORT_SAFETY.md](IMPORT_SAFETY.md)を参照してください。
 
 ## データモデル
 
