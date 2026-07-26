@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Analytics
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Icon
@@ -31,12 +32,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.net.toUri
 import dev.ndcshelf.app.BookDeleteFailure
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditFailure
 import dev.ndcshelf.app.BookEditUiState
+import dev.ndcshelf.app.BuildConfig
 import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.LibraryExportUiState
@@ -45,6 +49,7 @@ import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.ui.screens.InsightsScreen
+import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
@@ -318,21 +323,34 @@ fun NdcShelfApp(viewModel: MainViewModel) {
         databaseBackupCreator.launch("ndc-shelf-database-$date.ndcshelfbackup")
     }
 
+    fun openExternalUrl(url: String) {
+        runCatching {
+            val uri = url.toUri()
+            require(uri.scheme == "https" || uri.scheme == "http")
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }.onFailure {
+            scope.launch {
+                snackbarHostState.showSnackbar(resources.getString(R.string.external_link_failure))
+            }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar(tonalElevation = 2.dp) {
                 AppDestination.entries.forEach { destination ->
+                    val label = stringResource(destination.labelRes)
                     NavigationBarItem(
                         selected = selected == destination,
                         onClick = { selected = destination },
                         icon = {
                             Icon(
                                 imageVector = destination.icon,
-                                contentDescription = destination.label,
+                                contentDescription = label,
                             )
                         },
-                        label = { Text(destination.label) },
+                        label = { Text(label) },
                     )
                 }
             }
@@ -389,16 +407,25 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
                 contentPadding = contentPadding,
             )
+
+            AppDestination.INFO -> AppInfoScreen(
+                versionName = BuildConfig.VERSION_NAME,
+                versionCode = BuildConfig.VERSION_CODE,
+                buildType = BuildConfig.BUILD_TYPE,
+                onOpenUrl = ::openExternalUrl,
+                contentPadding = contentPadding,
+            )
         }
     }
 }
 
 private enum class AppDestination(
-    val label: String,
+    @androidx.annotation.StringRes val labelRes: Int,
     val icon: ImageVector,
 ) {
-    LIBRARY("本棚", Icons.AutoMirrored.Rounded.LibraryBooks),
-    SCAN("スキャン", Icons.Rounded.QrCodeScanner),
-    INSIGHTS("分類", Icons.Rounded.Analytics),
-    DATA("データ", Icons.Rounded.Storage),
+    LIBRARY(R.string.navigation_library, Icons.AutoMirrored.Rounded.LibraryBooks),
+    SCAN(R.string.navigation_scan, Icons.Rounded.QrCodeScanner),
+    INSIGHTS(R.string.navigation_insights, Icons.Rounded.Analytics),
+    DATA(R.string.navigation_data, Icons.Rounded.Storage),
+    INFO(R.string.navigation_info, Icons.Rounded.Info),
 }
