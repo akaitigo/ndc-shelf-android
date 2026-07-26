@@ -43,6 +43,7 @@ class LibraryLocationScreenTest {
         setLibraryContent(listOf(book()))
 
         composeRule.onNodeWithText("テスト本").performClick()
+        composeRule.onNodeWithText("所蔵本").performClick()
 
         composeRule.onNodeWithText("登録済みの段").assertIsDisplayed()
         composeRule.onNodeWithText("書斎 / 本棚A / 上段").assertIsDisplayed()
@@ -58,6 +59,7 @@ class LibraryLocationScreenTest {
         setLibraryContent(books)
 
         composeRule.onNodeWithText("中央の本").performClick()
+        composeRule.onNodeWithText("所蔵本").performClick()
 
         composeRule.onNodeWithText("左: 左の本").assertIsDisplayed()
         composeRule.onNodeWithText("右: 右の本").assertIsDisplayed()
