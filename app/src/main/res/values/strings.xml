@@ -13,6 +13,15 @@
     <string name="scan_error_invalid_response">書誌情報の応答を読み取れませんでした</string>
     <string name="scan_error_save">蔵書を端末へ保存できませんでした</string>
     <string name="scan_error_camera">カメラを利用できません</string>
+    <string name="camera_torch_on">ライトを点ける</string>
+    <string name="camera_torch_off">ライトを消す</string>
+    <string name="camera_start_error">カメラを開始できませんでした。別のアプリが使用していないか確認してください。</string>
+    <string name="camera_scan_guide">ISBN（978 / 979）を枠内へ。ピンチで拡大、タップでピント調整。</string>
+    <string name="camera_scan_success">ISBNを読み取りました</string>
+    <string name="camera_permission_reason">ISBNバーコードを読み取る場合だけカメラを使用します。画像は保存・送信しません。手入力でも登録できます。</string>
+    <string name="camera_permission_permanent">カメラ権限が無効です。Androidの設定でNDC Shelfのカメラを許可してください。手入力はそのまま利用できます。</string>
+    <string name="camera_permission_allow">カメラを許可</string>
+    <string name="camera_permission_settings">Androidの設定を開く</string>
     <string name="scan_duplicate_owned">すでに%1$d冊持っています</string>
     <string name="scan_duplicate_copy_label">コピーの識別名（任意）</string>
     <string name="scan_duplicate_add">もう1冊追加</string>

@@ -447,6 +447,7 @@ class MainViewModel(
         ) {
             _bookstoreState.value = BookstoreUiState.Error(
                 failure = ScanFailure.CAMERA,
+                message = message,
             )
         }
     }
@@ -882,6 +883,7 @@ sealed interface BookstoreUiState {
         val failure: ScanFailure,
         val isbn13: String? = null,
         val retryIsbn: String? = null,
+        val message: String? = null,
     ) : BookstoreUiState
 }
 

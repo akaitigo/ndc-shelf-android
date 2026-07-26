@@ -42,6 +42,8 @@ sequenceDiagram
     end
 ```
 
+`CameraPreview`はbindした`CameraControl`だけを通じて、対応端末のトーチ、CameraInfoの倍率範囲内のズーム、対応するAF/AE測光点を操作します。トーチ状態は画面をまたいで自動復元せず、画面破棄時に必ずOFFへ戻します。非同期CameraProviderは破棄済み画面へbindせず、`ImageAnalysis.clearAnalyzer()`、ML Kit scannerのclose、専用Executorのshutdown、use caseのunbindを同じ終了処理で行います。
+
 ## インポートフロー
 
 ```mermaid

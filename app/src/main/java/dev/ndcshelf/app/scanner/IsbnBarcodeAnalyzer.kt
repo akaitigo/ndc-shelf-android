@@ -21,6 +21,7 @@ class IsbnBarcodeAnalyzer(
             .build(),
     )
     private val isProcessing = AtomicBoolean(false)
+    private val isClosed = AtomicBoolean(false)
 
     private var lastCandidate: String? = null
     private var consecutiveDetections = 0
@@ -28,6 +29,10 @@ class IsbnBarcodeAnalyzer(
 
     @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
+        if (isClosed.get()) {
+            imageProxy.close()
+            return
+        }
         val mediaImage = imageProxy.image
         if (mediaImage == null || !isProcessing.compareAndSet(false, true)) {
             imageProxy.close()
@@ -39,8 +44,16 @@ class IsbnBarcodeAnalyzer(
             imageProxy.imageInfo.rotationDegrees,
         )
 
-        scanner.process(input)
+        val task = try {
+            scanner.process(input)
+        } catch (_: Exception) {
+            isProcessing.set(false)
+            imageProxy.close()
+            return
+        }
+        task
             .addOnSuccessListener { barcodes ->
+                if (isClosed.get()) return@addOnSuccessListener
                 val isbn = barcodes
                     .asSequence()
                     .mapNotNull(Barcode::getRawValue)
@@ -76,7 +89,7 @@ class IsbnBarcodeAnalyzer(
     }
 
     override fun close() {
-        scanner.close()
+        if (isClosed.compareAndSet(false, true)) scanner.close()
     }
 
     private companion object {
