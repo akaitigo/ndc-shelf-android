@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ndcshelf.app.BookEditFailure
+import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.R
@@ -54,6 +57,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val books by viewModel.books.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
+    val bookEditState by viewModel.bookEditState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
@@ -137,6 +141,37 @@ fun NdcShelfApp(viewModel: MainViewModel) {
         viewModel.consumeImportSuccess()
     }
 
+    LaunchedEffect(bookEditState) {
+        when (val state = bookEditState) {
+            is BookEditUiState.Saved -> {
+                val result = snackbarHostState.showSnackbar(
+                    message = resources.getString(R.string.book_edit_success),
+                    actionLabel = resources.getString(R.string.book_edit_undo),
+                    withDismissAction = true,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.undoLastBookEdit()
+                } else {
+                    viewModel.clearBookEditState()
+                }
+            }
+            BookEditUiState.Undone -> {
+                snackbarHostState.showSnackbar(resources.getString(R.string.book_edit_undone))
+                viewModel.clearBookEditState()
+            }
+            is BookEditUiState.Error -> {
+                val message = when (state.failure) {
+                    BookEditFailure.NOT_FOUND -> R.string.book_edit_not_found
+                    BookEditFailure.SAVE -> R.string.book_edit_failure
+                    BookEditFailure.UNDO -> R.string.book_edit_undo_failure
+                }
+                snackbarHostState.showSnackbar(resources.getString(message))
+                viewModel.clearBookEditState()
+            }
+            else -> Unit
+        }
+    }
+
     fun requestExport(format: LibraryExportFormat) {
         val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val fileName = "ndc-shelf-$date.${format.extension}"
@@ -169,7 +204,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
         when (selected) {
             AppDestination.LIBRARY -> LibraryScreen(
                 books = books,
-                onUpdateCopy = viewModel::updateCopy,
+                onSaveBook = viewModel::saveBookEdit,
                 onExport = ::requestExport,
                 onImport = { format ->
                     when (format) {
@@ -182,6 +217,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                     }
                 },
                 importState = importState,
+                bookEditState = bookEditState,
+                onClearBookEditState = viewModel::clearBookEditState,
                 onSelectImportPolicy = viewModel::selectImportConflictPolicy,
                 onConfirmImport = viewModel::confirmImport,
                 onDismissImport = viewModel::dismissImport,
