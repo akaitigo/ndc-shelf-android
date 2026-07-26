@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": 1767225600000,
+  "bookCount": 2,
+  "books": [
+    {
+      "copyId": "copy:release-fixture-1",
+      "workId": "work:release-fixture-1",
+      "editionId": "edition:release-fixture-1",
+      "title": "=匿名サンプル図書A",
+      "primaryAuthor": "架空著者A",
+      "isbn13": "9784820418078",
+      "publisher": "テスト出版",
+      "publishedYear": 2024,
+      "coverUrl": "https://ndlsearch.ndl.go.jp/thumbnail/9784820418078.jpg",
+      "ndcCode": "014.45",
+      "ndcEdition": "NDC10",
+      "classificationSource": "NDL",
+      "mediaType": "PHYSICAL",
+      "location": "検証室・棚A・1段目",
+      "readingStatus": "READING",
+      "addedAt": 1700000000000
+    },
+    {
+      "copyId": "copy:release-fixture-2",
+      "workId": "work:release-fixture-2",
+      "editionId": "edition:release-fixture-2",
+      "title": "匿名サンプル図書B, 改訂版",
+      "primaryAuthor": "架空著者B・架空著者C",
+      "isbn13": "9784101010014",
+      "publisher": null,
+      "publishedYear": null,
+      "coverUrl": null,
+      "ndcCode": null,
+      "ndcEdition": null,
+      "classificationSource": "UNKNOWN",
+      "mediaType": "PHYSICAL",
+      "location": "検証室・棚B\n仮置き",
+      "readingStatus": "UNREAD",
+      "addedAt": 1700000001000
+    }
+  ]
+}
