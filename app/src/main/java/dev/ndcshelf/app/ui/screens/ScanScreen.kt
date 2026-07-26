@@ -1,7 +1,13 @@
 package dev.ndcshelf.app.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -46,7 +52,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,6 +73,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.BookstoreUiState
 import dev.ndcshelf.app.ScanFailure
@@ -78,6 +90,7 @@ import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.ui.components.CameraPreview
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
 
 @Composable
 fun ScanScreen(
@@ -104,6 +117,11 @@ fun ScanScreen(
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    val permissionPreferences = remember(context) {
+        context.getSharedPreferences(CAMERA_PERMISSION_PREFERENCES, Context.MODE_PRIVATE)
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
     val haptics = LocalHapticFeedback.current
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -113,10 +131,23 @@ fun ScanScreen(
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
+    var permissionRequested by rememberSaveable {
+        mutableStateOf(permissionPreferences.getBoolean(CAMERA_PERMISSION_REQUESTED, false))
+    }
+    var permissionPermanentlyDenied by rememberSaveable {
+        mutableStateOf(
+            !hasCameraPermission && permissionRequested &&
+                activity?.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) == false,
+        )
+    }
+    var successSequence by remember { mutableIntStateOf(0) }
+    var showSuccessFeedback by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasCameraPermission = granted
+        permissionPermanentlyDenied = !granted && permissionRequested &&
+            activity?.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) == false
     }
     var mode by rememberSaveable { mutableStateOf(ScanMode.LIBRARY) }
     var wishlistQuery by rememberSaveable { mutableStateOf("") }
@@ -125,9 +156,35 @@ fun ScanScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
+        if (!hasCameraPermission && !permissionRequested) {
+            permissionRequested = true
+            permissionPreferences.edit { putBoolean(CAMERA_PERMISSION_REQUESTED, true) }
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    LaunchedEffect(successSequence) {
+        if (successSequence == 0) return@LaunchedEffect
+        showSuccessFeedback = true
+        delay(700)
+        showSuccessFeedback = false
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasCameraPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA,
+                ) == PackageManager.PERMISSION_GRANTED
+                permissionPermanentlyDenied = !hasCameraPermission && permissionRequested &&
+                    activity?.shouldShowRequestPermissionRationale(
+                        Manifest.permission.CAMERA,
+                    ) == false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LazyColumn(
@@ -198,6 +255,7 @@ fun ScanScreen(
                     CameraPreview(
                         onIsbnDetected = { isbn ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            successSequence += 1
                             if (mode == ScanMode.LIBRARY) {
                                 onSubmitIsbn(isbn)
                             } else {
@@ -217,10 +275,38 @@ fun ScanScreen(
                             .size(width = 270.dp, height = 116.dp)
                             .border(
                                 width = 3.dp,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = if (showSuccessFeedback) {
+                                    Color(0xFF62D49C)
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
                                 shape = RoundedCornerShape(18.dp),
                             ),
                     )
+                    if (showSuccessFeedback) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopCenter).padding(14.dp),
+                            color = Color(0xE6205D45),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                )
+                                Text(
+                                    stringResource(R.string.camera_scan_success),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                        }
+                    }
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -229,7 +315,7 @@ fun ScanScreen(
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         Text(
-                            text = "ISBN（978 / 979）を枠内へ",
+                            text = stringResource(R.string.camera_scan_guide),
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                             color = Color.White,
                             style = MaterialTheme.typography.labelLarge,
@@ -238,8 +324,21 @@ fun ScanScreen(
                 }
             } else {
                 CameraPermissionCard(
+                    permanentlyDenied = permissionPermanentlyDenied,
                     onRequestPermission = {
+                        permissionRequested = true
+                        permissionPreferences.edit {
+                            putBoolean(CAMERA_PERMISSION_REQUESTED, true)
+                        }
                         permissionLauncher.launch(Manifest.permission.CAMERA)
+                    },
+                    onOpenSettings = {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            ),
+                        )
                     },
                 )
             }
@@ -535,7 +634,11 @@ private fun ScanAttemptOutcome.label(undone: Boolean): String = if (undone) {
 }
 
 @Composable
-private fun CameraPermissionCard(onRequestPermission: () -> Unit) {
+internal fun CameraPermissionCard(
+    permanentlyDenied: Boolean,
+    onRequestPermission: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -556,17 +659,42 @@ private fun CameraPermissionCard(onRequestPermission: () -> Unit) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "バーコードを読むにはカメラを使います",
+                text = stringResource(
+                    if (permanentlyDenied) {
+                        R.string.camera_permission_permanent
+                    } else {
+                        R.string.camera_permission_reason
+                    },
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(16.dp))
-            FilledTonalButton(onClick = onRequestPermission) {
-                Text("カメラを許可")
+            FilledTonalButton(
+                onClick = if (permanentlyDenied) onOpenSettings else onRequestPermission,
+            ) {
+                Text(
+                    stringResource(
+                        if (permanentlyDenied) {
+                            R.string.camera_permission_settings
+                        } else {
+                            R.string.camera_permission_allow
+                        },
+                    ),
+                )
             }
         }
     }
 }
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+private const val CAMERA_PERMISSION_PREFERENCES = "camera-permission"
+private const val CAMERA_PERMISSION_REQUESTED = "requested"
 
 @Composable
 private fun ScanResultCard(
@@ -738,7 +866,7 @@ internal fun BookstoreResultCard(
                 tint = MaterialTheme.colorScheme.error,
             )
             Text(
-                text = state.failure.message(state.isbn13),
+                text = state.message ?: state.failure.message(state.isbn13),
                 modifier = Modifier.weight(1f),
             )
             Column(horizontalAlignment = Alignment.End) {
