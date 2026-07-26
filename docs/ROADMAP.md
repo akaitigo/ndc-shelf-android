@@ -14,7 +14,7 @@
 
 ## v0.2 — Own Your Data
 
-- JSON / CSVエクスポート
+- [x] JSON / CSVエクスポート
 - JSON / CSVインポート
 - 書誌・分類の手動補正
 - データベースのバックアップと復元
