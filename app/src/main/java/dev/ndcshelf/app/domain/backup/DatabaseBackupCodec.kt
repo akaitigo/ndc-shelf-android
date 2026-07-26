@@ -218,7 +218,7 @@ internal class DatabaseBackupCodec(
         if (snapshot.works.size > limits.maxRecords ||
             snapshot.editions.size > limits.maxRecords ||
             snapshot.copies.size > limits.maxRecords
-        ) invalid("Too many records")
+        ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::isbn13)
@@ -240,6 +240,9 @@ internal class DatabaseBackupCodec(
             }
         }
         if (strings.any { it.length > limits.maxStringLength }) invalid("String is too long")
+        if (strings.sumOf { it.length.toLong() } > limits.maxTotalCharacters) {
+            tooLarge("Snapshot text is too large")
+        }
     }
 
     private fun <T, K> List<T>.ensureUnique(selector: (T) -> K) {
@@ -326,6 +329,9 @@ internal class DatabaseBackupCodec(
     private fun unsupported(message: String): Nothing =
         throw BackupCodecException(DatabaseBackupFailure.UNSUPPORTED_FORMAT, message)
 
+    private fun tooLarge(message: String): Nothing =
+        throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
+
     companion object {
         const val CURRENT_FORMAT_VERSION = 2
         private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 2
@@ -341,8 +347,9 @@ internal data class DatabaseBackupLimits(
     val maxArchiveBytes: Int = 25 * 1024 * 1024,
     val maxManifestBytes: Int = 64 * 1024,
     val maxPayloadBytes: Int = 50 * 1024 * 1024,
-    val maxRecords: Int = 100_000,
+    val maxRecords: Int = 10_000,
     val maxStringLength: Int = 16_384,
+    val maxTotalCharacters: Long = 20_000_000,
 )
 
 internal class BackupCodecException(

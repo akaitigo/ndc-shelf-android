@@ -100,6 +100,20 @@ class DatabaseBackupCodecTest {
         assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
     }
 
+    @Test
+    fun `aggregate text limit is checked before archive allocation`() {
+        val constrained = DatabaseBackupCodec(
+            currentDatabaseVersion = 1,
+            limits = DatabaseBackupLimits(maxTotalCharacters = 10),
+        )
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            constrained.encode(sampleSnapshot(), "0.1.2", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.TOO_LARGE, error.failure)
+    }
+
     private fun sampleSnapshot() = DatabaseSnapshot(
         works = listOf(BookWorkEntity("work-1", "吾輩は猫である", "夏目漱石")),
         editions = listOf(
