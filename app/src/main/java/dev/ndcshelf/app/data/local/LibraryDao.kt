@@ -9,6 +9,15 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LibraryDao {
+    @Query("SELECT * FROM book_works ORDER BY id")
+    suspend fun getAllWorks(): List<BookWorkEntity>
+
+    @Query("SELECT * FROM book_editions ORDER BY id")
+    suspend fun getAllEditions(): List<BookEditionEntity>
+
+    @Query("SELECT * FROM owned_copies ORDER BY id")
+    suspend fun getAllCopies(): List<OwnedCopyEntity>
+
     @Query(
         """
         SELECT
@@ -148,6 +157,15 @@ interface LibraryDao {
 
     @Upsert
     suspend fun upsertCopies(copies: List<OwnedCopyEntity>)
+
+    @Query("DELETE FROM owned_copies")
+    suspend fun deleteAllCopies()
+
+    @Query("DELETE FROM book_editions")
+    suspend fun deleteAllEditions()
+
+    @Query("DELETE FROM book_works")
+    suspend fun deleteAllWorks()
 
     @Query(
         """

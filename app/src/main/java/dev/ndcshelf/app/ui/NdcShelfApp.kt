@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.ui
 
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,7 +36,9 @@ import dev.ndcshelf.app.BookDeleteFailure
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditFailure
 import dev.ndcshelf.app.BookEditUiState
+import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.LibraryImportUiState
+import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
@@ -62,6 +66,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val bookEditState by viewModel.bookEditState.collectAsStateWithLifecycle()
     val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
+    val databaseBackupState by viewModel.databaseBackupState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
@@ -128,6 +133,46 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 }
             } else {
                 viewModel.loadCsvImport(input)
+            }
+        }
+    }
+    val databaseBackupCreator = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri != null) {
+            val output = try {
+                context.contentResolver.openOutputStream(uri, "wt")
+            } catch (_: Exception) {
+                null
+            }
+            if (output == null) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        resources.getString(R.string.database_backup_output_failure),
+                    )
+                }
+            } else {
+                viewModel.createDatabaseBackup(output)
+            }
+        }
+    }
+    val databaseBackupRestorer = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            val input = try {
+                context.contentResolver.openInputStream(uri)
+            } catch (_: Exception) {
+                null
+            }
+            if (input == null) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        resources.getString(R.string.database_backup_open_failure),
+                    )
+                }
+            } else {
+                viewModel.loadDatabaseBackup(input)
             }
         }
     }
@@ -209,6 +254,32 @@ fun NdcShelfApp(viewModel: MainViewModel) {
         }
     }
 
+    LaunchedEffect(databaseBackupState) {
+        when (val state = databaseBackupState) {
+            is DatabaseBackupUiState.Created -> {
+                snackbarHostState.showSnackbar(
+                    resources.getString(R.string.database_backup_created, state.copyCount),
+                )
+                viewModel.dismissDatabaseBackup()
+            }
+            is DatabaseBackupUiState.Restored -> {
+                snackbarHostState.showSnackbar(
+                    resources.getString(
+                        R.string.database_restore_success,
+                        state.restoredCopyCount,
+                        state.automaticBackupName,
+                    ),
+                )
+                val restart = Intent(context, MainActivity::class.java).addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                )
+                context.startActivity(restart)
+                (context as? Activity)?.finish()
+            }
+            else -> Unit
+        }
+    }
+
     fun requestExport(format: LibraryExportFormat) {
         val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val fileName = "ndc-shelf-$date.${format.extension}"
@@ -216,6 +287,11 @@ fun NdcShelfApp(viewModel: MainViewModel) {
             LibraryExportFormat.JSON -> jsonExporter.launch(fileName)
             LibraryExportFormat.CSV -> csvExporter.launch(fileName)
         }
+    }
+
+    fun requestDatabaseBackup() {
+        val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        databaseBackupCreator.launch("ndc-shelf-database-$date.ndcshelfbackup")
     }
 
     Scaffold(
@@ -254,6 +330,15 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                         )
                     }
                 },
+                databaseBackupState = databaseBackupState,
+                onCreateDatabaseBackup = ::requestDatabaseBackup,
+                onSelectDatabaseBackup = {
+                    databaseBackupRestorer.launch(
+                        arrayOf("application/zip", "application/octet-stream"),
+                    )
+                },
+                onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
+                onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
                 importState = importState,
                 bookEditState = bookEditState,
                 onClearBookEditState = viewModel::clearBookEditState,
