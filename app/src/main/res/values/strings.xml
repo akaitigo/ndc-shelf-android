@@ -56,4 +56,16 @@
     <string name="book_edit_not_found">対象の本が見つかりませんでした</string>
     <string name="book_edit_failure">本の情報を保存できませんでした</string>
     <string name="book_edit_undo_failure">他の変更があるため元に戻せませんでした</string>
+    <string name="book_delete_action">この所有コピーを削除</string>
+    <string name="book_delete_confirm_title">蔵書から削除しますか？</string>
+    <string name="book_delete_confirm_message">「%1$s」\nISBN %2$s\n\nこの所有コピーだけを削除します。共有されている書誌情報や別のコピーは削除しません。</string>
+    <string name="book_delete_confirm">削除する</string>
+    <string name="book_delete_cancel">削除しない</string>
+    <string name="book_delete_success">所有コピーを削除しました</string>
+    <string name="book_delete_undo">元に戻す</string>
+    <string name="book_delete_restored">削除した所有コピーを復元しました</string>
+    <string name="book_delete_not_found">削除対象の所有コピーが見つかりませんでした</string>
+    <string name="book_delete_failure">所有コピーを削除できませんでした</string>
+    <string name="book_delete_restore_conflict">蔵書が変更されたため削除を元に戻せませんでした</string>
+    <string name="book_delete_restore_failure">削除した所有コピーを復元できませんでした</string>
 </resources>

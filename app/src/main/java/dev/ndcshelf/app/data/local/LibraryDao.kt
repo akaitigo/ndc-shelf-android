@@ -119,6 +119,18 @@ interface LibraryDao {
     )
     suspend fun findOwnedByCopyId(copyId: String): LibraryBookRow?
 
+    @Query("SELECT * FROM book_works WHERE id = :workId LIMIT 1")
+    suspend fun findWorkById(workId: String): BookWorkEntity?
+
+    @Query("SELECT * FROM book_editions WHERE id = :editionId LIMIT 1")
+    suspend fun findEditionById(editionId: String): BookEditionEntity?
+
+    @Query("SELECT * FROM book_editions WHERE isbn13 = :isbn13 LIMIT 1")
+    suspend fun findEditionByIsbn(isbn13: String): BookEditionEntity?
+
+    @Query("SELECT * FROM owned_copies WHERE id = :copyId LIMIT 1")
+    suspend fun findCopyById(copyId: String): OwnedCopyEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertWork(work: BookWorkEntity)
 
@@ -172,4 +184,19 @@ interface LibraryDao {
         ndcEdition: String?,
         classificationSource: String,
     )
+
+    @Query("DELETE FROM owned_copies WHERE id = :copyId")
+    suspend fun deleteCopyById(copyId: String): Int
+
+    @Query("SELECT COUNT(*) FROM owned_copies WHERE editionId = :editionId")
+    suspend fun countCopiesForEdition(editionId: String): Int
+
+    @Query("DELETE FROM book_editions WHERE id = :editionId")
+    suspend fun deleteEditionById(editionId: String): Int
+
+    @Query("SELECT COUNT(*) FROM book_editions WHERE workId = :workId")
+    suspend fun countEditionsForWork(workId: String): Int
+
+    @Query("DELETE FROM book_works WHERE id = :workId")
+    suspend fun deleteWorkById(workId: String): Int
 }

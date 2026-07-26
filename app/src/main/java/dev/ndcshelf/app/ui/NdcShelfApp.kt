@@ -11,6 +11,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -29,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ndcshelf.app.BookDeleteFailure
+import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditFailure
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LibraryImportUiState
@@ -58,6 +61,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val bookEditState by viewModel.bookEditState.collectAsStateWithLifecycle()
+    val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
@@ -172,6 +176,39 @@ fun NdcShelfApp(viewModel: MainViewModel) {
         }
     }
 
+    LaunchedEffect(bookDeleteState) {
+        when (val state = bookDeleteState) {
+            is BookDeleteUiState.Deleted -> {
+                val result = snackbarHostState.showSnackbar(
+                    message = resources.getString(R.string.book_delete_success),
+                    actionLabel = resources.getString(R.string.book_delete_undo),
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.undoLastBookDeletion()
+                } else {
+                    viewModel.clearBookDeleteState()
+                }
+            }
+            BookDeleteUiState.Restored -> {
+                snackbarHostState.showSnackbar(resources.getString(R.string.book_delete_restored))
+                viewModel.clearBookDeleteState()
+            }
+            is BookDeleteUiState.Error -> {
+                val message = when (state.failure) {
+                    BookDeleteFailure.NOT_FOUND -> R.string.book_delete_not_found
+                    BookDeleteFailure.DELETE -> R.string.book_delete_failure
+                    BookDeleteFailure.RESTORE_CONFLICT -> R.string.book_delete_restore_conflict
+                    BookDeleteFailure.RESTORE -> R.string.book_delete_restore_failure
+                }
+                snackbarHostState.showSnackbar(resources.getString(message))
+                viewModel.clearBookDeleteState()
+            }
+            else -> Unit
+        }
+    }
+
     fun requestExport(format: LibraryExportFormat) {
         val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val fileName = "ndc-shelf-$date.${format.extension}"
@@ -205,6 +242,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
             AppDestination.LIBRARY -> LibraryScreen(
                 books = books,
                 onSaveBook = viewModel::saveBookEdit,
+                onDeleteBook = viewModel::deleteBook,
                 onExport = ::requestExport,
                 onImport = { format ->
                     when (format) {
@@ -219,6 +257,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 importState = importState,
                 bookEditState = bookEditState,
                 onClearBookEditState = viewModel::clearBookEditState,
+                bookDeleteState = bookDeleteState,
+                onClearBookDeleteState = viewModel::clearBookDeleteState,
                 onSelectImportPolicy = viewModel::selectImportConflictPolicy,
                 onConfirmImport = viewModel::confirmImport,
                 onDismissImport = viewModel::dismissImport,
