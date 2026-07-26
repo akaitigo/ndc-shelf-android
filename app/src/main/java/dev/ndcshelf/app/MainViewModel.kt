@@ -25,6 +25,7 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
@@ -212,22 +213,34 @@ class MainViewModel(
                     title = result.book.title,
                 )
 
-                is AddBookResult.InvalidIsbn -> ScanUiState.Error(
-                    "ISBNの形式またはチェックデジットが正しくありません",
-                )
+                is AddBookResult.InvalidIsbn -> ScanUiState.Error(ScanFailure.INVALID_ISBN)
 
                 is AddBookResult.NotFound -> ScanUiState.Error(
-                    "国立国会図書館サーチで ${result.isbn13} が見つかりませんでした",
+                    failure = ScanFailure.NOT_FOUND,
+                    isbn13 = result.isbn13,
                 )
 
-                is AddBookResult.Failure -> ScanUiState.Error(result.message)
+                is AddBookResult.Failure -> ScanUiState.Error(
+                    failure = result.reason.toScanFailure(),
+                    isbn13 = result.isbn13,
+                    retryIsbn = result.isbn13.takeIf { result.reason.retryable },
+                )
             }
         }
     }
 
+    fun retryScan() {
+        val isbn = (_scanState.value as? ScanUiState.Error)?.retryIsbn ?: return
+        lastSubmission = null
+        submitIsbn(isbn)
+    }
+
     fun reportCameraError(message: String) {
         if (_scanState.value !is ScanUiState.Loading) {
-            _scanState.value = ScanUiState.Error(message)
+            _scanState.value = ScanUiState.Error(
+                failure = ScanFailure.CAMERA,
+                message = message,
+            )
         }
     }
 
@@ -541,7 +554,37 @@ sealed interface ScanUiState {
         val title: String,
     ) : ScanUiState
 
-    data class Error(val message: String) : ScanUiState
+    data class Error(
+        val failure: ScanFailure,
+        val isbn13: String? = null,
+        val retryIsbn: String? = null,
+        val message: String? = null,
+    ) : ScanUiState
+}
+
+enum class ScanFailure {
+    INVALID_ISBN,
+    NOT_FOUND,
+    OFFLINE,
+    TIMEOUT,
+    RATE_LIMITED,
+    SERVICE_UNAVAILABLE,
+    NETWORK,
+    REQUEST_REJECTED,
+    INVALID_RESPONSE,
+    SAVE,
+    CAMERA,
+}
+
+private fun AddBookFailure.toScanFailure(): ScanFailure = when (this) {
+    AddBookFailure.OFFLINE -> ScanFailure.OFFLINE
+    AddBookFailure.TIMEOUT -> ScanFailure.TIMEOUT
+    AddBookFailure.RATE_LIMITED -> ScanFailure.RATE_LIMITED
+    AddBookFailure.SERVICE_UNAVAILABLE -> ScanFailure.SERVICE_UNAVAILABLE
+    AddBookFailure.NETWORK -> ScanFailure.NETWORK
+    AddBookFailure.REQUEST_REJECTED -> ScanFailure.REQUEST_REJECTED
+    AddBookFailure.INVALID_RESPONSE -> ScanFailure.INVALID_RESPONSE
+    AddBookFailure.SAVE -> ScanFailure.SAVE
 }
 
 sealed interface LibraryImportUiState {

@@ -12,5 +12,26 @@ data class BookMetadata(
 )
 
 fun interface BookMetadataService {
-    suspend fun findByIsbn(isbn13: String): BookMetadata?
+    suspend fun findByIsbn(isbn13: String): BookMetadataLookupResult
+}
+
+sealed interface BookMetadataLookupResult {
+    data class Found(val metadata: BookMetadata) : BookMetadataLookupResult
+
+    data object NotFound : BookMetadataLookupResult
+
+    data class Failure(
+        val reason: BookMetadataFailure,
+        val httpStatus: Int? = null,
+    ) : BookMetadataLookupResult
+}
+
+enum class BookMetadataFailure(val retryable: Boolean) {
+    OFFLINE(true),
+    TIMEOUT(true),
+    RATE_LIMITED(true),
+    SERVER(true),
+    NETWORK(true),
+    CLIENT(false),
+    PARSE(false),
 }

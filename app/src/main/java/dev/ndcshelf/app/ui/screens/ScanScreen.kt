@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,12 +55,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.ScanFailure
 import dev.ndcshelf.app.ScanUiState
 import dev.ndcshelf.app.ui.components.CameraPreview
 
@@ -68,6 +72,7 @@ fun ScanScreen(
     scanState: ScanUiState,
     onSubmitIsbn: (String) -> Unit,
     onCameraError: (String) -> Unit,
+    onRetry: () -> Unit,
     onClearState: () -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -170,6 +175,7 @@ fun ScanScreen(
         item {
             ScanResultCard(
                 state = scanState,
+                onRetry = onRetry,
                 onClear = onClearState,
             )
         }
@@ -239,6 +245,7 @@ private fun CameraPermissionCard(onRequestPermission: () -> Unit) {
 @Composable
 private fun ScanResultCard(
     state: ScanUiState,
+    onRetry: () -> Unit,
     onClear: () -> Unit,
 ) {
     when (state) {
@@ -316,16 +323,38 @@ private fun ScanResultCard(
                     tint = MaterialTheme.colorScheme.error,
                 )
                 Text(
-                    text = state.message,
+                    text = state.message ?: state.failure.message(state.isbn13),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Rounded.Close, contentDescription = "閉じる")
+                Column(horizontalAlignment = Alignment.End) {
+                    if (state.retryIsbn != null) {
+                        TextButton(onClick = onRetry) {
+                            Text(stringResource(R.string.scan_retry))
+                        }
+                    }
+                    IconButton(onClick = onClear) {
+                        Icon(Icons.Rounded.Close, contentDescription = "閉じる")
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ScanFailure.message(isbn13: String?): String = when (this) {
+    ScanFailure.INVALID_ISBN -> stringResource(R.string.scan_error_invalid_isbn)
+    ScanFailure.NOT_FOUND -> stringResource(R.string.scan_error_not_found, isbn13.orEmpty())
+    ScanFailure.OFFLINE -> stringResource(R.string.scan_error_offline)
+    ScanFailure.TIMEOUT -> stringResource(R.string.scan_error_timeout)
+    ScanFailure.RATE_LIMITED -> stringResource(R.string.scan_error_rate_limited)
+    ScanFailure.SERVICE_UNAVAILABLE -> stringResource(R.string.scan_error_service_unavailable)
+    ScanFailure.NETWORK -> stringResource(R.string.scan_error_network)
+    ScanFailure.REQUEST_REJECTED -> stringResource(R.string.scan_error_request_rejected)
+    ScanFailure.INVALID_RESPONSE -> stringResource(R.string.scan_error_invalid_response)
+    ScanFailure.SAVE -> stringResource(R.string.scan_error_save)
+    ScanFailure.CAMERA -> stringResource(R.string.scan_error_camera)
 }
 
 @Composable

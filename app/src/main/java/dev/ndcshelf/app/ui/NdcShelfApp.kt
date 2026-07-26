@@ -372,6 +372,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 scanState = scanState,
                 onSubmitIsbn = viewModel::submitIsbn,
                 onCameraError = viewModel::reportCameraError,
+                onRetry = viewModel::retryScan,
                 onClearState = viewModel::clearScanState,
                 contentPadding = contentPadding,
             )

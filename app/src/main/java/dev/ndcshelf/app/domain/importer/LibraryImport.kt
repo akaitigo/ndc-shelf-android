@@ -4,8 +4,8 @@ import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.scanner.Isbn
-import java.net.URI
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -214,7 +214,7 @@ class LibraryImportPlanner(
             limits.maxUrlLength,
             errors,
         )
-        if (coverUrl != null && !coverUrl.isSafeWebUrl()) {
+        if (coverUrl != null && !NdlEndpointPolicy.isAllowedCoverUrl(coverUrl, isbn13)) {
             errors.addCapped(recordError(recordNumber, "coverUrl", "NDL Searchのhttps URLを指定してください"))
         }
         val ndcCode = optionalText(
@@ -458,12 +458,6 @@ class LibraryImportPlanner(
         }
     }
 
-    private fun String.isSafeWebUrl(): Boolean = runCatching {
-        val uri = URI(this)
-        uri.scheme?.lowercase(Locale.ROOT) == "https" &&
-            uri.host?.lowercase(Locale.ROOT) in SAFE_COVER_HOSTS
-    }.getOrDefault(false)
-
     private fun MutableList<ImportValidationError>.addCapped(error: ImportValidationError) {
         if (size < MAX_ERRORS) add(error)
     }
@@ -493,6 +487,5 @@ class LibraryImportPlanner(
         const val MAX_CLOCK_SKEW_MILLIS = 24 * 60 * 60 * 1000L
         val NDC_CODE_REGEX = Regex("""\d{3}(?:\.\d+)?""")
         val ID_REGEX = Regex("""[A-Za-z0-9._:-]+""")
-        val SAFE_COVER_HOSTS = setOf("ndlsearch.ndl.go.jp")
     }
 }

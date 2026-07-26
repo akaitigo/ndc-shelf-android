@@ -69,5 +69,19 @@ sealed interface AddBookResult {
 
     data class NotFound(val isbn13: String) : AddBookResult
 
-    data class Failure(val message: String) : AddBookResult
+    data class Failure(
+        val reason: AddBookFailure,
+        val isbn13: String? = null,
+    ) : AddBookResult
+}
+
+enum class AddBookFailure(val retryable: Boolean) {
+    OFFLINE(true),
+    TIMEOUT(true),
+    RATE_LIMITED(true),
+    SERVICE_UNAVAILABLE(true),
+    NETWORK(true),
+    REQUEST_REJECTED(false),
+    INVALID_RESPONSE(false),
+    SAVE(false),
 }

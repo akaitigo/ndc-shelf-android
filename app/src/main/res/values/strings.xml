@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NDC Shelf</string>
+    <string name="scan_retry">再試行</string>
+    <string name="scan_error_invalid_isbn">ISBNの形式またはチェックデジットが正しくありません</string>
+    <string name="scan_error_not_found">国立国会図書館サーチで %1$s が見つかりませんでした</string>
+    <string name="scan_error_offline">オフラインです。接続を確認して再試行してください</string>
+    <string name="scan_error_timeout">国立国会図書館サーチから時間内に応答がありませんでした</string>
+    <string name="scan_error_rate_limited">アクセスが一時的に制限されています。時間を置いて再試行してください</string>
+    <string name="scan_error_service_unavailable">国立国会図書館サーチを一時的に利用できません</string>
+    <string name="scan_error_network">書誌情報の通信に失敗しました。接続を確認してください</string>
+    <string name="scan_error_request_rejected">書誌情報の要求が受け付けられませんでした</string>
+    <string name="scan_error_invalid_response">書誌情報の応答を読み取れませんでした</string>
+    <string name="scan_error_save">蔵書を端末へ保存できませんでした</string>
+    <string name="scan_error_camera">カメラを利用できません</string>
     <string name="export_json">JSONで保存</string>
     <string name="export_csv">CSVで保存</string>
     <string name="export_success">%1$d冊の蔵書を書き出しました</string>
@@ -123,7 +135,7 @@
     <string name="info_privacy_device_title">端末内で扱うデータ</string>
     <string name="info_privacy_device_body">バーコード認識はML Kitの端末内モデルで処理します。ISBN、書誌情報、NDC、読書状態、置き場所は端末内のRoomデータベースに保存され、開発者のサーバーへ送信されません。</string>
     <string name="info_privacy_network_title">外部サービスへの通信</string>
-    <string name="info_privacy_network_body">ISBNを登録したとき、そのISBNをHTTPSで国立国会図書館サーチへ送信し、書誌情報とNDCを取得します。表紙を表示するときも同サービスへ画像を要求します。各通信先にはIPアドレスなど通常の通信情報が伝わります。ML Kitはカメラ画像・バーコード値・認識結果をGoogleへ送りませんが、端末・アプリ情報、性能、API利用イベント、エラーコード等を診断と利用分析のためGoogleへ送信します。通信時はHTTPSで暗号化されます。</string>
+    <string name="info_privacy_network_body">ISBNを登録したとき、そのISBNだけをHTTPSで国立国会図書館サーチへ送信し、書誌情報とNDCを取得します。表紙は同サービスだけから取得し、再通信を減らすため端末キャッシュへ最大50MiB保存します。キャッシュはAndroidの設定から削除でき、古い画像から自動削除されます。タイトル、読書状態、置き場所、他の蔵書は送信しません。各通信先にはIPアドレスなど通常の通信情報が伝わります。ML Kitはカメラ画像・バーコード値・認識結果をGoogleへ送りませんが、端末・アプリ情報、性能、API利用イベント、エラーコード等を診断と利用分析のためGoogleへ送信します。通信時はHTTPSで暗号化されます。</string>
     <string name="info_mlkit_data_link">ML Kitのデータ開示</string>
     <string name="info_privacy_backup_title">バックアップとファイル</string>
     <string name="info_privacy_backup_body">Androidのクラウドバックアップから全データを除外しています。Android 9以降の端末間転送ではRoomデータベースだけを移行対象にし、Android 8.1以前ではOS移行も対象外です。JSON、CSV、完全バックアップは、選択した保存先にだけ書き出し、アプリが独自にアップロードすることはありません。これらのファイルは暗号化されないため、保存先の保護が必要です。</string>
