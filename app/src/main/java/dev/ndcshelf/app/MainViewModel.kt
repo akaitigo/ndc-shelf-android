@@ -34,6 +34,8 @@ import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
+import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
+import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -80,6 +82,8 @@ class MainViewModel(
     val libraryExportState: StateFlow<LibraryExportUiState> = _libraryExportState.asStateFlow()
     private val _locationMutationState = MutableStateFlow<LocationMutationUiState>(LocationMutationUiState.Idle)
     val locationMutationState: StateFlow<LocationMutationUiState> = _locationMutationState.asStateFlow()
+    private val _shelfMoveState = MutableStateFlow<ShelfMoveUiState>(ShelfMoveUiState.Idle)
+    val shelfMoveState: StateFlow<ShelfMoveUiState> = _shelfMoveState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
@@ -328,6 +332,23 @@ class MainViewModel(
 
     fun clearLocationMutationState() {
         _locationMutationState.value = LocationMutationUiState.Idle
+    }
+
+    fun moveBookWithinTier(copyId: String, direction: ShelfMoveDirection) {
+        if (_shelfMoveState.value is ShelfMoveUiState.Moving) return
+        _shelfMoveState.value = ShelfMoveUiState.Moving(copyId)
+        viewModelScope.launch {
+            _shelfMoveState.value = when (repository.moveBookWithinTier(copyId, direction)) {
+                ShelfMoveResult.Moved -> ShelfMoveUiState.Moved
+                ShelfMoveResult.Boundary -> ShelfMoveUiState.Boundary
+                ShelfMoveResult.NotFound -> ShelfMoveUiState.Error("棚内の本が見つかりません")
+                ShelfMoveResult.Failure -> ShelfMoveUiState.Error("棚内の順序を変更できませんでした")
+            }
+        }
+    }
+
+    fun clearShelfMoveState() {
+        _shelfMoveState.value = ShelfMoveUiState.Idle
     }
 
     private fun mutateLocation(
@@ -584,6 +605,14 @@ sealed interface LocationMutationUiState {
     data object Success : LocationMutationUiState
     data class InUse(val level: LocationLevel, val id: String, val copyCount: Int) : LocationMutationUiState
     data class Error(val message: String) : LocationMutationUiState
+}
+
+sealed interface ShelfMoveUiState {
+    data object Idle : ShelfMoveUiState
+    data class Moving(val copyId: String) : ShelfMoveUiState
+    data object Moved : ShelfMoveUiState
+    data object Boundary : ShelfMoveUiState
+    data class Error(val message: String) : ShelfMoveUiState
 }
 
 sealed interface DatabaseBackupUiState {

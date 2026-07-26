@@ -39,7 +39,8 @@ interface LibraryDao {
             END AS location,
             copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
-            copies.addedAt AS addedAt
+            copies.addedAt AS addedAt,
+            copies.shelfOrderKey AS shelfOrderKey
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
@@ -72,7 +73,8 @@ interface LibraryDao {
             END AS location,
             copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
-            copies.addedAt AS addedAt
+            copies.addedAt AS addedAt,
+            copies.shelfOrderKey AS shelfOrderKey
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
@@ -105,7 +107,8 @@ interface LibraryDao {
             END AS location,
             copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
-            copies.addedAt AS addedAt
+            copies.addedAt AS addedAt,
+            copies.shelfOrderKey AS shelfOrderKey
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
@@ -139,7 +142,8 @@ interface LibraryDao {
             END AS location,
             copies.tierId AS locationTierId,
             copies.readingStatus AS readingStatus,
-            copies.addedAt AS addedAt
+            copies.addedAt AS addedAt,
+            copies.shelfOrderKey AS shelfOrderKey
         FROM owned_copies AS copies
         INNER JOIN book_editions AS editions ON editions.id = copies.editionId
         INNER JOIN book_works AS works ON works.id = editions.workId
@@ -194,7 +198,10 @@ interface LibraryDao {
     @Query(
         """
         UPDATE owned_copies
-        SET location = :location, tierId = :tierId, readingStatus = :readingStatus
+        SET location = :location,
+            tierId = :tierId,
+            shelfOrderKey = :shelfOrderKey,
+            readingStatus = :readingStatus
         WHERE id = :copyId
         """,
     )
@@ -203,6 +210,7 @@ interface LibraryDao {
         location: String,
         readingStatus: String,
         tierId: String? = null,
+        shelfOrderKey: String? = null,
     )
 
     @Query("UPDATE book_works SET title = :title, primaryAuthor = :primaryAuthor WHERE id = :workId")

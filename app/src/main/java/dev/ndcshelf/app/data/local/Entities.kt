@@ -109,7 +109,11 @@ data class LocationTierEntity(
             onDelete = ForeignKey.SET_NULL,
         ),
     ],
-    indices = [Index(value = ["editionId"]), Index(value = ["tierId"])],
+    indices = [
+        Index(value = ["editionId"]),
+        Index(value = ["tierId"]),
+        Index(value = ["tierId", "shelfOrderKey"]),
+    ],
 )
 data class OwnedCopyEntity(
     @PrimaryKey val id: String,
@@ -119,6 +123,7 @@ data class OwnedCopyEntity(
     val readingStatus: String,
     val addedAt: Long,
     val tierId: String? = null,
+    val shelfOrderKey: String? = null,
 )
 
 data class LibraryBookRow(
@@ -139,6 +144,7 @@ data class LibraryBookRow(
     val locationTierId: String?,
     val readingStatus: String,
     val addedAt: Long,
+    val shelfOrderKey: String?,
 )
 
 data class LocationTierCountRow(

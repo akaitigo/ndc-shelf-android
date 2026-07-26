@@ -171,6 +171,7 @@ internal class DatabaseBackupCodec(
                     put("readingStatus", JsonPrimitive(copy.readingStatus))
                     put("addedAt", JsonPrimitive(copy.addedAt))
                     putNullable("tierId", copy.tierId)
+                    putNullable("shelfOrderKey", copy.shelfOrderKey)
                 })
             }
         })
@@ -243,6 +244,7 @@ internal class DatabaseBackupCodec(
                     ?: if (formatVersion == 1) "UNREAD" else invalid("Missing readingStatus"),
                 addedAt = value.requiredLong("addedAt"),
                 tierId = value.optionalString("tierId"),
+                shelfOrderKey = value.optionalString("shelfOrderKey"),
             )
         }
         val rooms = payload.versionedArray("rooms", schemaVersion, 3).map { element ->
@@ -304,6 +306,15 @@ internal class DatabaseBackupCodec(
             snapshot.shelves.any { it.roomId !in roomIds } ||
             snapshot.tiers.any { it.shelfId !in shelfIds }
         ) invalid("Foreign key reference is missing")
+        if (snapshot.copies.any { copy ->
+                copy.tierId == null && copy.shelfOrderKey != null ||
+                    copy.shelfOrderKey?.let { key ->
+                        key.length % 2 != 0 || key.any { it !in '0'..'9' && it !in 'a'..'f' }
+                    } == true
+            }
+        ) {
+            invalid("Invalid shelf order key")
+        }
         val strings = buildList {
             snapshot.works.forEach { add(it.id); add(it.title); add(it.primaryAuthor) }
             snapshot.editions.forEach {
@@ -318,6 +329,7 @@ internal class DatabaseBackupCodec(
                 add(it.location)
                 add(it.readingStatus)
                 add(it.tierId.orEmpty())
+                add(it.shelfOrderKey.orEmpty())
             }
             snapshot.rooms.forEach { add(it.id); add(it.name) }
             snapshot.shelves.forEach { add(it.id); add(it.roomId); add(it.name) }
@@ -420,8 +432,8 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 3
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 3
+        const val CURRENT_FORMAT_VERSION = 4
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 4
         private const val FORMAT_ID = "ndc-shelf-room-backup"
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val PAYLOAD_ENTRY = "database.json"

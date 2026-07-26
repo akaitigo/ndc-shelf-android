@@ -99,6 +99,7 @@ erDiagram
         string editionId FK
         string location
         string tierId FK
+        string shelfOrderKey
         string readingStatus
     }
     LOCATION_ROOM {
@@ -127,6 +128,8 @@ erDiagram
 構造化した置き場所は`LocationRoom`→`LocationShelf`→`LocationTier`の3階層とし、`OwnedCopy.tierId`から段だけを参照します。表示時は親を結合して`部屋 / 本棚 / 段`とします。部屋名は全体、本棚名と段名は同一親内で完全一致を禁止し、表示区切りと曖昧になる`/`は使用できません。各階層は`sortOrder`の昇順とし、同値の場合は名前、IDの順で安定化します。並べ替え後は同一親の順序を0始まりの連番へ正規化します。
 
 旧`OwnedCopy.location`は互換用の原文として残します。v1からv2へのMigrationでは値を分割・推測せず、`tierId = NULL`のまま一字も変更しません。段を割り当てたコピーだけ構造化パスを表示し、未割り当ては旧文字列を表示します。使用中の部屋・本棚・段は、配下コピーの移動先または明示的な未設定化を指定しない限り削除しません。
+
+段内の物理順は`OwnedCopy.shelfOrderKey`で管理します。キー生成と同期競合時のtie-breakerは[ADR 0001](adr/0001-fractional-shelf-order-key.md)を正本とし、通常操作で段全体の連番を更新してはいけません。
 
 ### 手動補正の優先順位
 

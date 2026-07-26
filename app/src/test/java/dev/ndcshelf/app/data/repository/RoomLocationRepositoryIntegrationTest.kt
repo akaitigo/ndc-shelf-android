@@ -15,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
@@ -93,6 +94,7 @@ class RoomLocationRepositoryIntegrationTest {
         )
 
         assertEquals("location-3", database.libraryDao().findCopyById("copy")?.tierId)
+        assertNotNull(database.libraryDao().findCopyById("copy")?.shelfOrderKey)
         assertEquals("書斎 / 本棚 / 下段", database.libraryDao().findOwnedByCopyId("copy")?.location)
     }
 
