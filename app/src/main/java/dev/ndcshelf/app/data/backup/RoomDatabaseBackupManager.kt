@@ -87,6 +87,7 @@ class RoomDatabaseBackupManager(
             automaticBackupName = automaticBackup.name
 
             dao.deleteAllCopies()
+            dao.deleteAllWishlistItems()
             locationDao.deleteAllTiers()
             locationDao.deleteAllShelves()
             locationDao.deleteAllRooms()
@@ -94,6 +95,7 @@ class RoomDatabaseBackupManager(
             dao.deleteAllWorks()
             dao.upsertWorks(preview.snapshot.works)
             dao.upsertEditions(preview.snapshot.editions)
+            dao.upsertWishlistItems(preview.snapshot.wishlistItems)
             locationDao.upsertRooms(preview.snapshot.rooms)
             locationDao.upsertShelves(preview.snapshot.shelves)
             locationDao.upsertTiers(preview.snapshot.tiers)
@@ -121,6 +123,7 @@ class RoomDatabaseBackupManager(
         rooms = locationDao.getRooms(),
         shelves = locationDao.getAllShelves(),
         tiers = locationDao.getAllTiers(),
+        wishlistItems = dao.getAllWishlistItems(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {

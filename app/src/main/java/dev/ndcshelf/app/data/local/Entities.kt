@@ -127,6 +127,43 @@ data class OwnedCopyEntity(
     val copyLabel: String = "所蔵本",
 )
 
+@Entity(
+    tableName = "wishlist_items",
+    foreignKeys = [
+        ForeignKey(
+            entity = BookEditionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["editionId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["status"])],
+)
+data class WishlistItemEntity(
+    @PrimaryKey val editionId: String,
+    val status: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+data class WishlistBookRow(
+    val workId: String,
+    val editionId: String,
+    val title: String,
+    val primaryAuthor: String,
+    val isbn13: String,
+    val publisher: String?,
+    val publishedYear: Int?,
+    val coverUrl: String?,
+    val ndcCode: String?,
+    val ndcEdition: String?,
+    val classificationSource: String,
+    val status: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val ownedCopyCount: Int,
+)
+
 data class LibraryBookRow(
     val copyId: String,
     val workId: String,

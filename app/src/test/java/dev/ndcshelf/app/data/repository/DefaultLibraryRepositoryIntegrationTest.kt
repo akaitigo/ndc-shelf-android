@@ -14,12 +14,16 @@ import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.PurchaseStatus
+import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.AddBookFailure
+import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
+import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
@@ -217,6 +221,135 @@ class DefaultLibraryRepositoryIntegrationTest {
         assertEquals(1, database.libraryDao().getAllWorks().size)
         assertEquals(1, database.libraryDao().getAllEditions().size)
         assertEquals(listOf("保存用", "貸出用"), database.libraryDao().getAllCopies().map { it.copyLabel })
+    }
+
+    @Test
+    fun bookstoreStatesPersistOfflineAndPurchaseCreatesOwnedCopy() = runBlocking {
+        var metadataCalls = 0
+        val repository = repository(
+            ids = listOf("work-wish", "edition-wish", "copy-purchased"),
+            service = BookMetadataService {
+                metadataCalls += 1
+                BookMetadataLookupResult.Found(metadata())
+            },
+        )
+        val candidate = (repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found).book
+
+        val wanted = repository.changePurchaseState(candidate, PurchaseTransition.WANTED)
+            as BookstoreChangeResult.Updated
+        val offlineLookup = repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found
+        val reserved = repository.changePurchaseState(wanted.book, PurchaseTransition.RESERVED)
+            as BookstoreChangeResult.Updated
+
+        assertEquals(PurchaseStatus.WANTED, offlineLookup.book.purchaseStatus)
+        assertEquals(PurchaseStatus.RESERVED, reserved.book.purchaseStatus)
+        assertEquals(1, metadataCalls)
+        assertEquals(1, database.libraryDao().getAllWishlistItems().size)
+        assertTrue(database.libraryDao().getAllCopies().isEmpty())
+
+        val purchased = repository.changePurchaseState(reserved.book, PurchaseTransition.PURCHASED)
+            as BookstoreChangeResult.Updated
+
+        assertNull(purchased.book.purchaseStatus)
+        assertEquals(1, purchased.book.ownedCopyCount)
+        assertTrue(database.libraryDao().getAllWishlistItems().isEmpty())
+        val copy = database.libraryDao().getAllCopies().single()
+        assertEquals("copy-purchased", copy.id)
+        assertEquals("1冊目", copy.copyLabel)
+        assertEquals("edition-wish", copy.editionId)
+    }
+
+    @Test
+    fun concurrentCandidateUpdatesKeepOneWishlistRow() = runBlocking {
+        val repository = repository(
+            ids = listOf("work-wish", "edition-wish"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val candidate = (repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found).book
+
+        val results = coroutineScope {
+            listOf(PurchaseTransition.WANTED, PurchaseTransition.RESERVED).map { transition ->
+                async(Dispatchers.Default) {
+                    repository.changePurchaseState(candidate, transition)
+                }
+            }.awaitAll()
+        }
+
+        assertEquals(1, results.count { it is BookstoreChangeResult.Updated })
+        assertEquals(1, results.count { it is BookstoreChangeResult.Conflict })
+        val rows = database.libraryDao().getAllWishlistItems()
+        assertEquals(1, rows.size)
+        assertTrue(rows.single().status in setOf("WANTED", "RESERVED"))
+        assertEquals(1, database.libraryDao().getAllWorks().size)
+        assertEquals(1, database.libraryDao().getAllEditions().size)
+    }
+
+    @Test
+    fun concurrentPurchasesCreateExactlyOneOwnedCopy() = runBlocking {
+        val repository = repository(
+            ids = listOf("work-wish", "edition-wish", "copy-purchased"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val candidate = (repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found).book
+        val wanted = repository.changePurchaseState(candidate, PurchaseTransition.WANTED)
+            as BookstoreChangeResult.Updated
+
+        val results = coroutineScope {
+            List(2) {
+                async(Dispatchers.Default) {
+                    repository.changePurchaseState(wanted.book, PurchaseTransition.PURCHASED)
+                }
+            }.awaitAll()
+        }
+
+        assertEquals(1, results.count { it is BookstoreChangeResult.Updated })
+        assertEquals(1, results.count { it is BookstoreChangeResult.Conflict })
+        assertEquals(1, database.libraryDao().getAllCopies().size)
+        assertTrue(database.libraryDao().getAllWishlistItems().isEmpty())
+    }
+
+    @Test
+    fun deletingLastOwnedCopyKeepsWishlistEdition() = runBlocking {
+        val repository = repository(
+            ids = listOf("work-1", "edition-1", "copy-1"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val owned = (repository.addFromIsbn(ISBN) as AddBookResult.Added).book
+        val local = (repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found).book
+        repository.changePurchaseState(local, PurchaseTransition.WANTED)
+
+        repository.deleteBook(owned.copyId)
+
+        assertTrue(database.libraryDao().getAllCopies().isEmpty())
+        assertEquals("WANTED", database.libraryDao().getAllWishlistItems().single().status)
+        assertEquals("edition-1", database.libraryDao().getAllEditions().single().id)
+        assertEquals("work-1", database.libraryDao().getAllWorks().single().id)
+    }
+
+    @Test
+    fun ownedImportConvertsMatchingWishlistWithoutDuplicateEdition() = runBlocking {
+        val repository = repository(
+            ids = listOf("work-wish", "edition-wish"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val candidate = (repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found).book
+        repository.changePurchaseState(candidate, PurchaseTransition.RESERVED)
+        val imported = importBook("imported", ISBN)
+        val preview = LibraryImportPreview(
+            additions = listOf(imported),
+            updates = emptyList(),
+            skippedCount = 0,
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+            existingSnapshot = emptyList(),
+        )
+
+        val result = repository.applyImport(preview) as ImportApplyResult.Applied
+
+        assertEquals(1, result.addedCount)
+        assertTrue(database.libraryDao().getAllWishlistItems().isEmpty())
+        assertEquals(1, database.libraryDao().getAllEditions().size)
+        val copy = database.libraryDao().getAllCopies().single()
+        assertEquals("edition-wish", copy.editionId)
     }
 
     @Test

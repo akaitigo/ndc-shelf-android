@@ -79,6 +79,7 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 erDiagram
     BOOK_WORK ||--o{ BOOK_EDITION : has
     BOOK_EDITION ||--o{ OWNED_COPY : owned_as
+    BOOK_EDITION ||--o| WISHLIST_ITEM : planned_as
     LOCATION_ROOM ||--o{ LOCATION_SHELF : contains
     LOCATION_SHELF ||--o{ LOCATION_TIER : contains
     LOCATION_TIER ||--o{ OWNED_COPY : stores
@@ -101,6 +102,14 @@ erDiagram
         string tierId FK
         string shelfOrderKey
         string readingStatus
+        string copyLabel
+        long addedAt
+    }
+    WISHLIST_ITEM {
+        string editionId PK_FK
+        string status
+        long createdAt
+        long updatedAt
     }
     LOCATION_ROOM {
         string id PK
@@ -122,6 +131,12 @@ erDiagram
 ```
 
 `BookEdition.isbn13`はユニークです。同じISBNを再スキャンした場合は既存Editionを再利用し、新しい`OwnedCopy`だけをトランザクションで追加します。`OwnedCopy.copyLabel`、置き場所、読書状態、取得日時はコピー固有であり、一覧では同一Editionを参照するコピー数と表示名を併記します。Edition共通の書誌情報とコピー固有情報をUI上でも分離し、削除対象は必ずコピー単位で示します。
+
+### 書店モード
+
+未所有の購入候補は`OwnedCopy`を作らず、Editionに対して最大1件の`WishlistItem`として保存します。永続化する`PurchaseStatus`は`WANTED`と`RESERVED`だけで、読書状態とは別の列挙です。`PURCHASED`は保存状態ではなく遷移命令とし、単一トランザクションで既存Editionを再利用した`OwnedCopy`を追加して`WishlistItem`を削除します。すでに所有しているEditionにも追加購入の予定を持てます。
+
+書店モードのISBN照会は、RoomにあるEdition、所有冊数、購入候補をネットワークより先に検索します。保存済みISBNはオフラインでも状態を表示し、端末内にないISBNだけNDL Searchへ送信します。最後のOwnedCopyを削除しても同じEditionの`WishlistItem`が残る場合は、EditionとWorkを削除してはいけません。蔵書インポートで同じISBNが追加された場合は既存Editionを再利用し、購入済みへの遷移として候補を削除します。
 
 ### 置き場所
 

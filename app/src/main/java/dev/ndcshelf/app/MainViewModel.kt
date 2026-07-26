@@ -22,13 +22,17 @@ import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.importer.LibraryJsonImporter
 import dev.ndcshelf.app.domain.importer.LibraryJsonParseResult
 import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationMutationResult
 import dev.ndcshelf.app.domain.model.LocationTree
+import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
+import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
@@ -65,11 +69,19 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+    val wishlist: StateFlow<List<BookstoreBook>> = repository.observeWishlist()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
     val locations: StateFlow<LocationTree> = (locationRepository?.observeTree() ?: flowOf(LocationTree()))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LocationTree())
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
+    private val _bookstoreState = MutableStateFlow<BookstoreUiState>(BookstoreUiState.Idle)
+    val bookstoreState: StateFlow<BookstoreUiState> = _bookstoreState.asStateFlow()
     private val _importState = MutableStateFlow<LibraryImportUiState>(LibraryImportUiState.Idle)
     val importState: StateFlow<LibraryImportUiState> = _importState.asStateFlow()
     private val _bookEditState = MutableStateFlow<BookEditUiState>(BookEditUiState.Idle)
@@ -86,6 +98,7 @@ class MainViewModel(
     val shelfMoveState: StateFlow<ShelfMoveUiState> = _shelfMoveState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
+    private var lastBookstoreSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
     private val csvImporter = LibraryCsvImporter()
     private var importBatch: LibraryImportBatch? = null
@@ -251,6 +264,77 @@ class MainViewModel(
         submitIsbn(isbn)
     }
 
+    fun lookupBookstore(rawIsbn: String) {
+        if (_bookstoreState.value is BookstoreUiState.Loading ||
+            _bookstoreState.value is BookstoreUiState.Updating
+        ) return
+        val now = System.currentTimeMillis()
+        val previous = lastBookstoreSubmission
+        if (previous != null && previous.first == rawIsbn &&
+            now - previous.second < RESCAN_GUARD_MILLIS
+        ) return
+        lastBookstoreSubmission = rawIsbn to now
+        viewModelScope.launch {
+            _bookstoreState.value = BookstoreUiState.Loading(rawIsbn)
+            _bookstoreState.value = when (val result = repository.lookupBookstore(rawIsbn)) {
+                is BookstoreLookupResult.Found -> BookstoreUiState.Result(result.book)
+                is BookstoreLookupResult.InvalidIsbn -> BookstoreUiState.Error(
+                    ScanFailure.INVALID_ISBN,
+                )
+                is BookstoreLookupResult.NotFound -> BookstoreUiState.Error(
+                    ScanFailure.NOT_FOUND,
+                    isbn13 = result.isbn13,
+                )
+                is BookstoreLookupResult.Failure -> BookstoreUiState.Error(
+                    failure = result.reason.toScanFailure(),
+                    isbn13 = result.isbn13,
+                    retryIsbn = result.isbn13.takeIf { result.reason.retryable },
+                )
+            }
+        }
+    }
+
+    fun retryBookstoreLookup() {
+        val isbn = (_bookstoreState.value as? BookstoreUiState.Error)?.retryIsbn ?: return
+        lastBookstoreSubmission = null
+        lookupBookstore(isbn)
+    }
+
+    fun changePurchaseState(transition: PurchaseTransition) {
+        val book = when (val state = _bookstoreState.value) {
+            is BookstoreUiState.Result -> state.book
+            else -> return
+        }
+        _bookstoreState.value = BookstoreUiState.Updating(book, transition)
+        viewModelScope.launch {
+            _bookstoreState.value = when (
+                val result = repository.changePurchaseState(book, transition)
+            ) {
+                is BookstoreChangeResult.Updated -> BookstoreUiState.Result(result.book)
+                BookstoreChangeResult.Conflict -> BookstoreUiState.Error(
+                    ScanFailure.SAVE,
+                    isbn13 = book.isbn13,
+                )
+                BookstoreChangeResult.Failure -> BookstoreUiState.Error(
+                    ScanFailure.SAVE,
+                    isbn13 = book.isbn13,
+                )
+            }
+        }
+    }
+
+    fun selectWishlistItem(book: BookstoreBook) {
+        if (_bookstoreState.value !is BookstoreUiState.Updating) {
+            _bookstoreState.value = BookstoreUiState.Result(book)
+        }
+    }
+
+    fun clearBookstoreState() {
+        if (_bookstoreState.value !is BookstoreUiState.Updating) {
+            _bookstoreState.value = BookstoreUiState.Idle
+        }
+    }
+
     fun addDuplicateCopy(copyLabel: String) {
         val duplicate = _scanState.value as? ScanUiState.Duplicate ?: return
         _scanState.value = ScanUiState.Loading(duplicate.isbn13)
@@ -285,6 +369,16 @@ class MainViewModel(
             _scanState.value = ScanUiState.Error(
                 failure = ScanFailure.CAMERA,
                 message = message,
+            )
+        }
+    }
+
+    fun reportBookstoreCameraError(message: String) {
+        if (_bookstoreState.value !is BookstoreUiState.Loading &&
+            _bookstoreState.value !is BookstoreUiState.Updating
+        ) {
+            _bookstoreState.value = BookstoreUiState.Error(
+                failure = ScanFailure.CAMERA,
             )
         }
     }
@@ -697,6 +791,21 @@ sealed interface ScanUiState {
         val retryIsbn: String? = null,
         val message: String? = null,
     ) : ScanUiState
+}
+
+sealed interface BookstoreUiState {
+    data object Idle : BookstoreUiState
+    data class Loading(val isbn: String) : BookstoreUiState
+    data class Result(val book: BookstoreBook) : BookstoreUiState
+    data class Updating(
+        val book: BookstoreBook,
+        val transition: PurchaseTransition,
+    ) : BookstoreUiState
+    data class Error(
+        val failure: ScanFailure,
+        val isbn13: String? = null,
+        val retryIsbn: String? = null,
+    ) : BookstoreUiState
 }
 
 enum class ScanFailure {
