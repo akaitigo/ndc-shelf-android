@@ -5,8 +5,9 @@ import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportPreviewResult
 import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
+import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
-import dev.ndcshelf.app.domain.model.ReadingStatus
 import kotlinx.coroutines.flow.Flow
 
 interface LibraryRepository {
@@ -14,11 +15,9 @@ interface LibraryRepository {
 
     suspend fun addFromIsbn(rawIsbn: String): AddBookResult
 
-    suspend fun updateCopy(
-        copyId: String,
-        location: String,
-        readingStatus: ReadingStatus,
-    )
+    suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult
+
+    suspend fun restoreBook(previous: LibraryBook, expectedCurrent: LibraryBook): Boolean
 
     suspend fun previewImport(
         batch: LibraryImportBatch,
@@ -26,6 +25,19 @@ interface LibraryRepository {
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+sealed interface UpdateBookResult {
+    data class Updated(
+        val previous: LibraryBook,
+        val current: LibraryBook,
+    ) : UpdateBookResult
+
+    data class Invalid(val errors: List<BookEditValidationError>) : UpdateBookResult
+
+    data object NotFound : UpdateBookResult
+
+    data object Failure : UpdateBookResult
 }
 
 sealed interface AddBookResult {

@@ -13,10 +13,12 @@ import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.importer.LibraryJsonImporter
 import dev.ndcshelf.app.domain.importer.LibraryJsonParseResult
+import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
-import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +48,8 @@ class MainViewModel(
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
     private val _importState = MutableStateFlow<LibraryImportUiState>(LibraryImportUiState.Idle)
     val importState: StateFlow<LibraryImportUiState> = _importState.asStateFlow()
+    private val _bookEditState = MutableStateFlow<BookEditUiState>(BookEditUiState.Idle)
+    val bookEditState: StateFlow<BookEditUiState> = _bookEditState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
@@ -105,13 +109,41 @@ class MainViewModel(
         _scanState.value = ScanUiState.Idle
     }
 
-    fun updateCopy(
-        copyId: String,
-        location: String,
-        status: ReadingStatus,
-    ) {
+    fun saveBookEdit(copyId: String, draft: BookEditDraft) {
+        if (_bookEditState.value is BookEditUiState.Saving) return
         viewModelScope.launch {
-            repository.updateCopy(copyId, location, status)
+            _bookEditState.value = BookEditUiState.Saving(copyId)
+            _bookEditState.value = when (val result = repository.updateBook(copyId, draft)) {
+                is UpdateBookResult.Updated -> BookEditUiState.Saved(
+                    previous = result.previous,
+                    current = result.current,
+                )
+                is UpdateBookResult.Invalid -> BookEditUiState.Invalid(copyId, result.errors)
+                UpdateBookResult.NotFound -> BookEditUiState.Error(copyId, BookEditFailure.NOT_FOUND)
+                UpdateBookResult.Failure -> BookEditUiState.Error(copyId, BookEditFailure.SAVE)
+            }
+        }
+    }
+
+    fun undoLastBookEdit() {
+        val saved = _bookEditState.value as? BookEditUiState.Saved ?: return
+        viewModelScope.launch {
+            _bookEditState.value = BookEditUiState.Undoing
+            _bookEditState.value = if (
+                repository.restoreBook(saved.previous, saved.current)
+            ) {
+                BookEditUiState.Undone
+            } else {
+                BookEditUiState.Error(saved.current.copyId, BookEditFailure.UNDO)
+            }
+        }
+    }
+
+    fun clearBookEditState() {
+        if (_bookEditState.value !is BookEditUiState.Saving &&
+            _bookEditState.value !is BookEditUiState.Undoing
+        ) {
+            _bookEditState.value = BookEditUiState.Idle
         }
     }
 
@@ -345,4 +377,32 @@ enum class ImportFailure {
     PREVIEW,
     APPLY,
     STALE_RESELECT,
+}
+
+sealed interface BookEditUiState {
+    data object Idle : BookEditUiState
+
+    data class Saving(val copyId: String) : BookEditUiState
+
+    data class Invalid(
+        val copyId: String,
+        val errors: List<BookEditValidationError>,
+    ) : BookEditUiState
+
+    data class Saved(
+        val previous: LibraryBook,
+        val current: LibraryBook,
+    ) : BookEditUiState
+
+    data object Undoing : BookEditUiState
+
+    data object Undone : BookEditUiState
+
+    data class Error(val copyId: String, val failure: BookEditFailure) : BookEditUiState
+}
+
+enum class BookEditFailure {
+    NOT_FOUND,
+    SAVE,
+    UNDO,
 }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Clear
@@ -46,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,15 +58,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.ImportFailure
+import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.ui.components.BookCover
 
@@ -72,10 +78,12 @@ import dev.ndcshelf.app.ui.components.BookCover
 @Composable
 fun LibraryScreen(
     books: List<LibraryBook>,
-    onUpdateCopy: (String, String, ReadingStatus) -> Unit,
+    onSaveBook: (String, BookEditDraft) -> Unit,
     onExport: (LibraryExportFormat) -> Unit,
     onImport: (LibraryExportFormat) -> Unit,
     importState: LibraryImportUiState,
+    bookEditState: BookEditUiState,
+    onClearBookEditState: () -> Unit,
     onSelectImportPolicy: (ImportConflictPolicy) -> Unit,
     onConfirmImport: () -> Unit,
     onDismissImport: () -> Unit,
@@ -87,6 +95,11 @@ fun LibraryScreen(
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
+    }
+
+    LaunchedEffect(bookEditState) {
+        val saved = bookEditState as? BookEditUiState.Saved ?: return@LaunchedEffect
+        if (selectedBook?.copyId == saved.current.copyId) selectedBook = null
     }
 
     Column(
@@ -181,7 +194,10 @@ fun LibraryScreen(
                 ) { book ->
                     BookCard(
                         book = book,
-                        onClick = { selectedBook = book },
+                        onClick = {
+                            onClearBookEditState()
+                            selectedBook = book
+                        },
                     )
                 }
             }
@@ -191,11 +207,13 @@ fun LibraryScreen(
     selectedBook?.let { book ->
         EditBookSheet(
             book = book,
-            onDismiss = { selectedBook = null },
-            onSave = { location, status ->
-                onUpdateCopy(book.copyId, location, status)
+            editState = bookEditState,
+            onDismiss = {
+                onClearBookEditState()
                 selectedBook = null
             },
+            onClearErrors = onClearBookEditState,
+            onSave = { draft -> onSaveBook(book.copyId, draft) },
         )
     }
 
@@ -671,48 +689,150 @@ private fun EmptyLibrary(
 @Composable
 private fun EditBookSheet(
     book: LibraryBook,
+    editState: BookEditUiState,
     onDismiss: () -> Unit,
-    onSave: (String, ReadingStatus) -> Unit,
+    onClearErrors: () -> Unit,
+    onSave: (BookEditDraft) -> Unit,
 ) {
+    var title by rememberSaveable(book.copyId) { mutableStateOf(book.title) }
+    var primaryAuthor by rememberSaveable(book.copyId) { mutableStateOf(book.primaryAuthor) }
+    var publisher by rememberSaveable(book.copyId) { mutableStateOf(book.publisher.orEmpty()) }
+    var publishedYear by rememberSaveable(book.copyId) {
+        mutableStateOf(book.publishedYear?.toString().orEmpty())
+    }
+    var ndcCode by rememberSaveable(book.copyId) { mutableStateOf(book.ndcCode.orEmpty()) }
+    var ndcEdition by rememberSaveable(book.copyId) { mutableStateOf(book.ndcEdition.orEmpty()) }
     var location by rememberSaveable(book.copyId) { mutableStateOf(book.location) }
     var status by remember(book.copyId) { mutableStateOf(book.readingStatus) }
+    val saving = editState is BookEditUiState.Saving && editState.copyId == book.copyId
+    val errors = (editState as? BookEditUiState.Invalid)
+        ?.takeIf { it.copyId == book.copyId }
+        ?.errors
+        .orEmpty()
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
+
+    fun reset() {
+        title = book.title
+        primaryAuthor = book.primaryAuthor
+        publisher = book.publisher.orEmpty()
+        publishedYear = book.publishedYear?.toString().orEmpty()
+        ndcCode = book.ndcCode.orEmpty()
+        ndcEdition = book.ndcEdition.orEmpty()
+        location = book.location
+        status = book.readingStatus
+        onClearErrors()
+    }
+
+    ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = book.title,
+                text = stringResource(R.string.book_edit_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = book.isbn13,
+                text = stringResource(R.string.book_edit_isbn, book.isbn13),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(20.dp))
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_book_title)) },
+                isError = error(BookEditField.TITLE) != null,
+                supportingText = error(BookEditField.TITLE)?.let { message -> { Text(message) } },
+                enabled = !saving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = primaryAuthor,
+                onValueChange = { primaryAuthor = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_author)) },
+                isError = error(BookEditField.PRIMARY_AUTHOR) != null,
+                supportingText = error(BookEditField.PRIMARY_AUTHOR)?.let { message ->
+                    { Text(message) }
+                },
+                enabled = !saving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = publisher,
+                onValueChange = { publisher = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_publisher)) },
+                isError = error(BookEditField.PUBLISHER) != null,
+                supportingText = error(BookEditField.PUBLISHER)?.let { message -> { Text(message) } },
+                enabled = !saving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = publishedYear,
+                onValueChange = { publishedYear = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_published_year)) },
+                isError = error(BookEditField.PUBLISHED_YEAR) != null,
+                supportingText = error(BookEditField.PUBLISHED_YEAR)?.let { message ->
+                    { Text(message) }
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = !saving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = ndcCode,
+                onValueChange = { ndcCode = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_ndc_code)) },
+                isError = error(BookEditField.NDC_CODE) != null,
+                supportingText = error(BookEditField.NDC_CODE)?.let { message -> { Text(message) } },
+                enabled = !saving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = ndcEdition,
+                onValueChange = { ndcEdition = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.book_edit_ndc_edition)) },
+                isError = error(BookEditField.NDC_EDITION) != null,
+                supportingText = error(BookEditField.NDC_EDITION)?.let { message ->
+                    { Text(message) }
+                },
+                enabled = !saving,
+                singleLine = true,
+            )
+            Text(
+                text = stringResource(
+                    R.string.book_edit_classification_source,
+                    book.classificationSource.name,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = location,
                 onValueChange = { location = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("置き場所") },
-                placeholder = { Text("例: 書斎・本棚A・2段目") },
-                leadingIcon = {
-                    Icon(Icons.Rounded.LocationOn, contentDescription = null)
-                },
+                label = { Text(stringResource(R.string.book_edit_location)) },
+                placeholder = { Text(stringResource(R.string.book_edit_location_example)) },
+                leadingIcon = { Icon(Icons.Rounded.LocationOn, contentDescription = null) },
+                isError = error(BookEditField.LOCATION) != null,
+                supportingText = error(BookEditField.LOCATION)?.let { message -> { Text(message) } },
+                enabled = !saving,
                 singleLine = true,
             )
-            Spacer(Modifier.height(18.dp))
             Text(
-                text = "読書状態",
+                text = stringResource(R.string.book_edit_reading_status),
                 style = MaterialTheme.typography.labelLarge,
             )
-            Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -722,15 +842,40 @@ private fun EditBookSheet(
                         selected = status == candidate,
                         onClick = { status = candidate },
                         label = { Text(candidate.label) },
+                        enabled = !saving,
                     )
                 }
             }
-            Spacer(Modifier.height(22.dp))
-            Button(
-                onClick = { onSave(location, status) },
-                modifier = Modifier.fillMaxWidth(),
+            TextButton(
+                onClick = ::reset,
+                enabled = !saving,
+                modifier = Modifier.align(Alignment.End),
             ) {
-                Text("保存")
+                Text(stringResource(R.string.book_edit_reset))
+            }
+            Button(
+                onClick = {
+                    onSave(
+                        BookEditDraft(
+                            title = title,
+                            primaryAuthor = primaryAuthor,
+                            publisher = publisher,
+                            publishedYear = publishedYear,
+                            ndcCode = ndcCode,
+                            ndcEdition = ndcEdition,
+                            location = location,
+                            readingStatus = status,
+                        ),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !saving,
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                } else {
+                    Text(stringResource(R.string.book_edit_save))
+                }
             }
         }
     }

@@ -36,4 +36,24 @@
     <string name="import_stale_reselect">蔵書が変更されたため、ファイルを選び直してください</string>
     <string name="import_stale_notice">蔵書が変更されたため、最新状態で再計算しました</string>
     <string name="import_success">追加%1$d件、更新%2$d件、スキップ%3$d件でインポートしました</string>
+    <string name="book_edit_title">本の詳細を編集</string>
+    <string name="book_edit_isbn">ISBN %1$s</string>
+    <string name="book_edit_book_title">タイトル</string>
+    <string name="book_edit_author">著者</string>
+    <string name="book_edit_publisher">出版社（任意）</string>
+    <string name="book_edit_published_year">出版年（任意）</string>
+    <string name="book_edit_ndc_code">NDCコード（任意）</string>
+    <string name="book_edit_ndc_edition">NDC版（任意）</string>
+    <string name="book_edit_classification_source">現在の分類由来: %1$s。NDCを変更するとMANUALになります。</string>
+    <string name="book_edit_location">置き場所</string>
+    <string name="book_edit_location_example">例: 書斎・本棚A・2段目</string>
+    <string name="book_edit_reading_status">読書状態</string>
+    <string name="book_edit_reset">入力を変更前に戻す</string>
+    <string name="book_edit_save">変更を保存</string>
+    <string name="book_edit_success">本の情報を更新しました</string>
+    <string name="book_edit_undo">元に戻す</string>
+    <string name="book_edit_undone">直前の変更を元に戻しました</string>
+    <string name="book_edit_not_found">対象の本が見つかりませんでした</string>
+    <string name="book_edit_failure">本の情報を保存できませんでした</string>
+    <string name="book_edit_undo_failure">他の変更があるため元に戻せませんでした</string>
 </resources>

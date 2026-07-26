@@ -9,11 +9,13 @@ import dev.ndcshelf.app.domain.importer.LibraryImportBatch
 import dev.ndcshelf.app.domain.importer.LibraryImportPlanner
 import dev.ndcshelf.app.domain.importer.LibraryImportPreview
 import dev.ndcshelf.app.domain.model.ClassificationSource
+import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -172,11 +174,13 @@ class MainViewModelImportTest {
         override suspend fun addFromIsbn(rawIsbn: String): AddBookResult =
             error("Not used")
 
-        override suspend fun updateCopy(
-            copyId: String,
-            location: String,
-            readingStatus: ReadingStatus,
-        ) = error("Not used")
+        override suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult =
+            error("Not used")
+
+        override suspend fun restoreBook(
+            previous: LibraryBook,
+            expectedCurrent: LibraryBook,
+        ): Boolean = error("Not used")
 
         override suspend fun previewImport(
             batch: LibraryImportBatch,
