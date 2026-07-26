@@ -74,6 +74,7 @@ fun ScanScreen(
     onCameraError: (String) -> Unit,
     onRetry: () -> Unit,
     onClearState: () -> Unit,
+    onAddDuplicateCopy: (String) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
@@ -177,6 +178,7 @@ fun ScanScreen(
                 state = scanState,
                 onRetry = onRetry,
                 onClear = onClearState,
+                onAddDuplicateCopy = onAddDuplicateCopy,
             )
         }
 
@@ -247,6 +249,7 @@ private fun ScanResultCard(
     state: ScanUiState,
     onRetry: () -> Unit,
     onClear: () -> Unit,
+    onAddDuplicateCopy: (String) -> Unit,
 ) {
     when (state) {
         ScanUiState.Idle -> {
@@ -299,6 +302,7 @@ private fun ScanResultCard(
         }
 
         is ScanUiState.Duplicate -> {
+            var copyLabel by rememberSaveable(state.isbn13) { mutableStateOf("") }
             ResultSurface {
                 Icon(
                     Icons.Rounded.Info,
@@ -306,11 +310,25 @@ private fun ScanResultCard(
                     tint = MaterialTheme.colorScheme.tertiary,
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("すでに持っています", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.scan_duplicate_owned, state.copyCount),
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Text(state.title, style = MaterialTheme.typography.bodyMedium)
-                }
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Rounded.Close, contentDescription = "閉じる")
+                    OutlinedTextField(
+                        value = copyLabel,
+                        onValueChange = { copyLabel = it.take(100) },
+                        label = { Text(stringResource(R.string.scan_duplicate_copy_label)) },
+                        singleLine = true,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onClear) {
+                            Text(stringResource(R.string.scan_duplicate_keep))
+                        }
+                        Button(onClick = { onAddDuplicateCopy(copyLabel) }) {
+                            Text(stringResource(R.string.scan_duplicate_add))
+                        }
+                    }
                 }
             }
         }

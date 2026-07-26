@@ -172,6 +172,7 @@ internal class DatabaseBackupCodec(
                     put("addedAt", JsonPrimitive(copy.addedAt))
                     putNullable("tierId", copy.tierId)
                     putNullable("shelfOrderKey", copy.shelfOrderKey)
+                    put("copyLabel", JsonPrimitive(copy.copyLabel))
                 })
             }
         })
@@ -245,6 +246,11 @@ internal class DatabaseBackupCodec(
                 addedAt = value.requiredLong("addedAt"),
                 tierId = value.optionalString("tierId"),
                 shelfOrderKey = value.optionalString("shelfOrderKey"),
+                copyLabel = if (schemaVersion < 5) {
+                    "所蔵本"
+                } else {
+                    value.requiredString("copyLabel")
+                },
             )
         }
         val rooms = payload.versionedArray("rooms", schemaVersion, 3).map { element ->
@@ -315,6 +321,14 @@ internal class DatabaseBackupCodec(
         ) {
             invalid("Invalid shelf order key")
         }
+        if (snapshot.copies.any { copy ->
+                copy.copyLabel.isBlank() ||
+                    copy.copyLabel.length > MAX_COPY_LABEL_LENGTH ||
+                    '\u0000' in copy.copyLabel
+            }
+        ) {
+            invalid("Invalid copy label")
+        }
         val strings = buildList {
             snapshot.works.forEach { add(it.id); add(it.title); add(it.primaryAuthor) }
             snapshot.editions.forEach {
@@ -330,6 +344,7 @@ internal class DatabaseBackupCodec(
                 add(it.readingStatus)
                 add(it.tierId.orEmpty())
                 add(it.shelfOrderKey.orEmpty())
+                add(it.copyLabel)
             }
             snapshot.rooms.forEach { add(it.id); add(it.name) }
             snapshot.shelves.forEach { add(it.id); add(it.roomId); add(it.name) }
@@ -432,8 +447,9 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 4
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 4
+        const val CURRENT_FORMAT_VERSION = 5
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 5
+        private const val MAX_COPY_LABEL_LENGTH = 100
         private const val FORMAT_ID = "ndc-shelf-room-backup"
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val PAYLOAD_ENTRY = "database.json"

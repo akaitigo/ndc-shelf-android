@@ -94,6 +94,7 @@ class AppDatabaseMigrationTest {
         assertEquals(emptyList<LocationRoomEntity>(), runBlocking { database.locationDao().getRooms() })
         assertEquals("READING", row.readingStatus)
         assertEquals(1_700_000_000_000L, row.addedAt)
+        assertEquals("所蔵本", row.copyLabel)
     }
 
     @Test
@@ -155,6 +156,39 @@ class AppDatabaseMigrationTest {
             assertEquals("旧位置", cursor.getString(0))
             assertEquals("tier-1", cursor.getString(1))
             assertEquals("0000000000000002636f70792d62", cursor.getString(2))
+        }
+        migrated.close()
+    }
+
+    @Test
+    fun version3CopiesReceiveDefaultLabelWithoutChangingExistingValues() {
+        migrationHelper.createDatabase(V3_DATABASE, 3).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '本A', '著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition-1', 'work-1', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-1', 'edition-1', 'PHYSICAL', '旧位置', 'READING', 42, NULL, NULL)",
+            )
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V3_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query(
+            "SELECT location, readingStatus, addedAt, copyLabel FROM owned_copies WHERE id = 'copy-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("旧位置", cursor.getString(0))
+            assertEquals("READING", cursor.getString(1))
+            assertEquals(42L, cursor.getLong(2))
+            assertEquals("所蔵本", cursor.getString(3))
         }
         migrated.close()
     }
@@ -234,6 +268,7 @@ class AppDatabaseMigrationTest {
     private companion object {
         const val V1_DATABASE = "migration-v1"
         const val V2_DATABASE = "migration-v2"
+        const val V3_DATABASE = "migration-v3"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

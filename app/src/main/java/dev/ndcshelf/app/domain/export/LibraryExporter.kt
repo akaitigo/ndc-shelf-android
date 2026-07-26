@@ -15,7 +15,7 @@ enum class LibraryExportFormat(
 }
 
 object LibraryExporter {
-    const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 2
     private val utf8Bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
     fun write(
@@ -70,6 +70,7 @@ object LibraryExporter {
             appendJsonField("mediaType", book.mediaType.name)
             appendJsonField("location", book.location)
             appendJsonField("readingStatus", book.readingStatus.name)
+            appendJsonField("copyLabel", book.copyLabel)
             append("      \"addedAt\": ").append(book.addedAt.toString()).append('\n')
             append("    }")
             if (index != books.lastIndex) append(',')
@@ -136,6 +137,7 @@ object LibraryExporter {
                     book.mediaType.name,
                     book.location,
                     book.readingStatus.name,
+                    book.copyLabel,
                     book.addedAt.toString(),
                 ).joinToString(",") { it.safeForSpreadsheet().csvCell() },
             )
@@ -168,6 +170,7 @@ object LibraryExporter {
         "mediaType",
         "location",
         "readingStatus",
+        "copyLabel",
         "addedAt",
     )
 }

@@ -226,6 +226,7 @@ class MainViewModel(
                 is AddBookResult.Duplicate -> ScanUiState.Duplicate(
                     isbn13 = result.book.isbn13,
                     title = result.book.title,
+                    copyCount = result.copyCount,
                 )
 
                 is AddBookResult.InvalidIsbn -> ScanUiState.Error(ScanFailure.INVALID_ISBN)
@@ -248,6 +249,35 @@ class MainViewModel(
         val isbn = (_scanState.value as? ScanUiState.Error)?.retryIsbn ?: return
         lastSubmission = null
         submitIsbn(isbn)
+    }
+
+    fun addDuplicateCopy(copyLabel: String) {
+        val duplicate = _scanState.value as? ScanUiState.Duplicate ?: return
+        _scanState.value = ScanUiState.Loading(duplicate.isbn13)
+        viewModelScope.launch {
+            _scanState.value = when (
+                val result = repository.addAnotherCopy(duplicate.isbn13, copyLabel)
+            ) {
+                is AddBookResult.Added -> ScanUiState.Added(
+                    isbn13 = result.book.isbn13,
+                    title = result.book.title,
+                )
+                is AddBookResult.Duplicate -> ScanUiState.Duplicate(
+                    result.book.isbn13,
+                    result.book.title,
+                    result.copyCount,
+                )
+                is AddBookResult.InvalidIsbn -> ScanUiState.Error(ScanFailure.INVALID_ISBN)
+                is AddBookResult.NotFound -> ScanUiState.Error(
+                    ScanFailure.NOT_FOUND,
+                    result.isbn13,
+                )
+                is AddBookResult.Failure -> ScanUiState.Error(
+                    failure = result.reason.toScanFailure(),
+                    isbn13 = result.isbn13,
+                )
+            }
+        }
     }
 
     fun reportCameraError(message: String) {
@@ -658,6 +688,7 @@ sealed interface ScanUiState {
     data class Duplicate(
         val isbn13: String,
         val title: String,
+        val copyCount: Int = 1,
     ) : ScanUiState
 
     data class Error(

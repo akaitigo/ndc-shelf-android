@@ -124,6 +124,7 @@ data class OwnedCopyEntity(
     val addedAt: Long,
     val tierId: String? = null,
     val shelfOrderKey: String? = null,
+    val copyLabel: String = "所蔵本",
 )
 
 data class LibraryBookRow(
@@ -145,6 +146,7 @@ data class LibraryBookRow(
     val readingStatus: String,
     val addedAt: Long,
     val shelfOrderKey: String?,
+    val copyLabel: String,
 )
 
 data class LocationTierCountRow(

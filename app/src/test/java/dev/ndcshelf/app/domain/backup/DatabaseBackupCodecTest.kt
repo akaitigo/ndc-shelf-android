@@ -90,11 +90,25 @@ class DatabaseBackupCodecTest {
         assertEquals("UNKNOWN", preview.snapshot.editions.single().classificationSource)
         assertEquals("PHYSICAL", preview.snapshot.copies.single().mediaType)
         assertEquals("UNREAD", preview.snapshot.copies.single().readingStatus)
+        assertEquals("所蔵本", preview.snapshot.copies.single().copyLabel)
     }
 
     @Test
     fun `snapshot with missing foreign key is rejected`() {
         val invalid = sampleSnapshot().copy(works = emptyList())
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.encode(invalid, "0.1.2", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `invalid copy label is rejected before backup or restore`() {
+        val invalid = sampleSnapshot().copy(
+            copies = sampleSnapshot().copies.map { it.copy(copyLabel = " ") },
+        )
 
         val error = assertThrows(BackupCodecException::class.java) {
             codec.encode(invalid, "0.1.2", 1)
@@ -142,6 +156,7 @@ class DatabaseBackupCodecTest {
                 addedAt = 1_700_000_000_000,
                 tierId = "tier-1",
                 shelfOrderKey = "7f0011223344556677",
+                copyLabel = "保存用",
             ),
         ),
         rooms = listOf(LocationRoomEntity("room-1", "書斎", 0)),
