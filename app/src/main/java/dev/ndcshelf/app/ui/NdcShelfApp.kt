@@ -15,6 +15,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
@@ -51,6 +53,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val books by viewModel.books.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val importState by viewModel.importState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
@@ -84,6 +87,37 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val csvExporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(LibraryExportFormat.CSV.mimeType),
     ) { uri -> saveExport(uri, LibraryExportFormat.CSV) }
+    val jsonImporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            val input = try {
+                context.contentResolver.openInputStream(uri)
+            } catch (_: Exception) {
+                null
+            }
+            if (input == null) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(resources.getString(R.string.import_open_failure))
+                }
+            } else {
+                viewModel.loadJsonImport(input)
+            }
+        }
+    }
+
+    LaunchedEffect(importState) {
+        val result = importState as? LibraryImportUiState.Success ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(
+            resources.getString(
+                R.string.import_success,
+                result.addedCount,
+                result.updatedCount,
+                result.skippedCount,
+            ),
+        )
+        viewModel.consumeImportSuccess()
+    }
 
     fun requestExport(format: LibraryExportFormat) {
         val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
@@ -119,6 +153,11 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 books = books,
                 onUpdateCopy = viewModel::updateCopy,
                 onExport = ::requestExport,
+                onImportJson = { jsonImporter.launch(arrayOf("application/json", "text/json")) },
+                importState = importState,
+                onSelectImportPolicy = viewModel::selectImportConflictPolicy,
+                onConfirmImport = viewModel::confirmImport,
+                onDismissImport = viewModel::dismissImport,
                 contentPadding = contentPadding,
             )
 

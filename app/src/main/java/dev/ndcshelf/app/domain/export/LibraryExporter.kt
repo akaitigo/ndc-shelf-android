@@ -15,7 +15,7 @@ enum class LibraryExportFormat(
 }
 
 object LibraryExporter {
-    private const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 1
     private val utf8Bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
     fun write(
