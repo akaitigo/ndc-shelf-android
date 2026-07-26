@@ -86,6 +86,8 @@ class RoomDatabaseBackupManager(
             check(verifiedBackup.snapshot == current) { "Rollback backup verification failed" }
             automaticBackupName = automaticBackup.name
 
+            dao.deleteAllScanAttempts()
+            dao.deleteAllScanSessions()
             dao.deleteAllCopies()
             dao.deleteAllWishlistItems()
             locationDao.deleteAllTiers()

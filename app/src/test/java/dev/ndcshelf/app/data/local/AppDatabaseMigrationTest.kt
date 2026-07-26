@@ -227,6 +227,35 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version5DataIsPreservedAndScanSessionTablesAreUsable() {
+        migrationHelper.createDatabase(V5_DATABASE, 5).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '本A', '著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition-1', 'work-1', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN')",
+            )
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V5_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.execSQL("INSERT INTO scan_sessions VALUES ('session-1', 10, NULL)")
+        migrated.execSQL(
+            "INSERT INTO scan_attempts VALUES " +
+                "('attempt-1', 'session-1', '9784101010014', 'DUPLICATE', NULL, NULL, 11, NULL)",
+        )
+        migrated.query("SELECT outcome FROM scan_attempts WHERE id = 'attempt-1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("DUPLICATE", cursor.getString(0))
+        }
+        migrated.close()
+    }
+
+    @Test
     fun malformedExistingSchema_isRejectedInsteadOfBeingDestructivelyRecreated() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(CORRUPT_DATABASE)
@@ -303,6 +332,7 @@ class AppDatabaseMigrationTest {
         const val V2_DATABASE = "migration-v2"
         const val V3_DATABASE = "migration-v3"
         const val V4_DATABASE = "migration-v4"
+        const val V5_DATABASE = "migration-v5"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

@@ -8,6 +8,8 @@ import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.ScanAttemptEntity
+import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
@@ -58,12 +60,27 @@ class RoomDatabaseBackupManagerTest {
         manager.createBackup(output)
         clear()
         insert(sampleSnapshot("replacement"))
+        database.libraryDao().insertScanSession(ScanSessionEntity("session", 1, null))
+        database.libraryDao().insertScanAttempt(
+            ScanAttemptEntity(
+                id = "attempt",
+                sessionId = "session",
+                isbn = "9784003101018",
+                outcome = "DUPLICATE",
+                copyId = null,
+                copySnapshot = null,
+                attemptedAt = 2,
+                undoneAt = null,
+            ),
+        )
         val inspected = manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
             as DatabaseBackupInspectResult.Valid
 
         val result = manager.restoreBackup(inspected.preview) as DatabaseRestoreResult.Success
 
         assertEquals(sampleSnapshot("original"), readSnapshot())
+        assertTrue(database.libraryDao().getAllScanSessions().isEmpty())
+        assertTrue(database.libraryDao().getAllScanAttempts().isEmpty())
         assertEquals(1, result.restoredCopyCount)
         assertTrue(File(backupDirectory, result.automaticBackupName).isFile)
     }

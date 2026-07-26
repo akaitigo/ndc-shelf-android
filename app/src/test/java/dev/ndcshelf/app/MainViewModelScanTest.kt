@@ -11,6 +11,7 @@ import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.repository.AddBookFailure
@@ -20,6 +21,7 @@ import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
+import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -92,6 +94,25 @@ class MainViewModelScanTest {
     }
 
     @Test
+    fun rapidRepeatedDetectionIsHandledOnlyOnce() = runTest(dispatcher) {
+        val repository = FakeRepository(
+            ArrayDeque(
+                listOf(
+                    AddBookResult.Added(book()),
+                    AddBookResult.Duplicate(book()),
+                ),
+            ),
+        )
+        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
+
+        viewModel.submitIsbn(ISBN)
+        viewModel.submitIsbn(ISBN)
+
+        assertEquals(1, repository.lookupCount)
+        assertEquals(ScanUiState.Added(ISBN, "題名"), viewModel.scanState.value)
+    }
+
+    @Test
     fun duplicateCanBeConfirmedOrAddedAsAnotherCopy() = runTest(dispatcher) {
         val existing = book()
         val repository = FakeRepository(
@@ -147,6 +168,23 @@ class MainViewModelScanTest {
         assertEquals(BookstoreUiState.Result(candidate), viewModel.bookstoreState.value)
     }
 
+    @Test
+    fun sessionStartedImmediatelyBeforeScanRecordsAttemptAndExposesUndoResult() = runTest(dispatcher) {
+        val added = AddBookResult.Added(book())
+        val repository = FakeRepository(ArrayDeque(listOf(added))).apply {
+            startSessionResult = "session-1"
+            undoResult = ScanUndoResult.Undone(1)
+        }
+        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
+
+        viewModel.startScanSession()
+        viewModel.submitIsbn(ISBN)
+
+        assertEquals(Triple("session-1", ISBN, added), repository.recordedAttempt)
+        viewModel.undoScanSession("session-1")
+        assertEquals(ScanSessionUiState.Undone(1), viewModel.scanSessionState.value)
+    }
+
     private class FakeRepository(
         private val results: ArrayDeque<AddBookResult>,
     ) : LibraryRepository {
@@ -158,8 +196,27 @@ class MainViewModelScanTest {
             BookstoreLookupResult.Failure(AddBookFailure.SAVE)
         var bookstoreChangeResult: BookstoreChangeResult = BookstoreChangeResult.Failure
         var requestedTransition: PurchaseTransition? = null
+        var startSessionResult: String? = null
+        var recordedAttempt: Triple<String, String, AddBookResult>? = null
+        var undoResult: ScanUndoResult = ScanUndoResult.Failure
+        private val sessions = MutableStateFlow(emptyList<ScanSession>())
 
         override fun observeLibrary(): Flow<List<LibraryBook>> = books
+
+        override fun observeScanSessions(): Flow<List<ScanSession>> = sessions
+
+        override suspend fun startScanSession(): String? = startSessionResult
+
+        override suspend fun recordScanAttempt(
+            sessionId: String,
+            rawIsbn: String,
+            result: AddBookResult,
+        ): Boolean {
+            recordedAttempt = Triple(sessionId, rawIsbn, result)
+            return true
+        }
+
+        override suspend fun undoScanSession(sessionId: String): ScanUndoResult = undoResult
 
         override suspend fun addFromIsbn(rawIsbn: String): AddBookResult {
             lookupCount += 1
