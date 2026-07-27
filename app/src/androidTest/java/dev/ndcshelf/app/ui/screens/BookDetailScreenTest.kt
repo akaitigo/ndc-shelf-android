@@ -37,6 +37,7 @@ class BookDetailScreenTest {
         )
         var editedCopyId: String? = null
         var managedWorkId: String? = null
+        var managedVariantWorkId: String? = null
         composeRule.setContent {
             NdcShelfTheme {
                 BookDetailScreen(
@@ -49,6 +50,7 @@ class BookDetailScreenTest {
                     onEditBibliography = {},
                     onReconcile = {},
                     onManageSeries = { managedWorkId = it },
+                    onManageVariants = { managedVariantWorkId = it },
                     contentPadding = PaddingValues(),
                 )
             }
@@ -65,6 +67,11 @@ class BookDetailScreenTest {
             .assertIsDisplayed()
             .performClick()
         assertEquals(first.workId, managedWorkId)
+        composeRule.onNodeWithText("版違いを管理")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        assertEquals(first.workId, managedVariantWorkId)
         composeRule.onNodeWithContentDescription(
             "保存用、場所 書庫、未読、紙。タップして編集",
         ).performScrollTo().performClick()

@@ -385,6 +385,41 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version9MigrationAddsEmptyUsableWorkGroupsWithoutChangingWorks() {
+        migrationHelper.createDatabase(V9_DATABASE, 9).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '単行本', '著者')")
+            execSQL("INSERT INTO book_works VALUES ('work-2', '文庫版', '著者')")
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V9_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query("SELECT id, title FROM book_works ORDER BY id").use { cursor ->
+            assertEquals(2, cursor.count)
+            assertTrue(cursor.moveToFirst())
+            assertEquals("単行本", cursor.getString(1))
+        }
+        migrated.execSQL("PRAGMA foreign_keys=ON")
+        migrated.execSQL("INSERT INTO work_groups VALUES ('group-1', '作品', '著者', 1, 1, 1)")
+        migrated.execSQL(
+            "INSERT INTO work_group_memberships VALUES " +
+                "('member-1', 'group-1', 'work-1', 1), ('member-2', 'group-1', 'work-2', 1)",
+        )
+        assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
+            migrated.execSQL(
+                "INSERT INTO work_group_memberships VALUES " +
+                    "('member-duplicate', 'group-1', 'work-1', 1)",
+            )
+        }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
+    @Test
     fun malformedExistingSchema_isRejectedInsteadOfBeingDestructivelyRecreated() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(CORRUPT_DATABASE)
@@ -465,6 +500,7 @@ class AppDatabaseMigrationTest {
         const val V6_DATABASE = "migration-v6"
         const val V7_DATABASE = "migration-v7"
         const val V8_DATABASE = "migration-v8"
+        const val V9_DATABASE = "migration-v9"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

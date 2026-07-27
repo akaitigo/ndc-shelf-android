@@ -14,6 +14,48 @@ data class BookWorkEntity(
 )
 
 @Entity(
+    tableName = "work_groups",
+    indices = [Index(value = ["title", "id"])],
+)
+data class WorkGroupEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val primaryAuthor: String,
+    val seriesSubstitutionEnabled: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "work_group_memberships",
+    foreignKeys = [
+        ForeignKey(
+            entity = WorkGroupEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["groupId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = BookWorkEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["workId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["groupId"]),
+        Index(value = ["workId"], unique = true),
+        Index(value = ["groupId", "workId"], unique = true),
+    ],
+)
+data class WorkGroupMembershipEntity(
+    @PrimaryKey val id: String,
+    val groupId: String,
+    val workId: String,
+    val createdAt: Long,
+)
+
+@Entity(
     tableName = "series",
     indices = [Index(value = ["name", "id"])],
 )

@@ -66,6 +66,7 @@ sequenceDiagram
 ```
 
 形式パーサーとUIは必ず共通インポート基盤を経由します。詳細な上限、競合方針、ロールバック条件は[IMPORT_SAFETY.md](IMPORT_SAFETY.md)を参照してください。
+通常のJSON / CSVインポートは作品グループを推測せず、新規Workを未所属のまま保存します。内部IDと確定済み作品グループを含む移行は、完全バックアップ形式v11以降だけを使用します。
 
 ## データ管理UI
 
@@ -82,6 +83,12 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻ラベルと種別は表示事実、fractional order keyは表示順として分離し、タイトルから暗黙に推測しません。`RoomSeriesRepository`はMembershipをEdition・Copy・Wishlistへ集約し、Composeへ所有・読了・購入予定状態をFlowで提供します。欠巻候補は確認済みMembershipのうち明示的な巻ラベルを持つ本編だけであり、番号の穴から未知の巻を生成しません。Room v8の外部キー・一意制約、複数所属、削除・統合・同期の判断は[シリーズモデル](SERIES_MODEL.md)と[ADR 0002](adr/0002-multiple-series-memberships.md)を参照してください。
 
 タイトル解析結果は`SeriesSuggestion`としてメモリ上だけに置き、画面表示や高信頼度を理由に自動保存しません。利用者が編集・確定した一冊または一括候補だけを単一Room transactionでMembershipへ変換し、Room v9の`origin`、`confirmedBy`、`sourceTitle`へ由来を保存します。表示後にWorkタイトルが変化した候補、重複所属、同名シリーズ作成はfail-closedで競合として扱います。
+
+## 版違いモデル
+
+単行本、文庫、新装版、電子版は既存の`BookWork`と`BookEdition`を変更せず、`WorkGroup`と`WorkGroupMembership`で可逆に関連付けます。タイトルと著者の正規化結果は候補表示だけに使い、自動保存しません。確定前に双方のISBN、出版社、出版年、NDC、表紙、媒体、所有冊数とシリーズへの影響を表示し、確定時に現在タイトルと所属を再検証します。
+
+1 Workは最大1 Groupに所属します。解除はMembershipだけを削除し、Work、Edition、OwnedCopy、WishlistItem、SeriesMembershipを変更しません。Groupが2件未満になれば残存MembershipとGroupを削除します。`seriesSubstitutionEnabled`を利用者が有効にしたGroupだけ、同じGroupの別Workに属する版をシリーズ充足へ含めます。詳細な判断は[ADR 0003](adr/0003-reversible-work-groups.md)を正本とします。
 
 ## 書籍詳細UI
 
@@ -100,6 +107,8 @@ WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻
 ```mermaid
 erDiagram
     BOOK_WORK ||--o{ BOOK_EDITION : has
+    WORK_GROUP ||--|{ WORK_GROUP_MEMBERSHIP : contains
+    BOOK_WORK ||--o| WORK_GROUP_MEMBERSHIP : grouped_as
     BOOK_EDITION ||--o{ OWNED_COPY : owned_as
     BOOK_EDITION ||--o| WISHLIST_ITEM : planned_as
     LOCATION_ROOM ||--o{ LOCATION_SHELF : contains
@@ -110,6 +119,16 @@ erDiagram
         string id PK
         string title
         string primaryAuthor
+    }
+    WORK_GROUP {
+        string id PK
+        string title
+        boolean seriesSubstitutionEnabled
+    }
+    WORK_GROUP_MEMBERSHIP {
+        string id PK
+        string groupId FK
+        string workId UK_FK
     }
     BOOK_EDITION {
         string id PK
@@ -176,7 +195,7 @@ erDiagram
 
 書店モードのISBN照会は、RoomにあるEdition、所有冊数、購入候補をネットワークより先に検索します。保存済みISBNはオフラインでも状態を表示し、端末内にないISBNだけNDL Searchへ送信します。最後のOwnedCopyを削除しても同じEditionの`WishlistItem`が残る場合は、EditionとWorkを削除してはいけません。蔵書インポートで同じISBNが追加された場合は既存Editionを再利用し、購入済みへの遷移として候補を削除します。
 
-連続スキャンは`ScanSession`と`ScanAttempt`へセッション時刻、ISBN、結果、追加copyIdだけを保存し、書誌情報を複製しません。追加時の`OwnedCopy`全項目はSHA-256化して保持し、個別・一括取り消し時に現在値と一致したコピーだけを削除します。一括操作は1件でも不一致なら全体をロールバックします。履歴は直近20セッションに制限し、操作履歴であるためファイルバックアップには含めず、復元時に消去します。
+連続スキャンは`ScanSession`と`ScanAttempt`へセッション時刻、ISBN、結果、追加copyIdだけを保存し、書誌情報を複製しません。追加時の`OwnedCopy`全項目はSHA-256化して保持し、個別・一括取り消し時に現在値と一致したコピーだけを削除します。一括操作は1件でも不一致なら全体をロールバックします。履歴は直近20セッションに制限し、完全バックアップ形式v10以降ではセッションと試行を欠落なく退避・復元します。
 
 ### 置き場所
 

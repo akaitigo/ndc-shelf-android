@@ -9,6 +9,8 @@ import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
+import dev.ndcshelf.app.data.local.WorkGroupEntity
+import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupFailure
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
@@ -98,8 +100,8 @@ class RoomDatabaseBackupManagerIntegrationTest {
         )
         val preview = DatabaseBackupPreview(
             metadata = DatabaseBackupMetadata(
-                formatVersion = 10,
-                databaseVersion = 9,
+                formatVersion = 11,
+                databaseVersion = 10,
                 createdAt = 1,
                 appVersion = "test",
                 workCount = 0,
@@ -157,6 +159,8 @@ class RoomDatabaseBackupManagerIntegrationTest {
     private suspend fun insert(snapshot: DatabaseSnapshot) {
         val dao = database.libraryDao()
         dao.upsertWorks(snapshot.works)
+        database.workGroupDao().upsertGroups(snapshot.workGroups)
+        database.workGroupDao().upsertMemberships(snapshot.workGroupMemberships)
         dao.upsertEditions(snapshot.editions)
         dao.upsertCopies(snapshot.copies)
         dao.upsertScanSessions(snapshot.scanSessions)
@@ -168,6 +172,8 @@ class RoomDatabaseBackupManagerIntegrationTest {
         dao.deleteAllScanAttempts()
         dao.deleteAllScanSessions()
         dao.deleteAllCopies()
+        database.workGroupDao().deleteAllMemberships()
+        database.workGroupDao().deleteAllGroups()
         dao.deleteAllEditions()
         dao.deleteAllWorks()
     }
@@ -180,11 +186,16 @@ class RoomDatabaseBackupManagerIntegrationTest {
             copies = dao.getAllCopies(),
             scanSessions = dao.getAllScanSessions(),
             scanAttempts = dao.getAllScanAttempts(),
+            workGroups = database.workGroupDao().getAllGroups(),
+            workGroupMemberships = database.workGroupDao().getAllMemberships(),
         )
     }
 
     private fun snapshot(prefix: String, outcome: String) = DatabaseSnapshot(
-        works = listOf(BookWorkEntity("$prefix-work", "$prefix-title", "$prefix-author")),
+        works = listOf(
+            BookWorkEntity("$prefix-work", "$prefix-title", "$prefix-author"),
+            BookWorkEntity("$prefix-work-alt", "$prefix-title 文庫版", "$prefix-author"),
+        ),
         editions = listOf(
             BookEditionEntity(
                 id = "$prefix-edition",
@@ -219,6 +230,18 @@ class RoomDatabaseBackupManagerIntegrationTest {
                 copySnapshot = null,
                 attemptedAt = 20,
                 undoneAt = null,
+            ),
+        ),
+        workGroups = listOf(
+            WorkGroupEntity("$prefix-group", "$prefix-title", "$prefix-author", true, 1, 2),
+        ),
+        workGroupMemberships = listOf(
+            WorkGroupMembershipEntity("$prefix-group-member-a", "$prefix-group", "$prefix-work", 1),
+            WorkGroupMembershipEntity(
+                "$prefix-group-member-b",
+                "$prefix-group",
+                "$prefix-work-alt",
+                1,
             ),
         ),
     )

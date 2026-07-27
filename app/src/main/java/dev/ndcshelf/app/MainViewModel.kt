@@ -42,6 +42,7 @@ import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.SeriesOverview
 import dev.ndcshelf.app.domain.model.SeriesSuggestion
+import dev.ndcshelf.app.domain.model.WorkVariantEditor
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
@@ -62,6 +63,8 @@ import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
+import dev.ndcshelf.app.domain.repository.WorkGroupMutationResult
+import dev.ndcshelf.app.domain.repository.WorkGroupRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +97,7 @@ class MainViewModel(
     private val librarySearchSettings: LibrarySearchSettingsStore =
         InMemoryLibrarySearchSettingsStore,
     private val seriesRepository: SeriesRepository? = null,
+    private val workGroupRepository: WorkGroupRepository? = null,
 ) : ViewModel() {
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
@@ -141,6 +145,8 @@ class MainViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val _seriesEditorState = MutableStateFlow<SeriesEditorUiState>(SeriesEditorUiState.Idle)
     val seriesEditorState: StateFlow<SeriesEditorUiState> = _seriesEditorState.asStateFlow()
+    private val _workVariantState = MutableStateFlow<WorkVariantUiState>(WorkVariantUiState.Idle)
+    val workVariantState: StateFlow<WorkVariantUiState> = _workVariantState.asStateFlow()
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
@@ -184,6 +190,85 @@ class MainViewModel(
     private var databaseBackupJob: Job? = null
     private var exportJob: Job? = null
     private var seriesJob: Job? = null
+    private var workVariantJob: Job? = null
+    private var activeWorkVariantId: String? = null
+
+    fun prepareWorkVariantEditor(workId: String) {
+        val source = workGroupRepository ?: return
+        activeWorkVariantId = workId
+        workVariantJob?.cancel()
+        workVariantJob = viewModelScope.launch {
+            _workVariantState.value = WorkVariantUiState.Loading
+            _workVariantState.value = source.editorFor(workId)
+                ?.let(WorkVariantUiState::Ready)
+                ?: WorkVariantUiState.Error
+        }
+    }
+
+    fun linkWorkVariant(targetWorkId: String, enableSeriesSubstitution: Boolean) {
+        val source = workGroupRepository ?: return
+        val editor = (_workVariantState.value as? WorkVariantUiState.Ready)?.editor ?: return
+        val target = editor.suggestions.firstOrNull { it.work.workId == targetWorkId }?.work ?: return
+        workVariantJob?.cancel()
+        workVariantJob = viewModelScope.launch {
+            _workVariantState.value = WorkVariantUiState.Saving
+            when (
+                source.link(
+                    sourceWorkId = editor.source.workId,
+                    targetWorkId = target.workId,
+                    expectedSourceTitle = editor.source.title,
+                    expectedTargetTitle = target.title,
+                    seriesSubstitutionEnabled = enableSeriesSubstitution,
+                )
+            ) {
+                is WorkGroupMutationResult.Linked -> reloadWorkVariantEditor(source)
+                WorkGroupMutationResult.Conflict -> _workVariantState.value = WorkVariantUiState.Conflict
+                WorkGroupMutationResult.Invalid -> _workVariantState.value = WorkVariantUiState.Invalid
+                else -> _workVariantState.value = WorkVariantUiState.Error
+            }
+        }
+    }
+
+    fun unlinkWorkVariant(membershipId: String) {
+        val source = workGroupRepository ?: return
+        workVariantJob?.cancel()
+        workVariantJob = viewModelScope.launch {
+            _workVariantState.value = WorkVariantUiState.Saving
+            when (source.unlink(membershipId)) {
+                WorkGroupMutationResult.Unlinked -> reloadWorkVariantEditor(source)
+                WorkGroupMutationResult.Conflict -> _workVariantState.value = WorkVariantUiState.Conflict
+                WorkGroupMutationResult.Invalid -> _workVariantState.value = WorkVariantUiState.Invalid
+                else -> _workVariantState.value = WorkVariantUiState.Error
+            }
+        }
+    }
+
+    fun setWorkVariantSeriesSubstitution(groupId: String, enabled: Boolean) {
+        val source = workGroupRepository ?: return
+        workVariantJob?.cancel()
+        workVariantJob = viewModelScope.launch {
+            _workVariantState.value = WorkVariantUiState.Saving
+            when (source.setSeriesSubstitution(groupId, enabled)) {
+                WorkGroupMutationResult.Updated -> reloadWorkVariantEditor(source)
+                WorkGroupMutationResult.Conflict -> _workVariantState.value = WorkVariantUiState.Conflict
+                WorkGroupMutationResult.Invalid -> _workVariantState.value = WorkVariantUiState.Invalid
+                else -> _workVariantState.value = WorkVariantUiState.Error
+            }
+        }
+    }
+
+    fun clearWorkVariantState() {
+        workVariantJob?.cancel()
+        activeWorkVariantId = null
+        _workVariantState.value = WorkVariantUiState.Idle
+    }
+
+    private suspend fun reloadWorkVariantEditor(source: WorkGroupRepository) {
+        val workId = activeWorkVariantId
+        _workVariantState.value = workId?.let { source.editorFor(it) }
+            ?.let(WorkVariantUiState::Ready)
+            ?: WorkVariantUiState.Error
+    }
 
     fun prepareSeriesEditor(workId: String) {
         val source = seriesRepository ?: return
@@ -983,6 +1068,7 @@ class MainViewModel(
             locationRepository: LocationRepository,
             librarySearchSettings: LibrarySearchSettingsStore = InMemoryLibrarySearchSettingsStore,
             seriesRepository: SeriesRepository? = null,
+            workGroupRepository: WorkGroupRepository? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -994,6 +1080,7 @@ class MainViewModel(
                         locationRepository = locationRepository,
                         librarySearchSettings = librarySearchSettings,
                         seriesRepository = seriesRepository,
+                        workGroupRepository = workGroupRepository,
                     ) as T
                 }
             }
@@ -1015,6 +1102,16 @@ sealed interface SeriesEditorUiState {
     data object Conflict : SeriesEditorUiState
     data object Invalid : SeriesEditorUiState
     data object Error : SeriesEditorUiState
+}
+
+sealed interface WorkVariantUiState {
+    data object Idle : WorkVariantUiState
+    data object Loading : WorkVariantUiState
+    data class Ready(val editor: WorkVariantEditor) : WorkVariantUiState
+    data object Saving : WorkVariantUiState
+    data object Conflict : WorkVariantUiState
+    data object Invalid : WorkVariantUiState
+    data object Error : WorkVariantUiState
 }
 
 sealed interface LocationMutationUiState {
