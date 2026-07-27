@@ -140,7 +140,7 @@ SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLと�
 - [ ] バックアップ同期（任意・オプトイン）
 - [ ] AI司書（任意・オプトイン）
 
-詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。
+詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。将来の任意同期は、実装前に固定した[公開protocol](docs/SYNC_PROTOCOL.md)と[脅威モデル](docs/SYNC_THREAT_MODEL.md)に従います。
 
 ## コントリビューション
 
