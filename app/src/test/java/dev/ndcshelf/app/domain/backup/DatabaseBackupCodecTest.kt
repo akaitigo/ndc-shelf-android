@@ -136,13 +136,13 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":9", "\"schemaVersion\":7")
+            .replace("\"schemaVersion\":10", "\"schemaVersion\":7")
             .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":9", "\"formatVersion\":7")
+            .replace("\"formatVersion\":10", "\"formatVersion\":7")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
 
@@ -160,14 +160,14 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":9", "\"schemaVersion\":8")
+            .replace("\"schemaVersion\":10", "\"schemaVersion\":8")
             .replace(",\"series\":[]", "")
             .replace(",\"seriesMemberships\":[]", "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":9", "\"formatVersion\":8")
+            .replace("\"formatVersion\":10", "\"formatVersion\":8")
             .replace(",\"seriesCount\":0,\"seriesMembershipCount\":0", "")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
@@ -243,6 +243,41 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `format nine membership is restored as user confirmed manual data`() {
+        val payload = """
+            {
+              "schemaVersion":9,
+              "works":[{"id":"work-1","title":"作品 上巻","primaryAuthor":"著者"}],
+              "editions":[],"copies":[],"rooms":[],"shelves":[],"tiers":[],
+              "wishlistItems":[],
+              "series":[{"id":"series-1","name":"作品","createdAt":1,"updatedAt":2}],
+              "seriesMemberships":[{
+                "id":"member-1","seriesId":"series-1","workId":"work-1",
+                "sortOrderKey":"80","volumeLabel":"上巻","type":"MAIN_STORY",
+                "createdAt":1,"updatedAt":2
+              }]
+            }
+        """.trimIndent().encodeToByteArray()
+        val manifest = """
+            {
+              "format":"ndc-shelf-room-backup","formatVersion":9,"databaseVersion":8,
+              "createdAt":1,"appVersion":"0.4.0","payloadSha256":"${payload.sha256()}",
+              "workCount":1,"editionCount":0,"copyCount":0,"wishlistCount":0,
+              "seriesCount":1,"seriesMembershipCount":1
+            }
+        """.trimIndent().encodeToByteArray()
+
+        val preview = DatabaseBackupCodec(currentDatabaseVersion = 9).decode(
+            ByteArrayInputStream(zip(mapOf("manifest.json" to manifest, "database.json" to payload))),
+        )
+
+        val membership = preview.snapshot.seriesMemberships.single()
+        assertEquals("MANUAL", membership.origin)
+        assertEquals("USER", membership.confirmedBy)
+        assertEquals("", membership.sourceTitle)
+    }
+
+    @Test
     fun `snapshot with missing foreign key is rejected`() {
         val invalid = sampleSnapshot().copy(works = emptyList())
 
@@ -273,6 +308,20 @@ class DatabaseBackupCodecTest {
             seriesMemberships = sample.seriesMemberships.map {
                 it.copy(type = "UNKNOWN", sortOrderKey = "not-hex")
             },
+        )
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.encode(invalid, "0.4.0", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `unknown membership provenance is rejected before backup`() {
+        val sample = sampleSnapshot()
+        val invalid = sample.copy(
+            seriesMemberships = sample.seriesMemberships.map { it.copy(origin = "AUTOMATIC") },
         )
 
         val error = assertThrows(BackupCodecException::class.java) {
@@ -377,6 +426,9 @@ class DatabaseBackupCodecTest {
                 type = "MAIN_STORY",
                 createdAt = 1,
                 updatedAt = 2,
+                origin = "TITLE_SUGGESTION",
+                confirmedBy = "USER",
+                sourceTitle = "吾輩シリーズ 上巻",
             ),
         ),
     )

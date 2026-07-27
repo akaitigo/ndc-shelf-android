@@ -48,6 +48,7 @@ import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.LibraryExportUiState
 import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.MainViewModel
+import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.ui.screens.InsightsScreen
@@ -55,6 +56,7 @@ import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.SeriesScreen
+import dev.ndcshelf.app.ui.screens.SeriesSuggestionScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -88,9 +90,22 @@ fun NdcShelfApp(
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
     val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
+    val seriesSuggestions by viewModel.seriesSuggestions.collectAsStateWithLifecycle()
+    val seriesEditorState by viewModel.seriesEditorState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
     var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
+    var showSeriesEditor by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(seriesEditorState) {
+        if (seriesEditorState === SeriesEditorUiState.Removed) {
+            snackbarHostState.showSnackbar(resources.getString(R.string.series_membership_removed))
+            viewModel.clearSeriesEditorState()
+        } else if (seriesEditorState === SeriesEditorUiState.Error && !showSeriesEditor) {
+            snackbarHostState.showSnackbar(resources.getString(R.string.series_membership_remove_error))
+            viewModel.clearSeriesEditorState()
+        }
+    }
 
     LaunchedEffect(requestedEditionId) {
         if (requestedEditionId != null) {
@@ -417,6 +432,11 @@ fun NdcShelfApp(
                     onPreviewManualReconciliation = viewModel::previewManualReconciliation,
                     onConfirmManualReconciliation = viewModel::confirmManualReconciliation,
                     onClearManualReconciliation = viewModel::clearManualReconciliationState,
+                    onManageSeries = { workId ->
+                        viewModel.prepareSeriesEditor(workId)
+                        showSeriesEditor = true
+                        selected = AppDestination.SERIES
+                    },
                     contentPadding = contentPadding,
                 )
             }
@@ -449,21 +469,46 @@ fun NdcShelfApp(
                 bookstoreRequestKey = bookstoreRequestKey,
             )
 
-            AppDestination.SERIES -> SeriesScreen(
-                series = seriesCatalog,
-                selectedSeriesId = selectedSeriesId,
-                onSelectSeries = { selectedSeriesId = it },
-                onOpenEdition = { editionId ->
-                    viewModel.selectLibraryEdition(editionId)
-                    selected = AppDestination.LIBRARY
-                },
-                onOpenBookstore = { isbn ->
-                    bookstoreRequestKey += 1
-                    viewModel.lookupBookstore(isbn)
-                    selected = AppDestination.SCAN
-                },
-                contentPadding = contentPadding,
-            )
+            AppDestination.SERIES -> if (showSeriesEditor) {
+                SeriesSuggestionScreen(
+                    suggestions = seriesSuggestions,
+                    catalog = seriesCatalog,
+                    focusedSuggestion = (seriesEditorState as? SeriesEditorUiState.Ready)?.suggestion,
+                    state = seriesEditorState,
+                    onConfirm = viewModel::confirmSeries,
+                    onBack = {
+                        showSeriesEditor = false
+                        viewModel.clearSeriesEditorState()
+                    },
+                    onSaved = { seriesId ->
+                        selectedSeriesId = seriesId
+                        showSeriesEditor = false
+                    },
+                    onClearState = viewModel::clearSeriesEditorState,
+                    contentPadding = contentPadding,
+                )
+            } else {
+                SeriesScreen(
+                    series = seriesCatalog,
+                    selectedSeriesId = selectedSeriesId,
+                    onSelectSeries = { selectedSeriesId = it },
+                    onOpenEdition = { editionId ->
+                        viewModel.selectLibraryEdition(editionId)
+                        selected = AppDestination.LIBRARY
+                    },
+                    onOpenBookstore = { isbn ->
+                        bookstoreRequestKey += 1
+                        viewModel.lookupBookstore(isbn)
+                        selected = AppDestination.SCAN
+                    },
+                    onManageSuggestions = {
+                        viewModel.clearSeriesEditorState()
+                        showSeriesEditor = true
+                    },
+                    onRemoveMembership = viewModel::removeSeriesMembership,
+                    contentPadding = contentPadding,
+                )
+            }
 
             AppDestination.INSIGHTS -> {
                 val books by viewModel.books.collectAsStateWithLifecycle()

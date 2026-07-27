@@ -11,6 +11,11 @@ import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.domain.model.SeriesVolumeState
+import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
+import dev.ndcshelf.app.domain.model.SeriesMembershipType
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -113,6 +118,91 @@ class RoomSeriesRepositoryIntegrationTest {
         assertEquals(SeriesVolumeState.WANTED, sideStory.state)
         assertFalse(sideStory.isMissingCandidate)
         assertNull(sideStory.ownedEditionId)
+    }
+
+    @Test
+    fun suggestionsRemainTransientUntilBatchConfirmationAndRemovalPreservesBooks() = runBlocking {
+        database.libraryDao().upsertWorks(
+            listOf(
+                BookWorkEntity("work-1", "年代記 1巻", "著者"),
+                BookWorkEntity("work-2", "年代記 2巻", "著者"),
+                BookWorkEntity("manual", "名前に巻がない本", "著者"),
+            ),
+        )
+        val ids = ArrayDeque(listOf("series-new", "membership-1", "membership-2"))
+        val repository = RoomSeriesRepository(database, idFactory = { ids.removeFirst() }, nowMillis = { 50 })
+
+        val suggestions = repository.observeSuggestions().first()
+        assertEquals(listOf("work-1", "work-2"), suggestions.map { it.workId })
+        assertTrue(database.seriesDao().getAllSeries().isEmpty())
+        assertTrue(database.seriesDao().getAllMemberships().isEmpty())
+
+        val result = repository.confirm(
+            SeriesConfirmationTarget.New("年代記"),
+            suggestions.map { suggestion ->
+                SeriesConfirmationDraft(
+                    workId = suggestion.workId,
+                    volumeLabel = suggestion.proposedVolumeLabel,
+                    type = suggestion.proposedType,
+                    sourceTitle = suggestion.sourceTitle,
+                    origin = SeriesMembershipOrigin.TITLE_SUGGESTION,
+                )
+            },
+        )
+
+        assertEquals(
+            SeriesConfirmationResult.Confirmed(
+                "series-new",
+                listOf("membership-1", "membership-2"),
+            ),
+            result,
+        )
+        val memberships = database.seriesDao().getAllMemberships().sortedBy { it.sortOrderKey }
+        assertEquals(listOf("1巻", "2巻"), memberships.map { it.volumeLabel })
+        assertTrue(memberships[0].sortOrderKey < memberships[1].sortOrderKey)
+        assertTrue(memberships.all { it.origin == "TITLE_SUGGESTION" && it.confirmedBy == "USER" })
+        assertEquals(listOf("年代記 1巻", "年代記 2巻"), memberships.map { it.sourceTitle })
+        assertEquals(emptyList<String>(), repository.observeSuggestions().first().map { it.workId })
+
+        assertTrue(repository.removeMembership("membership-1"))
+        assertEquals(3, database.libraryDao().getAllWorks().size)
+        assertEquals(listOf("membership-2"), database.seriesDao().getAllMemberships().map { it.id })
+
+        val manual = requireNotNull(repository.suggestionFor("manual"))
+        assertEquals("巻番号なし", manual.proposedVolumeLabel)
+        assertEquals(SeriesMembershipType.OTHER, manual.proposedType)
+    }
+
+    @Test
+    fun existingSeriesCanBeSelectedButDuplicateNameAndStaleTitleFailClosed() = runBlocking {
+        database.libraryDao().upsertWorks(listOf(BookWorkEntity("work", "作品 1巻", "著者")))
+        database.seriesDao().upsertSeries(SeriesEntity("existing", "作品", 1, 1))
+        val repository = RoomSeriesRepository(database, idFactory = { "generated" }, nowMillis = { 2 })
+        val draft = SeriesConfirmationDraft(
+            workId = "work",
+            volumeLabel = "1巻",
+            type = SeriesMembershipType.MAIN_STORY,
+            sourceTitle = "古い題名 1巻",
+            origin = SeriesMembershipOrigin.TITLE_SUGGESTION,
+        )
+
+        assertEquals(
+            SeriesConfirmationResult.Conflict,
+            repository.confirm(SeriesConfirmationTarget.Existing("existing"), listOf(draft)),
+        )
+        assertEquals(
+            SeriesConfirmationResult.Conflict,
+            repository.confirm(SeriesConfirmationTarget.New("別シリーズ"), listOf(draft)),
+        )
+        assertEquals(
+            SeriesConfirmationResult.Conflict,
+            repository.confirm(
+                SeriesConfirmationTarget.New("作品"),
+                listOf(draft.copy(sourceTitle = "作品 1巻")),
+            ),
+        )
+        assertTrue(database.seriesDao().getAllMemberships().isEmpty())
+        assertEquals(listOf("existing"), database.seriesDao().getAllSeries().map { it.id })
     }
 
     private fun membership(
