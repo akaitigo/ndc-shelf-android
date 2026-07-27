@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Analytics
+import androidx.compose.material.icons.rounded.CollectionsBookmark
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Storage
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,6 +54,7 @@ import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
+import dev.ndcshelf.app.ui.screens.SeriesScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -84,7 +87,10 @@ fun NdcShelfApp(
     val locationMutationState by viewModel.locationMutationState.collectAsStateWithLifecycle()
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
+    val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
+    var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
+    var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(requestedEditionId) {
         if (requestedEditionId != null) {
@@ -440,6 +446,23 @@ fun NdcShelfApp(
                 onUndoScanAttempt = viewModel::undoScanAttempt,
                 onUndoScanSession = viewModel::undoScanSession,
                 contentPadding = contentPadding,
+                bookstoreRequestKey = bookstoreRequestKey,
+            )
+
+            AppDestination.SERIES -> SeriesScreen(
+                series = seriesCatalog,
+                selectedSeriesId = selectedSeriesId,
+                onSelectSeries = { selectedSeriesId = it },
+                onOpenEdition = { editionId ->
+                    viewModel.selectLibraryEdition(editionId)
+                    selected = AppDestination.LIBRARY
+                },
+                onOpenBookstore = { isbn ->
+                    bookstoreRequestKey += 1
+                    viewModel.lookupBookstore(isbn)
+                    selected = AppDestination.SCAN
+                },
+                contentPadding = contentPadding,
             )
 
             AppDestination.INSIGHTS -> {
@@ -491,6 +514,7 @@ private enum class AppDestination(
 ) {
     LIBRARY(R.string.navigation_library, Icons.AutoMirrored.Rounded.LibraryBooks),
     SCAN(R.string.navigation_scan, Icons.Rounded.QrCodeScanner),
+    SERIES(R.string.navigation_series, Icons.Rounded.CollectionsBookmark),
     INSIGHTS(R.string.navigation_insights, Icons.Rounded.Analytics),
     DATA(R.string.navigation_data, Icons.Rounded.Storage),
     INFO(R.string.navigation_info, Icons.Rounded.Info),

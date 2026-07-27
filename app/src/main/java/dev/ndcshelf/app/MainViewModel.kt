@@ -40,6 +40,7 @@ import dev.ndcshelf.app.domain.model.MAX_LIBRARY_QUERY_LENGTH
 import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanSession
+import dev.ndcshelf.app.domain.model.SeriesOverview
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
@@ -55,6 +56,7 @@ import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
+import dev.ndcshelf.app.domain.repository.SeriesRepository
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -87,6 +89,7 @@ class MainViewModel(
     private val locationRepository: LocationRepository? = null,
     private val librarySearchSettings: LibrarySearchSettingsStore =
         InMemoryLibrarySearchSettingsStore,
+    private val seriesRepository: SeriesRepository? = null,
 ) : ViewModel() {
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
@@ -126,6 +129,9 @@ class MainViewModel(
         )
     val locations: StateFlow<LocationTree> = (locationRepository?.observeTree() ?: flowOf(LocationTree()))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LocationTree())
+    val seriesCatalog: StateFlow<List<SeriesOverview>> =
+        (seriesRepository?.observeCatalog() ?: flowOf(emptyList()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
@@ -920,6 +926,7 @@ class MainViewModel(
             databaseBackupManager: DatabaseBackupManager,
             locationRepository: LocationRepository,
             librarySearchSettings: LibrarySearchSettingsStore = InMemoryLibrarySearchSettingsStore,
+            seriesRepository: SeriesRepository? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -930,6 +937,7 @@ class MainViewModel(
                         databaseBackupManager = databaseBackupManager,
                         locationRepository = locationRepository,
                         librarySearchSettings = librarySearchSettings,
+                        seriesRepository = seriesRepository,
                     ) as T
                 }
             }
