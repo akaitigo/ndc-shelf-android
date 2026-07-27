@@ -683,15 +683,20 @@ private fun EditBookSheet(
     val currentShelfIndex = orderedTierBooks.indexOfFirst { it.copyId == book.copyId }
     val leftNeighbor = orderedTierBooks.getOrNull(currentShelfIndex - 1)
     val rightNeighbor = orderedTierBooks.getOrNull(currentShelfIndex + 1)
-    val targetTierBooks = allBooks.filter {
-        it.locationTierId == locationTierId && it.copyId != book.copyId
-    }.sortedWith(
-        compareBy<LibraryBook> { it.shelfOrderKey == null }
-            .thenBy { it.shelfOrderKey }
-            .thenBy { it.addedAt }
-            .thenBy { it.copyId },
-    )
-
+    val candidateBooksByTier = remember(allBooks, book.copyId) {
+        allBooks.asSequence()
+            .filter { it.locationTierId != null && it.copyId != book.copyId }
+            .groupBy { requireNotNull(it.locationTierId) }
+            .mapValues { (_, candidates) ->
+                candidates.sortedWith(
+                    compareBy<LibraryBook> { it.shelfOrderKey == null }
+                        .thenBy { it.shelfOrderKey }
+                        .thenBy { it.addedAt }
+                        .thenBy { it.copyId },
+                )
+            }
+    }
+    val targetTierBooks = locationTierId?.let(candidateBooksByTier::get).orEmpty()
     fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
 
     fun reset() {
@@ -916,14 +921,7 @@ private fun EditBookSheet(
                 )
                 locations.tiers.forEach { tier ->
                     val path = locations.pathForTier(tier.id) ?: tier.name
-                    val candidates = allBooks.filter {
-                        it.locationTierId == tier.id && it.copyId != book.copyId
-                    }.sortedWith(
-                        compareBy<LibraryBook> { it.shelfOrderKey == null }
-                            .thenBy { it.shelfOrderKey }
-                            .thenBy { it.addedAt }
-                            .thenBy { it.copyId },
-                    )
+                    val candidates = candidateBooksByTier[tier.id].orEmpty()
                     FilterChip(
                         selected = locationTierId == tier.id,
                         onClick = {
