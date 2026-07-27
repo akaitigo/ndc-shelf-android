@@ -27,6 +27,7 @@
 - NDL Search通信の失敗分類、上限付きretry、明示的な再試行UIを追加。
 - 表紙取得をNDLのHTTPS thumbnailへ限定し、最大50MiBの端末cacheを設定。
 - CSV再import時に、数式記号の直前にある元データのアポストロフィを欠落させず復元。
+- 完全backup形式v10でスキャンセッションと試行履歴を欠落なく退避・復元。
 
 ### Security
 

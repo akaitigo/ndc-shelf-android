@@ -79,8 +79,8 @@ class RoomDatabaseBackupManagerTest {
         val result = manager.restoreBackup(inspected.preview) as DatabaseRestoreResult.Success
 
         assertEquals(sampleSnapshot("original"), readSnapshot())
-        assertTrue(database.libraryDao().getAllScanSessions().isEmpty())
-        assertTrue(database.libraryDao().getAllScanAttempts().isEmpty())
+        assertEquals(sampleSnapshot("original").scanSessions, database.libraryDao().getAllScanSessions())
+        assertEquals(sampleSnapshot("original").scanAttempts, database.libraryDao().getAllScanAttempts())
         assertEquals(1, result.restoredCopyCount)
         assertTrue(File(backupDirectory, result.automaticBackupName).isFile)
     }
@@ -110,9 +110,13 @@ class RoomDatabaseBackupManagerTest {
         database.libraryDao().upsertEditions(snapshot.editions)
         database.libraryDao().upsertWishlistItems(snapshot.wishlistItems)
         database.libraryDao().upsertCopies(snapshot.copies)
+        database.libraryDao().upsertScanSessions(snapshot.scanSessions)
+        database.libraryDao().upsertScanAttempts(snapshot.scanAttempts)
     }
 
     private suspend fun clear() {
+        database.libraryDao().deleteAllScanAttempts()
+        database.libraryDao().deleteAllScanSessions()
         database.libraryDao().deleteAllCopies()
         database.libraryDao().deleteAllWishlistItems()
         database.libraryDao().deleteAllEditions()
@@ -124,6 +128,8 @@ class RoomDatabaseBackupManagerTest {
         editions = database.libraryDao().getAllEditions(),
         copies = database.libraryDao().getAllCopies(),
         wishlistItems = database.libraryDao().getAllWishlistItems(),
+        scanSessions = database.libraryDao().getAllScanSessions(),
+        scanAttempts = database.libraryDao().getAllScanAttempts(),
     )
 
     private fun sampleSnapshot(prefix: String) = DatabaseSnapshot(
@@ -157,6 +163,19 @@ class RoomDatabaseBackupManagerTest {
                 status = "WANTED",
                 createdAt = 1,
                 updatedAt = 1,
+            ),
+        ),
+        scanSessions = listOf(ScanSessionEntity("$prefix-session", 1, 3)),
+        scanAttempts = listOf(
+            ScanAttemptEntity(
+                id = "$prefix-attempt",
+                sessionId = "$prefix-session",
+                isbn = "9784101010014",
+                outcome = "DUPLICATE",
+                copyId = null,
+                copySnapshot = null,
+                attemptedAt = 2,
+                undoneAt = null,
             ),
         ),
     )

@@ -31,6 +31,7 @@ class RoomDatabaseBackupManager(
     private val automaticBackupDirectory: File,
     private val appVersion: String,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val spaceReservation: ((Long) -> Boolean)? = null,
 ) : DatabaseBackupManager {
     private val dao = database.libraryDao()
     private val locationDao = database.locationDao()
@@ -107,6 +108,8 @@ class RoomDatabaseBackupManager(
             locationDao.upsertShelves(preview.snapshot.shelves)
             locationDao.upsertTiers(preview.snapshot.tiers)
             dao.upsertCopies(preview.snapshot.copies)
+            dao.upsertScanSessions(preview.snapshot.scanSessions)
+            dao.upsertScanAttempts(preview.snapshot.scanAttempts)
 
             check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
         }
@@ -133,6 +136,8 @@ class RoomDatabaseBackupManager(
         wishlistItems = dao.getAllWishlistItems(),
         series = seriesDao.getAllSeries(),
         seriesMemberships = seriesDao.getAllMemberships(),
+        scanSessions = dao.getAllScanSessions(),
+        scanAttempts = dao.getAllScanAttempts(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {
@@ -153,6 +158,7 @@ class RoomDatabaseBackupManager(
     }
 
     private fun reserveAutomaticBackupSpace(requiredBytes: Long): Boolean {
+        spaceReservation?.let { return it(requiredBytes) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val storageManager = context.getSystemService(StorageManager::class.java)
             val storageUuid = storageManager.getUuidForPath(automaticBackupDirectory)

@@ -237,7 +237,7 @@
     <string name="data_management_import_csv_title">CSVを取り込む</string>
     <string name="data_management_import_csv_description">表計算ソフトで編集した内容を検証し、確認後に追加または更新します。</string>
     <string name="data_management_backup_title">データベースを完全退避</string>
-    <string name="data_management_backup_description">購入予定を含む蔵書データをチェックサム付きで保存します。操作用のスキャン履歴は含みません。</string>
+    <string name="data_management_backup_description">購入予定と直近のスキャン履歴を含む蔵書データをチェックサム付きで保存します。</string>
     <string name="data_management_restore_title">完全バックアップから復元</string>
     <string name="data_management_restore_description">現在の全データをバックアップ内容で置き換えます。実行直前の状態はアプリ内へ自動退避します。</string>
     <string name="data_management_empty_reason">本棚が空のため書き出すデータがありません</string>
@@ -326,7 +326,7 @@
     <string name="info_privacy_network_body">ISBNを登録または書店モードで検索したとき、端末内に書誌情報がなければ、そのISBNだけをHTTPSで国立国会図書館サーチへ送信して書誌情報とNDCを取得します。表紙は同サービスだけから取得し、再通信を減らすため端末キャッシュへ最大50MiB保存します。キャッシュはAndroidの設定から削除でき、古い画像から自動削除されます。タイトル、読書状態、置き場所、購入予定、他の蔵書は送信しません。各通信先にはIPアドレスなど通常の通信情報が伝わります。ML Kitはカメラ画像・バーコード値・認識結果をGoogleへ送りませんが、端末・アプリ情報、性能、API利用イベント、エラーコード等を診断と利用分析のためGoogleへ送信します。通信時はHTTPSで暗号化されます。</string>
     <string name="info_mlkit_data_link">ML Kitのデータ開示</string>
     <string name="info_privacy_backup_title">バックアップとファイル</string>
-    <string name="info_privacy_backup_body">Androidのクラウドバックアップから全データを除外しています。Android 9以降の端末間転送ではRoomデータベースだけを移行対象にし、Android 8.1以前ではOS移行も対象外です。JSON、CSV、完全バックアップは、選択した保存先にだけ書き出し、アプリが独自にアップロードすることはありません。操作用のスキャン履歴はファイルへ含めず、完全復元時に消去します。これらのファイルは暗号化されないため、保存先の保護が必要です。</string>
+    <string name="info_privacy_backup_body">Androidのクラウドバックアップから全データを除外しています。Android 9以降の端末間転送ではRoomデータベースだけを移行対象にし、Android 8.1以前ではOS移行も対象外です。JSON、CSV、完全バックアップは、選択した保存先にだけ書き出し、アプリが独自にアップロードすることはありません。完全バックアップには直近のスキャン履歴も含まれます。これらのファイルは暗号化されないため、保存先の保護が必要です。</string>
     <string name="info_source_title">データ出典</string>
     <string name="info_source_ndl_title">国立国会図書館サーチ</string>
     <string name="info_source_ndl_body">本アプリは国立国会図書館サーチのAPIを利用しています。書誌情報とNDCの一部は同サービスおよび各メタデータ提供機関に由来し、内容と利用条件は提供元ごとに異なります。</string>

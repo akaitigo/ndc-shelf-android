@@ -8,6 +8,8 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
+import dev.ndcshelf.app.data.local.ScanAttemptEntity
+import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -192,6 +194,72 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `format nine backup is restored with empty scan history`() {
+        val current = sampleSnapshot().copy(scanSessions = emptyList(), scanAttempts = emptyList())
+        val (archive, _) = codec.encode(current, "0.4.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        val payload = requireNotNull(entries["database.json"])
+            .decodeToString()
+            .replace("\"schemaVersion\":10", "\"schemaVersion\":9")
+            .replace(Regex(",\"scanSessions\":\\[.*],\"scanAttempts\":\\[.*]}$"), "}")
+            .encodeToByteArray()
+        val manifest = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace("\"formatVersion\":10", "\"formatVersion\":9")
+            .replace(Regex(",\"scanSessionCount\":\\d+,\"scanAttemptCount\":\\d+"), "")
+            .replace(Regex("\"payloadSha256\":\"[0-9a-f]+\""), "\"payloadSha256\":\"${payload.sha256()}\"")
+            .encodeToByteArray()
+        entries["database.json"] = payload
+        entries["manifest.json"] = manifest
+
+        val preview = codec.decode(ByteArrayInputStream(zip(entries)))
+
+        assertEquals(emptyList<ScanSessionEntity>(), preview.snapshot.scanSessions)
+        assertEquals(emptyList<ScanAttemptEntity>(), preview.snapshot.scanAttempts)
+    }
+
+    @Test
+    fun `orphan scan attempt is rejected before backup`() {
+        val invalid = sampleSnapshot().copy(scanSessions = emptyList())
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.encode(invalid, "0.4.0", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `scan history count mismatch is rejected before restore`() {
+        val (archive, _) = codec.encode(sampleSnapshot(), "0.4.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        entries["manifest.json"] = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace("\"scanAttemptCount\":1", "\"scanAttemptCount\":2")
+            .encodeToByteArray()
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.decode(ByteArrayInputStream(zip(entries)))
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `invalid scan outcome is rejected before backup`() {
+        val sample = sampleSnapshot()
+        val invalid = sample.copy(
+            scanAttempts = sample.scanAttempts.map { it.copy(outcome = "UNKNOWN") },
+        )
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.encode(invalid, "0.4.0", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
     fun `snapshot with missing foreign key is rejected`() {
         val invalid = sampleSnapshot().copy(works = emptyList())
 
@@ -324,6 +392,25 @@ class DatabaseBackupCodecTest {
                 origin = "TITLE_SUGGESTION",
                 confirmedBy = "USER",
                 sourceTitle = "吾輩シリーズ 上巻",
+            ),
+        ),
+        scanSessions = listOf(
+            ScanSessionEntity(
+                id = "scan-session-1",
+                startedAt = 1_700_000_000_001,
+                endedAt = 1_700_000_000_003,
+            ),
+        ),
+        scanAttempts = listOf(
+            ScanAttemptEntity(
+                id = "scan-attempt-1",
+                sessionId = "scan-session-1",
+                isbn = "9784101010014",
+                outcome = "DUPLICATE",
+                copyId = null,
+                copySnapshot = null,
+                attemptedAt = 1_700_000_000_002,
+                undoneAt = null,
             ),
         ),
     )
