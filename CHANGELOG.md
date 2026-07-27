@@ -23,6 +23,11 @@
 - Androidクラウドbackupから全アプリデータを除外し、Android 9以降の端末間転送だけRoom DBを対象化。
 - NDL Search通信の失敗分類、上限付きretry、明示的な再試行UIを追加。
 - 表紙取得をNDLのHTTPS thumbnailへ限定し、最大50MiBの端末cacheを設定。
+- v0.3.0 release candidateとしてversionCodeを5へ更新し、匿名E2E release gateを追加。
+
+### Fixed
+
+- 階層化した棚へ配置済みのcopyで、編集直後の取り消しが構造化path差分により失敗する問題を修正。
 
 ### Security
 
