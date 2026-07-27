@@ -5,11 +5,13 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 7
+const val APP_DATABASE_VERSION = 8
 
 @Database(
     entities = [
         BookWorkEntity::class,
+        SeriesEntity::class,
+        SeriesMembershipEntity::class,
         BookEditionEntity::class,
         LocationRoomEntity::class,
         LocationShelfEntity::class,
@@ -34,12 +36,65 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_4_5,
             MIGRATION_5_6,
             MIGRATION_6_7,
+            MIGRATION_7_8,
         )
     }
 
     abstract fun libraryDao(): LibraryDao
 
     abstract fun locationDao(): LocationDao
+
+    abstract fun seriesDao(): SeriesDao
+}
+
+private val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS series (
+                id TEXT NOT NULL PRIMARY KEY,
+                name TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_series_name_id ON series(name, id)")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS series_memberships (
+                id TEXT NOT NULL PRIMARY KEY,
+                seriesId TEXT NOT NULL,
+                workId TEXT NOT NULL,
+                sortOrderKey TEXT NOT NULL,
+                volumeLabel TEXT NOT NULL,
+                type TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                FOREIGN KEY(seriesId) REFERENCES series(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(workId) REFERENCES book_works(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_series_memberships_seriesId " +
+                "ON series_memberships(seriesId)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_series_memberships_workId " +
+                "ON series_memberships(workId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_series_memberships_seriesId_workId " +
+                "ON series_memberships(seriesId, workId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_series_memberships_seriesId_sortOrderKey " +
+                "ON series_memberships(seriesId, sortOrderKey)",
+        )
+    }
 }
 
 private val MIGRATION_6_7 = object : Migration(6, 7) {

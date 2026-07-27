@@ -8,6 +8,8 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
+import dev.ndcshelf.app.data.local.SeriesEntity
+import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -134,13 +136,13 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":8", "\"schemaVersion\":7")
+            .replace("\"schemaVersion\":9", "\"schemaVersion\":7")
             .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":8", "\"formatVersion\":7")
+            .replace("\"formatVersion\":9", "\"formatVersion\":7")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
 
@@ -185,6 +187,33 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `format seven backup is restored with no inferred series`() {
+        val payload = """
+            {
+              "schemaVersion":7,
+              "works":[{"id":"work-1","title":"第一巻","primaryAuthor":"著者"}],
+              "editions":[],"copies":[],"rooms":[],"shelves":[],"tiers":[],
+              "wishlistItems":[]
+            }
+        """.trimIndent().encodeToByteArray()
+        val manifest = """
+            {
+              "format":"ndc-shelf-room-backup","formatVersion":7,"databaseVersion":7,
+              "createdAt":1,"appVersion":"0.3.0","payloadSha256":"${payload.sha256()}",
+              "workCount":1,"editionCount":0,"copyCount":0,"wishlistCount":0
+            }
+        """.trimIndent().encodeToByteArray()
+
+        val preview = DatabaseBackupCodec(currentDatabaseVersion = 8).decode(
+            ByteArrayInputStream(zip(mapOf("manifest.json" to manifest, "database.json" to payload))),
+        )
+
+        assertEquals(listOf("work-1"), preview.snapshot.works.map { it.id })
+        assertEquals(emptyList<SeriesEntity>(), preview.snapshot.series)
+        assertEquals(emptyList<SeriesMembershipEntity>(), preview.snapshot.seriesMemberships)
+    }
+
+    @Test
     fun `snapshot with missing foreign key is rejected`() {
         val invalid = sampleSnapshot().copy(works = emptyList())
 
@@ -203,6 +232,34 @@ class DatabaseBackupCodecTest {
 
         val error = assertThrows(BackupCodecException::class.java) {
             codec.encode(invalid, "0.1.2", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `invalid series enum and order key are rejected before backup`() {
+        val sample = sampleSnapshot()
+        val invalid = sample.copy(
+            seriesMemberships = sample.seriesMemberships.map {
+                it.copy(type = "UNKNOWN", sortOrderKey = "not-hex")
+            },
+        )
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.encode(invalid, "0.4.0", 1)
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `series membership with missing series is rejected before restore`() {
+        val sample = sampleSnapshot()
+        val invalid = sample.copy(series = emptyList())
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.encode(invalid, "0.4.0", 1)
         }
 
         assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
@@ -278,6 +335,19 @@ class DatabaseBackupCodecTest {
                 copySnapshot = "b".repeat(64),
                 attemptedAt = 1_650_000_000_000,
                 undoneAt = null,
+            ),
+        ),
+        series = listOf(SeriesEntity("series-1", "吾輩シリーズ", 1, 2)),
+        seriesMemberships = listOf(
+            SeriesMembershipEntity(
+                id = "membership-1",
+                seriesId = "series-1",
+                workId = "work-1",
+                sortOrderKey = "80",
+                volumeLabel = "上巻",
+                type = "MAIN_STORY",
+                createdAt = 1,
+                updatedAt = 2,
             ),
         ),
     )

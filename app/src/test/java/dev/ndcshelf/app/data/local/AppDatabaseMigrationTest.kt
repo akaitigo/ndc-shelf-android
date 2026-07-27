@@ -299,6 +299,55 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version7Migration_preservesWorksAndAddsConstrainedSeriesTables() {
+        migrationHelper.createDatabase(V7_DATABASE, 7).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '本編 上', '著者')")
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V7_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query("SELECT title FROM book_works WHERE id = 'work-1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("本編 上", cursor.getString(0))
+        }
+        migrated.query("SELECT COUNT(*) FROM series_memberships").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.assertForeignKey("series_memberships", "series", "seriesId", "id")
+        migrated.assertForeignKey("series_memberships", "book_works", "workId", "id")
+        migrated.assertIndex("series", "index_series_name_id", unique = false)
+        migrated.assertIndex(
+            "series_memberships",
+            "index_series_memberships_seriesId_workId",
+            unique = true,
+        )
+        migrated.assertIndex(
+            "series_memberships",
+            "index_series_memberships_seriesId_sortOrderKey",
+            unique = true,
+        )
+        migrated.execSQL("PRAGMA foreign_keys=ON")
+        migrated.execSQL("INSERT INTO series VALUES ('series-1', '作品集', 1, 1)")
+        migrated.execSQL(
+            "INSERT INTO series_memberships VALUES " +
+                "('membership-1', 'series-1', 'work-1', '80', '上巻', 'MAIN_STORY', 1, 1)",
+        )
+        migrated.execSQL("DELETE FROM series WHERE id = 'series-1'")
+        migrated.query("SELECT COUNT(*) FROM series_memberships").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
+    @Test
     fun malformedExistingSchema_isRejectedInsteadOfBeingDestructivelyRecreated() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(CORRUPT_DATABASE)
@@ -377,6 +426,7 @@ class AppDatabaseMigrationTest {
         const val V4_DATABASE = "migration-v4"
         const val V5_DATABASE = "migration-v5"
         const val V6_DATABASE = "migration-v6"
+        const val V7_DATABASE = "migration-v7"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

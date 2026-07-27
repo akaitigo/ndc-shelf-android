@@ -8,6 +8,8 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
+import dev.ndcshelf.app.data.local.SeriesEntity
+import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -51,6 +53,8 @@ internal class DatabaseBackupCodec(
             wishlistCount = snapshot.wishlistItems.size,
             scanSessionCount = snapshot.scanSessions.size,
             scanAttemptCount = snapshot.scanAttempts.size,
+            seriesCount = snapshot.series.size,
+            seriesMembershipCount = snapshot.seriesMemberships.size,
         )
         val manifest = encodeManifest(metadata, payload.sha256()).toString().encodeToByteArray()
         val archive = ByteArrayOutputStream().use { bytes ->
@@ -99,6 +103,12 @@ internal class DatabaseBackupCodec(
             wishlistCount = if (formatVersion < 6) 0 else manifest.requiredInt("wishlistCount"),
             scanSessionCount = if (formatVersion < 7) 0 else manifest.requiredInt("scanSessionCount"),
             scanAttemptCount = if (formatVersion < 7) 0 else manifest.requiredInt("scanAttemptCount"),
+            seriesCount = if (formatVersion < 9) 0 else manifest.requiredInt("seriesCount"),
+            seriesMembershipCount = if (formatVersion < 9) {
+                0
+            } else {
+                manifest.requiredInt("seriesMembershipCount")
+            },
         )
         val snapshot = decodePayload(parseObject(payloadBytes), formatVersion)
         if (metadata.workCount != snapshot.works.size ||
@@ -106,7 +116,9 @@ internal class DatabaseBackupCodec(
             metadata.copyCount != snapshot.copies.size ||
             metadata.wishlistCount != snapshot.wishlistItems.size ||
             metadata.scanSessionCount != snapshot.scanSessions.size ||
-            metadata.scanAttemptCount != snapshot.scanAttempts.size
+            metadata.scanAttemptCount != snapshot.scanAttempts.size ||
+            metadata.seriesCount != snapshot.series.size ||
+            metadata.seriesMembershipCount != snapshot.seriesMemberships.size
         ) {
             invalid("Manifest counts do not match payload")
         }
@@ -148,6 +160,8 @@ internal class DatabaseBackupCodec(
         put("wishlistCount", JsonPrimitive(metadata.wishlistCount))
         put("scanSessionCount", JsonPrimitive(metadata.scanSessionCount))
         put("scanAttemptCount", JsonPrimitive(metadata.scanAttemptCount))
+        put("seriesCount", JsonPrimitive(metadata.seriesCount))
+        put("seriesMembershipCount", JsonPrimitive(metadata.seriesMembershipCount))
     }
 
     private fun encodePayload(snapshot: DatabaseSnapshot) = buildJsonObject {
@@ -251,6 +265,30 @@ internal class DatabaseBackupCodec(
                     putNullable("copySnapshot", attempt.copySnapshot)
                     put("attemptedAt", JsonPrimitive(attempt.attemptedAt))
                     putNullable("undoneAt", attempt.undoneAt)
+                })
+            }
+        })
+        put("series", buildJsonArray {
+            snapshot.series.forEach { series ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(series.id))
+                    put("name", JsonPrimitive(series.name))
+                    put("createdAt", JsonPrimitive(series.createdAt))
+                    put("updatedAt", JsonPrimitive(series.updatedAt))
+                })
+            }
+        })
+        put("seriesMemberships", buildJsonArray {
+            snapshot.seriesMemberships.forEach { membership ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(membership.id))
+                    put("seriesId", JsonPrimitive(membership.seriesId))
+                    put("workId", JsonPrimitive(membership.workId))
+                    put("sortOrderKey", JsonPrimitive(membership.sortOrderKey))
+                    put("volumeLabel", JsonPrimitive(membership.volumeLabel))
+                    put("type", JsonPrimitive(membership.type))
+                    put("createdAt", JsonPrimitive(membership.createdAt))
+                    put("updatedAt", JsonPrimitive(membership.updatedAt))
                 })
             }
         })
@@ -368,6 +406,32 @@ internal class DatabaseBackupCodec(
                 undoneAt = value.optionalLong("undoneAt"),
             )
         }
+        val series = payload.versionedArray("series", schemaVersion, 9).map { element ->
+            val value = element.jsonObject
+            SeriesEntity(
+                id = value.requiredString("id"),
+                name = value.requiredString("name"),
+                createdAt = value.requiredLong("createdAt"),
+                updatedAt = value.requiredLong("updatedAt"),
+            )
+        }
+        val seriesMemberships = payload.versionedArray(
+            "seriesMemberships",
+            schemaVersion,
+            9,
+        ).map { element ->
+            val value = element.jsonObject
+            SeriesMembershipEntity(
+                id = value.requiredString("id"),
+                seriesId = value.requiredString("seriesId"),
+                workId = value.requiredString("workId"),
+                sortOrderKey = value.requiredString("sortOrderKey"),
+                volumeLabel = value.requiredString("volumeLabel"),
+                type = value.requiredString("type"),
+                createdAt = value.requiredLong("createdAt"),
+                updatedAt = value.requiredLong("updatedAt"),
+            )
+        }
         return DatabaseSnapshot(
             works,
             editions,
@@ -378,6 +442,8 @@ internal class DatabaseBackupCodec(
             wishlistItems,
             scanSessions,
             scanAttempts,
+            series,
+            seriesMemberships,
         )
     }
 
@@ -390,7 +456,9 @@ internal class DatabaseBackupCodec(
             snapshot.tiers.size > limits.maxRecords ||
             snapshot.wishlistItems.size > limits.maxRecords ||
             snapshot.scanSessions.size > limits.maxRecords ||
-            snapshot.scanAttempts.size > limits.maxRecords
+            snapshot.scanAttempts.size > limits.maxRecords ||
+            snapshot.series.size > limits.maxRecords ||
+            snapshot.seriesMemberships.size > limits.maxRecords
         ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::id)
@@ -404,6 +472,10 @@ internal class DatabaseBackupCodec(
         snapshot.wishlistItems.ensureUnique(WishlistItemEntity::editionId)
         snapshot.scanSessions.ensureUnique(ScanSessionEntity::id)
         snapshot.scanAttempts.ensureUnique(ScanAttemptEntity::id)
+        snapshot.series.ensureUnique(SeriesEntity::id)
+        snapshot.seriesMemberships.ensureUnique(SeriesMembershipEntity::id)
+        snapshot.seriesMemberships.ensureUnique { it.seriesId to it.workId }
+        snapshot.seriesMemberships.ensureUnique { it.seriesId to it.sortOrderKey }
         snapshot.tiers.ensureUnique { it.shelfId to it.name }
         val workIds = snapshot.works.mapTo(hashSetOf(), BookWorkEntity::id)
         val editionIds = snapshot.editions.mapTo(hashSetOf(), BookEditionEntity::id)
@@ -411,6 +483,7 @@ internal class DatabaseBackupCodec(
         val shelfIds = snapshot.shelves.mapTo(hashSetOf(), LocationShelfEntity::id)
         val tierIds = snapshot.tiers.mapTo(hashSetOf(), LocationTierEntity::id)
         val scanSessionIds = snapshot.scanSessions.mapTo(hashSetOf(), ScanSessionEntity::id)
+        val seriesIds = snapshot.series.mapTo(hashSetOf(), SeriesEntity::id)
         if (snapshot.editions.any { it.workId !in workIds } ||
             snapshot.copies.any {
                 it.editionId !in editionIds || it.tierId != null && it.tierId !in tierIds
@@ -418,7 +491,10 @@ internal class DatabaseBackupCodec(
             snapshot.shelves.any { it.roomId !in roomIds } ||
             snapshot.tiers.any { it.shelfId !in shelfIds } ||
             snapshot.wishlistItems.any { it.editionId !in editionIds } ||
-            snapshot.scanAttempts.any { it.sessionId !in scanSessionIds }
+            snapshot.scanAttempts.any { it.sessionId !in scanSessionIds } ||
+            snapshot.seriesMemberships.any {
+                it.seriesId !in seriesIds || it.workId !in workIds
+            }
         ) invalid("Foreign key reference is missing")
         if (snapshot.copies.any { copy ->
                 copy.tierId == null && copy.shelfOrderKey != null ||
@@ -465,6 +541,18 @@ internal class DatabaseBackupCodec(
         ) {
             invalid("Invalid scan attempt")
         }
+        if (snapshot.series.any { item ->
+                item.name.isBlank() || item.createdAt < 0 || item.updatedAt < item.createdAt
+            } || snapshot.seriesMemberships.any { item ->
+                item.volumeLabel.isBlank() ||
+                    item.type !in SERIES_MEMBERSHIP_TYPES ||
+                    item.createdAt < 0 ||
+                    item.updatedAt < item.createdAt ||
+                    !item.sortOrderKey.isValidOrderKey()
+            }
+        ) {
+            invalid("Invalid series data")
+        }
         val editionById = snapshot.editions.associateBy(BookEditionEntity::id)
         if (snapshot.editions.any {
                 it.bibliographicSource !in BIBLIOGRAPHIC_SOURCES ||
@@ -499,6 +587,11 @@ internal class DatabaseBackupCodec(
             snapshot.scanAttempts.forEach {
                 add(it.id); add(it.sessionId); add(it.isbn); add(it.outcome)
                 add(it.copyId.orEmpty()); add(it.copySnapshot.orEmpty())
+            }
+            snapshot.series.forEach { add(it.id); add(it.name) }
+            snapshot.seriesMemberships.forEach {
+                add(it.id); add(it.seriesId); add(it.workId); add(it.sortOrderKey)
+                add(it.volumeLabel); add(it.type)
             }
         }
         if (strings.any { it.length > limits.maxStringLength }) invalid("String is too long")
@@ -603,8 +696,8 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 8
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 8
+        const val CURRENT_FORMAT_VERSION = 9
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 9
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val MAX_RECORDED_ISBN_LENGTH = 32
         private const val FORMAT_ID = "ndc-shelf-room-backup"
@@ -616,8 +709,17 @@ internal class DatabaseBackupCodec(
         private val SCAN_ATTEMPT_OUTCOMES = setOf("ADDED", "DUPLICATE", "INVALID", "NOT_FOUND", "FAILURE")
         private val SHA256_REGEX = Regex("[0-9a-f]{64}")
         private val BIBLIOGRAPHIC_SOURCES = setOf("NDL", "MANUAL")
+        private val SERIES_MEMBERSHIP_TYPES = setOf(
+            "MAIN_STORY",
+            "SIDE_STORY",
+            "OMNIBUS",
+            "OTHER",
+        )
     }
 }
+
+private fun String.isValidOrderKey(): Boolean =
+    isNotEmpty() && length % 2 == 0 && all { it in '0'..'9' || it in 'a'..'f' }
 
 internal data class DatabaseBackupLimits(
     val maxArchiveBytes: Int = 25 * 1024 * 1024,
