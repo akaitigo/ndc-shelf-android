@@ -352,7 +352,7 @@
     <string name="info_privacy_device_title">端末内で扱うデータ</string>
     <string name="info_privacy_device_body">バーコード認識はML Kitの端末内モデルで処理します。ISBN、書誌情報、NDC、読書状態、置き場所、購入予定は端末内のRoomデータベースに保存され、開発者のサーバーへ送信されません。連続スキャン履歴はISBNと結果だけを直近20セッションまで保存します。</string>
     <string name="info_privacy_network_title">外部サービスへの通信</string>
-    <string name="info_privacy_network_body">ISBNを登録または書店モードで検索したとき、端末内に書誌情報がなければ、そのISBNだけをHTTPSで国立国会図書館サーチへ送信して書誌情報とNDCを取得します。表紙は同サービスだけから取得し、再通信を減らすため端末キャッシュへ最大50MiB保存します。キャッシュはAndroidの設定から削除でき、古い画像から自動削除されます。タイトル、読書状態、置き場所、購入予定、他の蔵書は送信しません。各通信先にはIPアドレスなど通常の通信情報が伝わります。ML Kitはカメラ画像・バーコード値・認識結果をGoogleへ送りませんが、端末・アプリ情報、性能、API利用イベント、エラーコード等を診断と利用分析のためGoogleへ送信します。通信時はHTTPSで暗号化されます。</string>
+    <string name="info_privacy_network_body">ISBN検索時はそのISBNだけをHTTPSで国立国会図書館サーチへ送信します。シリーズの定期確認を明示的に有効にした場合だけ、対象シリーズ名と検索開始年を最大週1回送信します。蔵書、読書状態、置き場所、購入予定は送りません。表紙は同サービスだけから取得して最大50MiBキャッシュします。各通信先にはIPアドレスなど通常の通信情報が伝わります。ML Kitは認識内容をGoogleへ送りませんが、診断・利用分析情報を送信します。通信時はHTTPSで暗号化されます。</string>
     <string name="info_mlkit_data_link">ML Kitのデータ開示</string>
     <string name="info_privacy_backup_title">バックアップとファイル</string>
     <string name="info_privacy_backup_body">Androidのクラウドバックアップから全データを除外しています。Android 9以降の端末間転送ではRoomデータベースだけを移行対象にし、Android 8.1以前ではOS移行も対象外です。JSON、CSV、完全バックアップは、選択した保存先にだけ書き出し、アプリが独自にアップロードすることはありません。完全バックアップには購入予定とスキャン履歴も含まれます。これらのファイルは暗号化されないため、保存先の保護が必要です。</string>
@@ -429,4 +429,17 @@
     <string name="shelf_order_insert_title">棚へ入れる位置</string>
     <string name="shelf_order_insert_start">先頭</string>
     <string name="shelf_order_insert_after">「%1$s」の後</string>
+    <string name="series_watch_title">新刊候補を定期確認</string>
+    <string name="series_watch_frequency">通信接続と十分なバッテリーがあるとき、最大週1回確認します。</string>
+    <string name="series_watch_privacy">有効にするとシリーズ名「%1$s」と検索開始年を国立国会図書館サーチへ送信します。蔵書・読書状態・置き場所は送りません。結果は候補であり、発売予定を保証しません。</string>
+    <string name="series_watch_last_checked">最終成功: %1$s</string>
+    <string name="series_watch_candidates">国立国会図書館サーチの候補</string>
+    <string name="series_watch_open_bookstore">書店モード</string>
+    <string name="series_watch_state_new">未登録</string>
+    <string name="series_watch_state_wanted">欲しい</string>
+    <string name="series_watch_state_reserved">予約済み</string>
+    <string name="series_watch_state_owned">所有済み</string>
+    <string name="series_watch_permission_denied">通知が許可されなかったため、定期確認は有効にしていません。</string>
+    <string name="series_watch_update_error">定期確認の設定を更新できませんでした。</string>
+    <string name="series_watch_updated">定期確認の設定を更新しました。</string>
 </resources>

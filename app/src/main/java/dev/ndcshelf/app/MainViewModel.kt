@@ -59,6 +59,9 @@ import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.SeriesRepository
+import dev.ndcshelf.app.domain.repository.SeriesWatchMutationResult
+import dev.ndcshelf.app.domain.repository.SeriesWatchRepository
+import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
@@ -98,7 +101,19 @@ class MainViewModel(
         InMemoryLibrarySearchSettingsStore,
     private val seriesRepository: SeriesRepository? = null,
     private val workGroupRepository: WorkGroupRepository? = null,
+    private val seriesWatchRepository: SeriesWatchRepository? = null,
+    private val seriesWatchScheduler: SeriesWatchScheduler? = null,
 ) : ViewModel() {
+    init {
+        if (seriesWatchRepository != null && seriesWatchScheduler != null) {
+            viewModelScope.launch {
+                runCatching {
+                    seriesWatchScheduler.reconcile(seriesWatchRepository.hasEnabledWatches())
+                }
+            }
+        }
+    }
+
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
             scope = viewModelScope,
@@ -143,6 +158,11 @@ class MainViewModel(
     val seriesSuggestions: StateFlow<List<SeriesSuggestion>> =
         (seriesRepository?.observeSuggestions() ?: flowOf(emptyList()))
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val seriesWatches = (seriesWatchRepository?.observeWatches() ?: flowOf(emptyList()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val _seriesWatchMutationState =
+        MutableStateFlow<SeriesWatchMutationUiState>(SeriesWatchMutationUiState.Idle)
+    val seriesWatchMutationState = _seriesWatchMutationState.asStateFlow()
     private val _seriesEditorState = MutableStateFlow<SeriesEditorUiState>(SeriesEditorUiState.Idle)
     val seriesEditorState: StateFlow<SeriesEditorUiState> = _seriesEditorState.asStateFlow()
     private val _workVariantState = MutableStateFlow<WorkVariantUiState>(WorkVariantUiState.Idle)
@@ -317,6 +337,36 @@ class MainViewModel(
     fun clearSeriesEditorState() {
         if (_seriesEditorState.value !== SeriesEditorUiState.Saving) {
             _seriesEditorState.value = SeriesEditorUiState.Idle
+        }
+    }
+
+    fun setSeriesWatchEnabled(seriesId: String, enabled: Boolean) {
+        val source = seriesWatchRepository ?: return
+        if (_seriesWatchMutationState.value === SeriesWatchMutationUiState.Working) return
+        viewModelScope.launch {
+            _seriesWatchMutationState.value = SeriesWatchMutationUiState.Working
+            _seriesWatchMutationState.value = when (source.setEnabled(seriesId, enabled)) {
+                SeriesWatchMutationResult.Updated -> {
+                    runCatching {
+                        seriesWatchScheduler?.reconcile(source.hasEnabledWatches())
+                    }.fold(
+                        onSuccess = { SeriesWatchMutationUiState.Updated },
+                        onFailure = { SeriesWatchMutationUiState.Error },
+                    )
+                }
+                SeriesWatchMutationResult.Invalid -> SeriesWatchMutationUiState.Invalid
+                SeriesWatchMutationResult.Failure -> SeriesWatchMutationUiState.Error
+            }
+        }
+    }
+
+    fun reportSeriesWatchPermissionDenied() {
+        _seriesWatchMutationState.value = SeriesWatchMutationUiState.PermissionDenied
+    }
+
+    fun clearSeriesWatchMutationState() {
+        if (_seriesWatchMutationState.value !== SeriesWatchMutationUiState.Working) {
+            _seriesWatchMutationState.value = SeriesWatchMutationUiState.Idle
         }
     }
 
@@ -1073,6 +1123,8 @@ class MainViewModel(
             librarySearchSettings: LibrarySearchSettingsStore = InMemoryLibrarySearchSettingsStore,
             seriesRepository: SeriesRepository? = null,
             workGroupRepository: WorkGroupRepository? = null,
+            seriesWatchRepository: SeriesWatchRepository? = null,
+            seriesWatchScheduler: SeriesWatchScheduler? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1085,10 +1137,21 @@ class MainViewModel(
                         librarySearchSettings = librarySearchSettings,
                         seriesRepository = seriesRepository,
                         workGroupRepository = workGroupRepository,
+                        seriesWatchRepository = seriesWatchRepository,
+                        seriesWatchScheduler = seriesWatchScheduler,
                     ) as T
                 }
             }
     }
+}
+
+sealed interface SeriesWatchMutationUiState {
+    data object Idle : SeriesWatchMutationUiState
+    data object Working : SeriesWatchMutationUiState
+    data object Updated : SeriesWatchMutationUiState
+    data object PermissionDenied : SeriesWatchMutationUiState
+    data object Invalid : SeriesWatchMutationUiState
+    data object Error : SeriesWatchMutationUiState
 }
 
 data class LibrarySearchResult(

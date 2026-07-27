@@ -104,6 +104,75 @@ data class SeriesMembershipEntity(
 )
 
 @Entity(
+    tableName = "series_watches",
+    foreignKeys = [
+        ForeignKey(
+            entity = SeriesEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["seriesId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["enabled"])],
+)
+data class SeriesWatchEntity(
+    @PrimaryKey val seriesId: String,
+    val queryTitle: String,
+    val enabled: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val lastCheckedAt: Long?,
+    val lastSuccessfulAt: Long?,
+)
+
+@Entity(
+    tableName = "series_release_candidates",
+    foreignKeys = [
+        ForeignKey(
+            entity = SeriesEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["seriesId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["seriesId"]),
+        Index(value = ["seriesId", "sourceRecordId"], unique = true),
+        Index(value = ["isbn13"]),
+        Index(value = ["notifiedAt"]),
+    ],
+)
+data class SeriesReleaseCandidateEntity(
+    @PrimaryKey val id: String,
+    val seriesId: String,
+    val sourceRecordId: String,
+    val title: String,
+    val primaryAuthor: String,
+    val isbn13: String?,
+    val publisher: String?,
+    val publishedDate: String?,
+    val firstSeenAt: Long,
+    val lastSeenAt: Long,
+    val notifiedAt: Long?,
+)
+
+data class SeriesReleaseCandidateRow(
+    val id: String,
+    val seriesId: String,
+    val sourceRecordId: String,
+    val title: String,
+    val primaryAuthor: String,
+    val isbn13: String?,
+    val publisher: String?,
+    val publishedDate: String?,
+    val firstSeenAt: Long,
+    val lastSeenAt: Long,
+    val notifiedAt: Long?,
+    val ownedCopyCount: Int,
+    val purchaseStatus: String?,
+)
+
+@Entity(
     tableName = "book_editions",
     foreignKeys = [
         ForeignKey(
