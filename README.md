@@ -13,6 +13,7 @@
 - Roomによる端末内の蔵書保存
 - 登録済みISBNの重複警告
 - タイトル、著者、ISBN、NDC、置き場所の横断検索
+- Room側の絞り込み、読書状態フィルター、追加日・書誌・NDC・棚順の並べ替え
 - 部屋・本棚・段の階層による置き場所管理と読書状態の編集
 - 段内の物理的な並び順と左右の隣接本による戻す位置の表示
 - NDCの類別ごとの蔵書分布表示
@@ -94,6 +95,8 @@ cd ndc-shelf-android
 Room schemaとRepositoryのテスト構成、Migration追加手順は[docs/DATABASE_TESTING.md](docs/DATABASE_TESTING.md)を参照してください。
 
 NDL Searchへの書誌・表紙通信、障害分類、再試行、表紙キャッシュの境界は[docs/NETWORK_BOUNDARY.md](docs/NETWORK_BOUNDARY.md)を参照してください。
+
+大規模蔵書の代表データ、検索性能予算、Room・索引・Pagingの採否は[docs/LIBRARY_SEARCH_PERFORMANCE.md](docs/LIBRARY_SEARCH_PERFORMANCE.md)を参照してください。
 
 利用者向け変更は[CHANGELOG.md](CHANGELOG.md)、v0.2の公開判定と復旧手順は[リリースチェックリスト](docs/releases/V0.2_RELEASE_CHECKLIST.md)および[ロールバック手順](docs/releases/V0.2_ROLLBACK.md)を参照してください。
 

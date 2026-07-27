@@ -25,13 +25,20 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
+import dev.ndcshelf.app.domain.model.LibrarySearchSettingsStore
+import dev.ndcshelf.app.domain.model.LibrarySort
+import dev.ndcshelf.app.domain.model.LibraryStats
+import dev.ndcshelf.app.domain.model.InMemoryLibrarySearchSettingsStore
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationMutationResult
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.ManualBookDraft
 import dev.ndcshelf.app.domain.model.ManualBookValidationError
 import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
+import dev.ndcshelf.app.domain.model.MAX_LIBRARY_QUERY_LENGTH
 import dev.ndcshelf.app.domain.model.PurchaseTransition
+import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
@@ -52,11 +59,18 @@ import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -64,12 +78,15 @@ import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
 
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class MainViewModel(
     private val repository: LibraryRepository,
     private val importIoDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val importComputationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val databaseBackupManager: DatabaseBackupManager? = null,
     private val locationRepository: LocationRepository? = null,
+    private val librarySearchSettings: LibrarySearchSettingsStore =
+        InMemoryLibrarySearchSettingsStore,
 ) : ViewModel() {
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
@@ -77,6 +94,24 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+    private val _librarySearchCriteria = MutableStateFlow(librarySearchSettings.load())
+    val librarySearchCriteria: StateFlow<LibrarySearchCriteria> = _librarySearchCriteria.asStateFlow()
+    val librarySearchResult: StateFlow<LibrarySearchResult> = _librarySearchCriteria
+        .debounce { criteria -> if (criteria.selectedEditionId == null) SEARCH_DEBOUNCE_MILLIS else 0L }
+        .distinctUntilChanged()
+        .onEach { criteria ->
+            if (criteria.selectedEditionId == null) librarySearchSettings.save(criteria)
+        }
+        .flatMapLatest { criteria ->
+            repository.observeLibrary(criteria).map { books -> LibrarySearchResult(criteria, books) }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = LibrarySearchResult(LibrarySearchCriteria(), emptyList()),
+        )
+    val libraryStats: StateFlow<LibraryStats> = repository.observeLibraryStats()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryStats())
     val wishlist: StateFlow<List<BookstoreBook>> = repository.observeWishlist()
         .stateIn(
             scope = viewModelScope,
@@ -139,13 +174,16 @@ class MainViewModel(
             output.closeSilently()
             return
         }
-        val booksToExport = books.value.toList()
         exportJob?.cancel()
         exportJob = viewModelScope.launch {
             _libraryExportState.value = LibraryExportUiState.Exporting
             try {
-                withContext(importIoDispatcher) {
-                    output.use { LibraryExporter.write(booksToExport, format, it) }
+                val booksToExport = withContext(importIoDispatcher) {
+                    output.use { stream ->
+                        val snapshot = repository.getLibrarySnapshot()
+                        LibraryExporter.write(snapshot, format, stream)
+                        snapshot
+                    }
                 }
                 _libraryExportState.value = LibraryExportUiState.Success(booksToExport.size)
             } catch (cancellation: CancellationException) {
@@ -154,6 +192,24 @@ class MainViewModel(
                 _libraryExportState.value = LibraryExportUiState.Error
             }
         }
+    }
+
+    fun updateLibraryQuery(query: String) {
+        _librarySearchCriteria.value = _librarySearchCriteria.value.copy(
+            query = query.take(MAX_LIBRARY_QUERY_LENGTH),
+        )
+    }
+
+    fun updateLibraryReadingStatus(status: ReadingStatus?) {
+        _librarySearchCriteria.value = _librarySearchCriteria.value.copy(readingStatus = status)
+    }
+
+    fun updateLibrarySort(sort: LibrarySort) {
+        _librarySearchCriteria.value = _librarySearchCriteria.value.copy(sort = sort)
+    }
+
+    fun selectLibraryEdition(editionId: String?) {
+        _librarySearchCriteria.value = _librarySearchCriteria.value.copy(selectedEditionId = editionId)
     }
 
     fun consumeLibraryExportResult() {
@@ -857,11 +913,13 @@ class MainViewModel(
 
     companion object {
         private const val RESCAN_GUARD_MILLIS = 4_000L
+        private const val SEARCH_DEBOUNCE_MILLIS = 250L
 
         fun factory(
             repository: LibraryRepository,
             databaseBackupManager: DatabaseBackupManager,
             locationRepository: LocationRepository,
+            librarySearchSettings: LibrarySearchSettingsStore = InMemoryLibrarySearchSettingsStore,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -871,11 +929,17 @@ class MainViewModel(
                         repository = repository,
                         databaseBackupManager = databaseBackupManager,
                         locationRepository = locationRepository,
+                        librarySearchSettings = librarySearchSettings,
                     ) as T
                 }
             }
     }
 }
+
+data class LibrarySearchResult(
+    val criteria: LibrarySearchCriteria,
+    val books: List<LibraryBook>,
+)
 
 sealed interface LocationMutationUiState {
     data object Idle : LocationMutationUiState

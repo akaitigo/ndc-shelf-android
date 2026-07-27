@@ -9,16 +9,35 @@ import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
+import dev.ndcshelf.app.domain.model.LibrarySort
+import dev.ndcshelf.app.domain.model.LibraryStats
 import dev.ndcshelf.app.domain.model.ManualBookDraft
 import dev.ndcshelf.app.domain.model.ManualBookValidationError
 import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
 import dev.ndcshelf.app.domain.model.PurchaseTransition
+import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 interface LibraryRepository {
     fun observeLibrary(): Flow<List<LibraryBook>>
+
+    fun observeLibrary(criteria: LibrarySearchCriteria): Flow<List<LibraryBook>> =
+        observeLibrary().map { books -> books.applyLibrarySearch(criteria) }
+
+    fun observeLibraryStats(): Flow<LibraryStats> = observeLibrary().map { books ->
+        LibraryStats(
+            totalCount = books.size,
+            classifiedCount = books.count { it.ndcCode != null },
+            readingCount = books.count { it.readingStatus == ReadingStatus.READING },
+        )
+    }
+
+    suspend fun getLibrarySnapshot(): List<LibraryBook> = observeLibrary().first()
 
     fun observeWishlist(): Flow<List<BookstoreBook>> = emptyFlow()
 
@@ -84,6 +103,43 @@ interface LibraryRepository {
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+private fun List<LibraryBook>.applyLibrarySearch(criteria: LibrarySearchCriteria): List<LibraryBook> {
+    if (criteria.selectedEditionId != null) return this
+    val filtered = filter { book ->
+        (criteria.normalizedQuery.isEmpty() || book.matches(criteria.normalizedQuery)) &&
+            (criteria.readingStatus == null || book.readingStatus == criteria.readingStatus)
+    }
+    return when (criteria.sort) {
+        LibrarySort.ADDED_NEWEST -> filtered.sortedWith(
+            compareByDescending<LibraryBook>(LibraryBook::addedAt).thenBy(LibraryBook::copyId),
+        )
+        LibrarySort.TITLE -> filtered.sortedWith(
+            compareBy<LibraryBook> { it.title.lowercase() }
+                .thenByDescending(LibraryBook::addedAt)
+                .thenBy(LibraryBook::copyId),
+        )
+        LibrarySort.AUTHOR -> filtered.sortedWith(
+            compareBy<LibraryBook> { it.primaryAuthor.lowercase() }
+                .thenBy { it.title.lowercase() }
+                .thenBy(LibraryBook::copyId),
+        )
+        LibrarySort.NDC -> filtered.sortedWith(
+            compareBy<LibraryBook> { it.ndcCode == null }
+                .thenBy { it.ndcCode }
+                .thenBy { it.title.lowercase() }
+                .thenBy(LibraryBook::copyId),
+        )
+        LibrarySort.SHELF -> filtered.sortedWith(
+            compareBy<LibraryBook> { it.locationTierId == null }
+                .thenBy { it.location }
+                .thenBy { it.shelfOrderKey == null }
+                .thenBy { it.shelfOrderKey }
+                .thenBy(LibraryBook::addedAt)
+                .thenBy(LibraryBook::copyId),
+        )
+    }
 }
 
 sealed interface ManualBookResult {

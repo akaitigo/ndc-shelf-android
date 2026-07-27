@@ -157,6 +157,14 @@
     <string name="book_detail_related_section">関連情報</string>
     <string name="book_detail_series_pending">シリーズと巻の関連付けは、シリーズ管理機能の追加後にここから行えます。</string>
     <string name="book_detail_series_action">シリーズを整理（準備中）</string>
+    <string name="library_filter_status">読書状態</string>
+    <string name="library_filter_all">すべて</string>
+    <string name="library_sort_label">並び順</string>
+    <string name="library_sort_added">追加日</string>
+    <string name="library_sort_title">タイトル</string>
+    <string name="library_sort_author">著者</string>
+    <string name="library_sort_ndc">NDC</string>
+    <string name="library_sort_shelf">棚順</string>
     <string name="book_edit_isbn">ISBN %1$s</string>
     <string name="book_edit_book_title">タイトル</string>
     <string name="book_edit_copy_label">このコピーの識別名</string>

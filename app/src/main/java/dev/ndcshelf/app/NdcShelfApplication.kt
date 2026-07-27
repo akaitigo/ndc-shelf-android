@@ -10,6 +10,7 @@ import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
 import dev.ndcshelf.app.data.local.AppDatabase
+import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
 import dev.ndcshelf.app.data.repository.DefaultLibraryRepository
 import dev.ndcshelf.app.data.repository.RoomLocationRepository
@@ -88,6 +89,8 @@ class AppContainer(application: Application) {
     )
 
     val locationRepository: LocationRepository = RoomLocationRepository(database)
+
+    val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
 
     val databaseBackupManager = RoomDatabaseBackupManager(
         context = application,
