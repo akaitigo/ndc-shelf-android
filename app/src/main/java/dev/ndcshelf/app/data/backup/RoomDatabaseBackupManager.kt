@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.os.storage.StorageManager
+import android.util.Log
 import androidx.room.withTransaction
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.APP_DATABASE_VERSION
@@ -67,63 +68,68 @@ class RoomDatabaseBackupManager(
 
     override suspend fun restoreBackup(
         preview: DatabaseBackupPreview,
-    ): DatabaseRestoreResult = try {
-        automaticBackupDirectory.mkdirs()
-        if (!automaticBackupDirectory.isDirectory) {
-            return DatabaseRestoreResult.Failure(DatabaseBackupFailure.WRITE_FAILED)
-        }
-
-        var automaticBackupName = ""
-        database.withTransaction {
-            val current = readSnapshot()
-            val (archive, _) = codec.encode(current, appVersion, nowMillis())
-            if (!reserveAutomaticBackupSpace(archive.size * REQUIRED_SPACE_MULTIPLIER)) {
-                throw BackupCodecException(
-                    DatabaseBackupFailure.INSUFFICIENT_SPACE,
-                    "Insufficient space for rollback backup",
-                )
+    ): DatabaseRestoreResult {
+        var automaticBackupName: String? = null
+        var automaticBackupVerified = false
+        return try {
+            automaticBackupDirectory.mkdirs()
+            if (!automaticBackupDirectory.isDirectory) {
+                return DatabaseRestoreResult.Failure(DatabaseBackupFailure.WRITE_FAILED)
             }
-            val automaticBackup = writeAutomaticBackup(archive)
-            val verifiedBackup = automaticBackup.inputStream().use(codec::decode)
-            check(verifiedBackup.snapshot == current) { "Rollback backup verification failed" }
-            automaticBackupName = automaticBackup.name
 
-            dao.deleteAllScanAttempts()
-            dao.deleteAllScanSessions()
-            dao.deleteAllCopies()
-            dao.deleteAllWishlistItems()
-            seriesDao.deleteAllMemberships()
-            seriesDao.deleteAllSeries()
-            locationDao.deleteAllTiers()
-            locationDao.deleteAllShelves()
-            locationDao.deleteAllRooms()
-            dao.deleteAllEditions()
-            dao.deleteAllWorks()
-            dao.upsertWorks(preview.snapshot.works)
-            seriesDao.upsertSeriesItems(preview.snapshot.series)
-            seriesDao.upsertMemberships(preview.snapshot.seriesMemberships)
-            dao.upsertEditions(preview.snapshot.editions)
-            dao.upsertWishlistItems(preview.snapshot.wishlistItems)
-            locationDao.upsertRooms(preview.snapshot.rooms)
-            locationDao.upsertShelves(preview.snapshot.shelves)
-            locationDao.upsertTiers(preview.snapshot.tiers)
-            dao.upsertCopies(preview.snapshot.copies)
-            dao.upsertScanSessions(preview.snapshot.scanSessions)
-            dao.upsertScanAttempts(preview.snapshot.scanAttempts)
+            database.withTransaction {
+                val current = readSnapshot()
+                val (archive, _) = codec.encode(current, appVersion, nowMillis())
+                if (!reserveAutomaticBackupSpace(archive.size * REQUIRED_SPACE_MULTIPLIER)) {
+                    throw BackupCodecException(
+                        DatabaseBackupFailure.INSUFFICIENT_SPACE,
+                        "Insufficient space for rollback backup",
+                    )
+                }
+                val automaticBackup = writeAutomaticBackup(archive)
+                automaticBackupName = automaticBackup.name
+                val verifiedBackup = automaticBackup.inputStream().use(codec::decode)
+                check(verifiedBackup.snapshot == current) { "Rollback backup verification failed" }
+                automaticBackupVerified = true
 
-            check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
+                dao.deleteAllScanAttempts()
+                dao.deleteAllScanSessions()
+                dao.deleteAllCopies()
+                dao.deleteAllWishlistItems()
+                seriesDao.deleteAllMemberships()
+                seriesDao.deleteAllSeries()
+                locationDao.deleteAllTiers()
+                locationDao.deleteAllShelves()
+                locationDao.deleteAllRooms()
+                dao.deleteAllEditions()
+                dao.deleteAllWorks()
+                dao.upsertWorks(preview.snapshot.works)
+                seriesDao.upsertSeriesItems(preview.snapshot.series)
+                seriesDao.upsertMemberships(preview.snapshot.seriesMemberships)
+                dao.upsertEditions(preview.snapshot.editions)
+                dao.upsertWishlistItems(preview.snapshot.wishlistItems)
+                locationDao.upsertRooms(preview.snapshot.rooms)
+                locationDao.upsertShelves(preview.snapshot.shelves)
+                locationDao.upsertTiers(preview.snapshot.tiers)
+                dao.upsertCopies(preview.snapshot.copies)
+                dao.upsertScanSessions(preview.snapshot.scanSessions)
+                dao.upsertScanAttempts(preview.snapshot.scanAttempts)
+
+                check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
+            }
+            DatabaseRestoreResult.Success(
+                restoredCopyCount = preview.metadata.copyCount,
+                automaticBackupName = requireNotNull(automaticBackupName),
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: BackupCodecException) {
+            DatabaseRestoreResult.Failure(error.failure)
+        } catch (_: Exception) {
+            DatabaseRestoreResult.Failure(DatabaseBackupFailure.RESTORE_FAILED)
+        } finally {
+            cleanAutomaticBackups(automaticBackupName, automaticBackupVerified)
         }
-        pruneAutomaticBackups(keepName = automaticBackupName)
-        DatabaseRestoreResult.Success(
-            restoredCopyCount = preview.metadata.copyCount,
-            automaticBackupName = automaticBackupName,
-        )
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: BackupCodecException) {
-        DatabaseRestoreResult.Failure(error.failure)
-    } catch (_: Exception) {
-        DatabaseRestoreResult.Failure(DatabaseBackupFailure.RESTORE_FAILED)
     }
 
     private suspend fun readSnapshot() = DatabaseSnapshot(
@@ -177,16 +183,37 @@ class RoomDatabaseBackupManager(
     private fun hasLegacyFreeSpace(requiredBytes: Long): Boolean =
         automaticBackupDirectory.usableSpace >= requiredBytes
 
-    private fun pruneAutomaticBackups(keepName: String) {
-        automaticBackupDirectory.listFiles()
+    private fun pruneAutomaticBackups(keepName: String?) {
+        val olderBackupLimit = if (keepName == null) {
+            MAX_AUTOMATIC_BACKUPS
+        } else {
+            MAX_AUTOMATIC_BACKUPS - 1
+        }
+        val deletionFailed = automaticBackupDirectory.listFiles()
             ?.filter { it.isFile && it.name.endsWith(".ndcshelfbackup") && it.name != keepName }
             ?.sortedByDescending(File::lastModified)
-            ?.drop(MAX_OLDER_AUTOMATIC_BACKUPS)
-            ?.forEach(File::delete)
+            ?.drop(olderBackupLimit)
+            ?.fold(false) { failed, file -> !file.delete() || failed }
+            ?: false
+        if (deletionFailed) Log.w(TAG, "Could not delete an older automatic backup")
+    }
+
+    private fun cleanAutomaticBackups(backupName: String?, verified: Boolean) {
+        try {
+            if (backupName != null && !verified &&
+                !File(automaticBackupDirectory, backupName).delete()
+            ) {
+                Log.w(TAG, "Could not delete an unverified automatic backup")
+            }
+            pruneAutomaticBackups(keepName = backupName.takeIf { verified })
+        } catch (_: Exception) {
+            Log.w(TAG, "Could not prune automatic backups")
+        }
     }
 
     companion object {
         private const val REQUIRED_SPACE_MULTIPLIER = 2L
-        private const val MAX_OLDER_AUTOMATIC_BACKUPS = 2
+        private const val MAX_AUTOMATIC_BACKUPS = 3
+        private const val TAG = "DatabaseBackup"
     }
 }

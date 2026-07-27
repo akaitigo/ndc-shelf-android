@@ -10,6 +10,9 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
+import dev.ndcshelf.app.domain.backup.DatabaseBackupFailure
+import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
+import dev.ndcshelf.app.domain.backup.DatabaseBackupPreview
 import dev.ndcshelf.app.domain.backup.DatabaseRestoreResult
 import dev.ndcshelf.app.domain.backup.DatabaseSnapshot
 import kotlinx.coroutines.runBlocking
@@ -31,6 +34,8 @@ class RoomDatabaseBackupManagerIntegrationTest {
     private lateinit var database: AppDatabase
     private lateinit var backupDirectory: File
     private lateinit var manager: RoomDatabaseBackupManager
+    private var now = 0L
+    private var spaceAvailable = true
 
     @Before
     fun setUp() {
@@ -39,13 +44,15 @@ class RoomDatabaseBackupManagerIntegrationTest {
             .allowMainThreadQueries()
             .build()
         backupDirectory = File(context.cacheDir, "backup-unit-test-${System.nanoTime()}")
+        now = 1_800_000_000_000
+        spaceAvailable = true
         manager = RoomDatabaseBackupManager(
             context = context,
             database = database,
             automaticBackupDirectory = backupDirectory,
             appVersion = "test",
-            nowMillis = { 1_800_000_000_000 },
-            spaceReservation = { true },
+            nowMillis = { now++ },
+            spaceReservation = { spaceAvailable },
         )
     }
 
@@ -78,6 +85,73 @@ class RoomDatabaseBackupManagerIntegrationTest {
         val rollback = manager.inspectBackup(rollbackFile.inputStream())
             as DatabaseBackupInspectResult.Valid
         assertEquals(replaced, rollback.preview.snapshot)
+    }
+
+    @Test
+    fun `repeated failed restores keep only three verified rollback backups`() = runBlocking {
+        val current = snapshot("current", "DUPLICATE")
+        insert(current)
+        val invalid = DatabaseSnapshot(
+            works = emptyList(),
+            editions = current.editions,
+            copies = current.copies,
+        )
+        val preview = DatabaseBackupPreview(
+            metadata = DatabaseBackupMetadata(
+                formatVersion = 10,
+                databaseVersion = 9,
+                createdAt = 1,
+                appVersion = "test",
+                workCount = 0,
+                editionCount = 1,
+                copyCount = 1,
+            ),
+            snapshot = invalid,
+        )
+
+        repeat(6) {
+            assertTrue(manager.restoreBackup(preview) is DatabaseRestoreResult.Failure)
+            assertEquals(current, readSnapshot())
+        }
+
+        val backups = backupDirectory.listFiles()
+            .orEmpty()
+            .filter { it.name.endsWith(".ndcshelfbackup") }
+        assertEquals(3, backups.size)
+        backups.forEach { backup ->
+            assertTrue(manager.inspectBackup(backup.inputStream()) is DatabaseBackupInspectResult.Valid)
+        }
+        assertTrue(backupDirectory.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
+    }
+
+    @Test
+    fun `failure before rollback creation prunes legacy overflow`() = runBlocking {
+        val current = snapshot("current", "DUPLICATE")
+        insert(current)
+        val output = ByteArrayOutputStream()
+        manager.createBackup(output)
+        val preview = manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
+            as DatabaseBackupInspectResult.Valid
+        backupDirectory.mkdirs()
+        repeat(5) { index ->
+            File(backupDirectory, "before-restore-legacy-$index.ndcshelfbackup").apply {
+                writeBytes(byteArrayOf(index.toByte()))
+                setLastModified(index.toLong())
+            }
+        }
+        spaceAvailable = false
+
+        val result = manager.restoreBackup(preview.preview)
+
+        assertEquals(
+            DatabaseRestoreResult.Failure(DatabaseBackupFailure.INSUFFICIENT_SPACE),
+            result,
+        )
+        assertEquals(current, readSnapshot())
+        assertEquals(
+            3,
+            backupDirectory.listFiles().orEmpty().count { it.name.endsWith(".ndcshelfbackup") },
+        )
     }
 
     private suspend fun insert(snapshot: DatabaseSnapshot) {
