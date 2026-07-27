@@ -670,14 +670,19 @@ private fun EditBookSheet(
     val currentShelfIndex = orderedTierBooks.indexOfFirst { it.copyId == book.copyId }
     val leftNeighbor = orderedTierBooks.getOrNull(currentShelfIndex - 1)
     val rightNeighbor = orderedTierBooks.getOrNull(currentShelfIndex + 1)
-    val targetTierBooks = allBooks.filter {
-        it.locationTierId == locationTierId && it.copyId != book.copyId
-    }.sortedWith(
-        compareBy<LibraryBook> { it.shelfOrderKey == null }
-            .thenBy { it.shelfOrderKey }
-            .thenBy { it.addedAt }
-            .thenBy { it.copyId },
-    )
+    val targetTierBooks = remember(allBooks, locationTierId, book.copyId) {
+        allBooks.filter {
+            it.locationTierId == locationTierId && it.copyId != book.copyId
+        }.sortedWith(
+            compareBy<LibraryBook> { it.shelfOrderKey == null }
+                .thenBy { it.shelfOrderKey }
+                .thenBy { it.addedAt }
+                .thenBy { it.copyId },
+        )
+    }
+    val addedAtLabel = remember(book.addedAt) {
+        DateFormat.getDateTimeInstance().format(Date(book.addedAt))
+    }
 
     fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
 
@@ -771,7 +776,7 @@ private fun EditBookSheet(
             Text(
                 text = stringResource(
                     R.string.book_added_at,
-                    DateFormat.getDateTimeInstance().format(Date(book.addedAt)),
+                    addedAtLabel,
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
