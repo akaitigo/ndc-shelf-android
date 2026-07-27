@@ -154,7 +154,8 @@ class LibraryCsvImporter(
     private fun String.restoreSpreadsheetProtection(): String {
         if (!startsWith('\'')) return this
         val candidate = drop(1)
-        return if (candidate.firstOrNull { !it.isWhitespace() } in FORMULA_PREFIXES) candidate else this
+        val firstMeaningful = candidate.firstOrNull { !it.isWhitespace() }
+        return if (firstMeaningful == '\'' || firstMeaningful in FORMULA_PREFIXES) candidate else this
     }
 
     private fun String?.generatedId(kind: String): String? {

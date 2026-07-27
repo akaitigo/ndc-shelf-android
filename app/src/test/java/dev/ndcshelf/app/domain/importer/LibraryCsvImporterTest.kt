@@ -35,6 +35,40 @@ class LibraryCsvImporterTest {
     }
 
     @Test
+    fun `exported CSV round trip preserves apostrophes before formula prefixes`() = runBlocking {
+        val original = sampleBook(
+            title = "'=TITLE()",
+            location = "  '@LOCATION",
+        ).copy(
+            primaryAuthor = "'+AUTHOR",
+            publisher = "'-PUBLISHER",
+            copyLabel = "'ordinary apostrophe",
+        )
+        val exported = LibraryExporter.export(listOf(original), LibraryExportFormat.CSV)
+
+        val parsed = importer().parse(ByteArrayInputStream(exported)) as LibraryCsvParseResult.Valid
+        val planned = planner().preview(
+            parsed.batch,
+            existingBooks = emptyList(),
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+
+        assertEquals(listOf(original.copy(location = "'@LOCATION")), planned.preview.additions)
+    }
+
+    @Test
+    fun `manually authored ordinary apostrophe is not treated as protection`() = runBlocking {
+        val source = requiredHeader() +
+            "\n'Book,'Author,9784820418078,NDL,PHYSICAL,'Shelf,READING,1"
+
+        val result = parse(source) as LibraryCsvParseResult.Valid
+
+        assertEquals("'Book", result.batch.records.single().title)
+        assertEquals("'Author", result.batch.records.single().primaryAuthor)
+        assertEquals("'Shelf", result.batch.records.single().location)
+    }
+
+    @Test
     fun `exported CSV round trip preserves manual source without ISBN`() = runBlocking {
         val manual = sampleBook("手動本", "未設定").copy(
             isbn13 = null,

@@ -51,6 +51,16 @@ class LibraryExporterTest {
     }
 
     @Test
+    fun `CSV export escapes leading apostrophe for lossless import`() {
+        val output = LibraryExporter.export(
+            books = listOf(sampleBook(title = "'=literal")),
+            format = LibraryExportFormat.CSV,
+        ).toString(StandardCharsets.UTF_8)
+
+        assertTrue(output.contains("\"''=literal\""))
+    }
+
+    @Test
     fun `CSV export escapes quotes commas and embedded newlines`() {
         val output = LibraryExporter.export(
             books = listOf(
