@@ -11,6 +11,8 @@ import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
+import dev.ndcshelf.app.data.local.WorkGroupEntity
+import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -105,20 +107,20 @@ class DatabaseBackupCodecTest {
         val olderManifest = original.toMutableMap().apply {
             this["manifest.json"] = requireNotNull(this["manifest.json"])
                 .decodeToString()
-                .replace("\"formatVersion\":10", "\"formatVersion\":9")
+                .replace("\"formatVersion\":11", "\"formatVersion\":10")
                 .encodeToByteArray()
         }
         val olderPayload = archiveWithPayload(
             original,
             requireNotNull(original["database.json"])
                 .decodeToString()
-                .replace("\"schemaVersion\":10", "\"schemaVersion\":9"),
+                .replace("\"schemaVersion\":11", "\"schemaVersion\":10"),
         )
         val missingPayloadSchema = archiveWithPayload(
             original,
             requireNotNull(original["database.json"])
                 .decodeToString()
-                .replace("\"schemaVersion\":10,", ""),
+                .replace("\"schemaVersion\":11,", ""),
         )
 
         listOf(zip(olderManifest), olderPayload, missingPayloadSchema).forEach { invalidArchive ->
@@ -135,13 +137,13 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":10", "\"schemaVersion\":7")
+            .replace("\"schemaVersion\":11", "\"schemaVersion\":7")
             .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":10", "\"formatVersion\":7")
+            .replace("\"formatVersion\":11", "\"formatVersion\":7")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
 
@@ -159,14 +161,14 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":10", "\"schemaVersion\":8")
+            .replace("\"schemaVersion\":11", "\"schemaVersion\":8")
             .replace(",\"series\":[]", "")
             .replace(",\"seriesMemberships\":[]", "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":10", "\"formatVersion\":8")
+            .replace("\"formatVersion\":11", "\"formatVersion\":8")
             .replace(",\"seriesCount\":0,\"seriesMembershipCount\":0", "")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
@@ -278,6 +280,51 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `format ten backup is restored with no inferred work groups`() {
+        val (archive, _) = codec.encode(sampleSnapshot(), "0.4.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        val payload = requireNotNull(entries["database.json"])
+            .decodeToString()
+            .replace("\"schemaVersion\":11", "\"schemaVersion\":10")
+            .replace(
+                Regex(",\"workGroups\":\\[.*?],\"workGroupMemberships\":\\[.*?]"),
+                "",
+            )
+            .encodeToByteArray()
+        val manifest = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace("\"formatVersion\":11", "\"formatVersion\":10")
+            .replace(Regex(",\"workGroupCount\":\\d+,\"workGroupMembershipCount\":\\d+"), "")
+            .replace(Regex("\"payloadSha256\":\"[0-9a-f]+\""), "\"payloadSha256\":\"${payload.sha256()}\"")
+            .encodeToByteArray()
+        entries["database.json"] = payload
+        entries["manifest.json"] = manifest
+
+        val preview = codec.decode(ByteArrayInputStream(zip(entries)))
+
+        assertEquals(emptyList<WorkGroupEntity>(), preview.snapshot.workGroups)
+        assertEquals(emptyList<WorkGroupMembershipEntity>(), preview.snapshot.workGroupMemberships)
+    }
+
+    @Test
+    fun `orphan and undersized work groups are rejected before backup`() {
+        val sample = sampleSnapshot()
+        val orphan = sample.copy(
+            workGroupMemberships = sample.workGroupMemberships.map { it.copy(groupId = "missing") },
+        )
+        val undersized = sample.copy(
+            workGroupMemberships = sample.workGroupMemberships.take(1),
+        )
+
+        listOf(orphan, undersized).forEach { invalid ->
+            val error = assertThrows(BackupCodecException::class.java) {
+                codec.encode(invalid, "0.4.0", 1)
+            }
+            assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+        }
+    }
+
+    @Test
     fun `snapshot with missing foreign key is rejected`() {
         val invalid = sampleSnapshot().copy(works = emptyList())
 
@@ -358,7 +405,10 @@ class DatabaseBackupCodecTest {
     }
 
     private fun sampleSnapshot() = DatabaseSnapshot(
-        works = listOf(BookWorkEntity("work-1", "吾輩は猫である", "夏目漱石")),
+        works = listOf(
+            BookWorkEntity("work-1", "吾輩は猫である", "夏目漱石"),
+            BookWorkEntity("work-2", "吾輩は猫である 文庫版", "夏目漱石"),
+        ),
         editions = listOf(
             BookEditionEntity(
                 id = "edition-1",
@@ -430,6 +480,13 @@ class DatabaseBackupCodecTest {
                 confirmedBy = "USER",
                 sourceTitle = "吾輩シリーズ 上巻",
             ),
+        ),
+        workGroups = listOf(
+            WorkGroupEntity("work-group-1", "吾輩は猫である", "夏目漱石", true, 1, 2),
+        ),
+        workGroupMemberships = listOf(
+            WorkGroupMembershipEntity("work-group-member-1", "work-group-1", "work-1", 1),
+            WorkGroupMembershipEntity("work-group-member-2", "work-group-1", "work-2", 1),
         ),
     )
 

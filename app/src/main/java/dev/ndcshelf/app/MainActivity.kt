@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
             locationRepository = application.container.locationRepository,
             librarySearchSettings = application.container.librarySearchSettings,
             seriesRepository = application.container.seriesRepository,
+            workGroupRepository = application.container.workGroupRepository,
         )
     }
 

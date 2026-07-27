@@ -118,6 +118,7 @@ fun LibraryScreen(
     onConfirmManualReconciliation: () -> Unit = {},
     onClearManualReconciliation: () -> Unit = {},
     onManageSeries: (String) -> Unit = {},
+    onManageVariants: (String) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var localQuery by rememberSaveable { mutableStateOf("") }
@@ -202,6 +203,7 @@ fun LibraryScreen(
             onEditBibliography = { openEditor(selectedCopies.first().copyId) },
             onReconcile = { openEditor(selectedCopies.first().copyId) },
             onManageSeries = onManageSeries,
+            onManageVariants = onManageVariants,
             contentPadding = contentPadding,
         )
     } else {

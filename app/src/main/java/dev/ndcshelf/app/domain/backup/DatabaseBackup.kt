@@ -11,6 +11,8 @@ import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
+import dev.ndcshelf.app.data.local.WorkGroupEntity
+import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 
 data class DatabaseSnapshot(
     val works: List<BookWorkEntity>,
@@ -24,6 +26,8 @@ data class DatabaseSnapshot(
     val scanAttempts: List<ScanAttemptEntity> = emptyList(),
     val series: List<SeriesEntity> = emptyList(),
     val seriesMemberships: List<SeriesMembershipEntity> = emptyList(),
+    val workGroups: List<WorkGroupEntity> = emptyList(),
+    val workGroupMemberships: List<WorkGroupMembershipEntity> = emptyList(),
 )
 
 data class DatabaseBackupMetadata(
@@ -39,6 +43,8 @@ data class DatabaseBackupMetadata(
     val scanAttemptCount: Int = 0,
     val seriesCount: Int = 0,
     val seriesMembershipCount: Int = 0,
+    val workGroupCount: Int = 0,
+    val workGroupMembershipCount: Int = 0,
 )
 
 class DatabaseBackupPreview internal constructor(

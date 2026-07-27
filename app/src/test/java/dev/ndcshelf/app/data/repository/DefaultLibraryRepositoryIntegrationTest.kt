@@ -7,6 +7,8 @@ import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.WorkGroupEntity
+import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import dev.ndcshelf.app.data.remote.BookMetadata
 import dev.ndcshelf.app.data.remote.BookMetadataLookupResult
 import dev.ndcshelf.app.data.remote.BookMetadataService
@@ -28,6 +30,7 @@ import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
 import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
+import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.ManualBookResult
 import dev.ndcshelf.app.domain.repository.ManualReconciliationApplyResult
 import dev.ndcshelf.app.domain.repository.ManualReconciliationLookupResult
@@ -121,6 +124,36 @@ class DefaultLibraryRepositoryIntegrationTest {
         assertTrue(database.libraryDao().getAllCopies().isEmpty())
         assertTrue(database.libraryDao().getAllEditions().isEmpty())
         assertTrue(database.libraryDao().getAllWorks().isEmpty())
+    }
+
+    @Test
+    fun deletingLastCopyPreservesWorkGroupAndUndoRestoresEdition() = runBlocking {
+        val repository = repository(
+            ids = listOf("work", "edition", "copy"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val added = (repository.addFromIsbn(ISBN) as AddBookResult.Added).book
+        database.libraryDao().insertWork(BookWorkEntity("alternate", "題名 文庫版", "著者A・著者B"))
+        database.workGroupDao().insertGroup(
+            WorkGroupEntity("group", "題名", "著者A・著者B", false, 1, 1),
+        )
+        database.workGroupDao().upsertMemberships(
+            listOf(
+                WorkGroupMembershipEntity("member-a", "group", added.workId, 1),
+                WorkGroupMembershipEntity("member-b", "group", "alternate", 1),
+            ),
+        )
+
+        val deleted = repository.deleteBook(added.copyId) as DeleteBookResult.Deleted
+
+        assertEquals(2, database.workGroupDao().getAllMemberships().size)
+        assertEquals("group", database.workGroupDao().findMembershipByWorkId(added.workId)?.groupId)
+        assertEquals(added.title, database.libraryDao().findWorkById(added.workId)?.title)
+        assertNull(database.libraryDao().findEditionById(added.editionId))
+
+        assertSame(RestoreDeletedBookResult.Restored, repository.restoreDeletedBook(deleted.book))
+        assertEquals(added.editionId, database.libraryDao().findCopyById(added.copyId)?.editionId)
+        assertEquals(2, database.workGroupDao().getAllMemberships().size)
     }
 
     @Test

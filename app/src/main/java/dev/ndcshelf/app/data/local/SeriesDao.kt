@@ -124,7 +124,18 @@ interface SeriesDao {
             MAX(copies.addedAt) AS latestOwnedAddedAt
         FROM series_memberships AS memberships
         INNER JOIN book_works AS works ON works.id = memberships.workId
-        LEFT JOIN book_editions AS editions ON editions.workId = memberships.workId
+        LEFT JOIN book_editions AS editions ON
+            editions.workId = memberships.workId OR
+            editions.workId IN (
+                SELECT alternatives.workId
+                FROM work_group_memberships AS anchor
+                INNER JOIN work_groups AS group_rows
+                    ON group_rows.id = anchor.groupId
+                    AND group_rows.seriesSubstitutionEnabled = 1
+                INNER JOIN work_group_memberships AS alternatives
+                    ON alternatives.groupId = group_rows.id
+                WHERE anchor.workId = memberships.workId
+            )
         LEFT JOIN owned_copies AS copies ON copies.editionId = editions.id
         LEFT JOIN wishlist_items AS wishlist ON wishlist.editionId = editions.id
         GROUP BY memberships.id

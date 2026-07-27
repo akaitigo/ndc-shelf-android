@@ -239,7 +239,9 @@ class DefaultLibraryRepository(
             ) {
                 check(dao.deleteEditionById(book.editionId) == 1)
                 if (dao.countEditionsForWork(book.workId) == 0) {
-                    dao.deleteWorkById(book.workId)
+                    if (database.workGroupDao().findMembershipByWorkId(book.workId) == null) {
+                        dao.deleteWorkById(book.workId)
+                    }
                 }
             }
         }
@@ -577,7 +579,10 @@ class DefaultLibraryRepository(
                 check(dao.moveCopiesToEdition(current.editionId, targetId) > 0)
                 dao.deleteWishlistByEditionId(targetId)
                 check(dao.deleteEditionById(current.editionId) == 1)
-                if (dao.countEditionsForWork(current.workId) == 0) dao.deleteWorkById(current.workId)
+                if (dao.countEditionsForWork(current.workId) == 0) {
+                    dao.deleteWorkById(current.workId)
+                    database.workGroupDao().deleteUndersizedGroups()
+                }
             } else {
                 dao.updateWork(
                     current.workId,
@@ -942,7 +947,9 @@ class DefaultLibraryRepository(
                 check(dao.deleteEditionById(book.editionId) == 1)
             }
             if (dao.countEditionsForWork(book.workId) == 0) {
-                check(dao.deleteWorkById(book.workId) == 1)
+                if (database.workGroupDao().findMembershipByWorkId(book.workId) == null) {
+                    check(dao.deleteWorkById(book.workId) == 1)
+                }
             }
             DeleteBookResult.Deleted(book)
         }
