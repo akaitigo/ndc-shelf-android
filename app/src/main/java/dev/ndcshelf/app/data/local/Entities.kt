@@ -306,3 +306,23 @@ data class SeriesMembershipRow(
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+data class SeriesVolumeRow(
+    val membershipId: String,
+    val seriesId: String,
+    val workId: String,
+    val workTitle: String,
+    val primaryAuthor: String,
+    val sortOrderKey: String,
+    val volumeLabel: String,
+    val type: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val ownedEditionId: String?,
+    val bookstoreIsbn: String?,
+    val ownedCopyCount: Int,
+    val readCopyCount: Int,
+    val readingCopyCount: Int,
+    val purchaseStatusRank: Int,
+    val latestOwnedAddedAt: Long?,
+)

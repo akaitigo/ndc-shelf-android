@@ -79,7 +79,7 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 
 ## シリーズモデル
 
-WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻ラベルと種別は表示事実、fractional order keyは表示順として分離し、タイトルから暗黙に推測しません。Room v8の外部キー・一意制約、複数所属、削除・統合・同期の判断は[シリーズモデル](SERIES_MODEL.md)と[ADR 0002](adr/0002-multiple-series-memberships.md)を参照してください。
+WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻ラベルと種別は表示事実、fractional order keyは表示順として分離し、タイトルから暗黙に推測しません。`RoomSeriesRepository`はMembershipをEdition・Copy・Wishlistへ集約し、Composeへ所有・読了・購入予定状態をFlowで提供します。欠巻候補は確認済みMembershipのうち明示的な巻ラベルを持つ本編だけであり、番号の穴から未知の巻を生成しません。Room v8の外部キー・一意制約、複数所属、削除・統合・同期の判断は[シリーズモデル](SERIES_MODEL.md)と[ADR 0002](adr/0002-multiple-series-memberships.md)を参照してください。
 
 ## 書籍詳細UI
 
