@@ -31,6 +31,7 @@
 - 完全restore失敗時も検証済み自動退避backupを最大3世代に制限。
 - 本編集シートの文字入力中に全蔵書の段内filter・sortを繰り返さないよう最適化。
 - CSV importは列数不一致でも表示上限100件に達した時点で解析を終了。
+- 完全backupのmanifest形式版とpayload schema版が一致しないファイルを復元前に拒否。
 
 ### Security
 

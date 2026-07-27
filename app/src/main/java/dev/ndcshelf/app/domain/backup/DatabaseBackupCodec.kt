@@ -300,6 +300,7 @@ internal class DatabaseBackupCodec(
     private fun decodePayload(payload: JsonObject, formatVersion: Int): DatabaseSnapshot {
         val schemaVersion = payload["schemaVersion"]?.jsonPrimitive?.intOrNull ?: 1
         if (schemaVersion > CURRENT_PAYLOAD_SCHEMA_VERSION) unsupported("Newer payload schema")
+        if (schemaVersion != formatVersion) unsupported("Backup format and payload schema differ")
         val works = payload.requiredArray("works").map { element ->
             val value = element.jsonObject
             BookWorkEntity(

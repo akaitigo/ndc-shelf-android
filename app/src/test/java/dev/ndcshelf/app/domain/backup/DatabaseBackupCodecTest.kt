@@ -99,6 +99,37 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `format and payload schema versions must match`() {
+        val (archive, _) = codec.encode(sampleSnapshot(), "0.4.0", 1)
+        val original = unzip(archive)
+        val olderManifest = original.toMutableMap().apply {
+            this["manifest.json"] = requireNotNull(this["manifest.json"])
+                .decodeToString()
+                .replace("\"formatVersion\":10", "\"formatVersion\":9")
+                .encodeToByteArray()
+        }
+        val olderPayload = archiveWithPayload(
+            original,
+            requireNotNull(original["database.json"])
+                .decodeToString()
+                .replace("\"schemaVersion\":10", "\"schemaVersion\":9"),
+        )
+        val missingPayloadSchema = archiveWithPayload(
+            original,
+            requireNotNull(original["database.json"])
+                .decodeToString()
+                .replace("\"schemaVersion\":10,", ""),
+        )
+
+        listOf(zip(olderManifest), olderPayload, missingPayloadSchema).forEach { invalidArchive ->
+            val error = assertThrows(BackupCodecException::class.java) {
+                codec.decode(ByteArrayInputStream(invalidArchive))
+            }
+            assertEquals(DatabaseBackupFailure.UNSUPPORTED_FORMAT, error.failure)
+        }
+    }
+
+    @Test
     fun `format one payload migrates fields added in format two`() {
         val payload = """
             {
@@ -435,6 +466,23 @@ class DatabaseBackupCodecTest {
             }
         }
         output.toByteArray()
+    }
+
+    private fun archiveWithPayload(
+        original: Map<String, ByteArray>,
+        payloadText: String,
+    ): ByteArray {
+        val payload = payloadText.encodeToByteArray()
+        val entries = original.toMutableMap()
+        entries["database.json"] = payload
+        entries["manifest.json"] = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace(
+                Regex("\"payloadSha256\":\"[0-9a-f]+\""),
+                "\"payloadSha256\":\"${payload.sha256()}\"",
+            )
+            .encodeToByteArray()
+        return zip(entries)
     }
 
     private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
