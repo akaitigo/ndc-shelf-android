@@ -11,6 +11,7 @@ import dev.ndcshelf.app.data.local.ScanSessionAttemptRow
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.WishlistBookRow
 import dev.ndcshelf.app.data.local.WishlistItemEntity
+import dev.ndcshelf.app.data.local.toSQLiteQuery
 import dev.ndcshelf.app.data.remote.BookMetadataFailure
 import dev.ndcshelf.app.data.remote.BookMetadataLookupResult
 import dev.ndcshelf.app.data.remote.BookMetadataService
@@ -30,6 +31,8 @@ import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
+import dev.ndcshelf.app.domain.model.LibraryStats
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ManualBookDraft
 import dev.ndcshelf.app.domain.model.ManualBookValidationResult
@@ -81,6 +84,19 @@ class DefaultLibraryRepository(
 
     override fun observeLibrary(): Flow<List<LibraryBook>> =
         dao.observeLibrary().map { rows -> rows.map(LibraryBookRow::toDomain) }
+
+    override fun observeLibrary(criteria: LibrarySearchCriteria): Flow<List<LibraryBook>> =
+        dao.observeLibrarySearch(criteria.toSQLiteQuery()).map { rows ->
+            rows.map(LibraryBookRow::toDomain)
+        }
+
+    override fun observeLibraryStats(): Flow<LibraryStats> =
+        dao.observeLibraryStats().map { row ->
+            LibraryStats(row.totalCount, row.classifiedCount, row.readingCount)
+        }
+
+    override suspend fun getLibrarySnapshot(): List<LibraryBook> =
+        dao.getLibrary().map(LibraryBookRow::toDomain)
 
     override fun observeWishlist(): Flow<List<BookstoreBook>> =
         dao.observeWishlist().map { rows -> rows.map(WishlistBookRow::toDomain) }

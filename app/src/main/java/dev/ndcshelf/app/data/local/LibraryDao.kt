@@ -4,7 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Upsert
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -153,6 +155,31 @@ interface LibraryDao {
         """,
     )
     fun observeLibrary(): Flow<List<LibraryBookRow>>
+
+    @RawQuery(
+        observedEntities = [
+            BookWorkEntity::class,
+            BookEditionEntity::class,
+            OwnedCopyEntity::class,
+            LocationRoomEntity::class,
+            LocationShelfEntity::class,
+            LocationTierEntity::class,
+        ],
+    )
+    fun observeLibrarySearch(query: SupportSQLiteQuery): Flow<List<LibraryBookRow>>
+
+    @Query(
+        """
+        SELECT
+            COUNT(*) AS totalCount,
+            COUNT(editions.ndcCode) AS classifiedCount,
+            COALESCE(SUM(CASE WHEN copies.readingStatus = 'READING' THEN 1 ELSE 0 END), 0)
+                AS readingCount
+        FROM owned_copies AS copies
+        INNER JOIN book_editions AS editions ON editions.id = copies.editionId
+        """,
+    )
+    fun observeLibraryStats(): Flow<LibraryStatsRow>
 
     @Query(
         """
