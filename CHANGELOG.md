@@ -46,6 +46,13 @@
 - importの入力上限、schema検証、CSV formula injection対策、URL allowlist、transaction rollbackを追加。
 - backup復元でZIP構造、SHA-256、DB版、件数、参照整合性、空き容量を事前検証。
 
+### Known limitations
+
+- シリーズ候補とNDL新刊書誌は確定事実ではなく、ユーザー確認前にシリーズ所属へ保存しない。
+- 欠巻は確認済みの明示的な本編だけを対象とし、未登録番号や外部の最新刊を推測しない。
+- 新刊候補確認は明示的opt-inかつ最大週1回で、発売日・網羅性・在庫を保証しない。
+- シリーズ統合と複数端末同期はv0.4の対象外。
+
 ## [0.1.2] - 2026-07-25
 
 ### Added
