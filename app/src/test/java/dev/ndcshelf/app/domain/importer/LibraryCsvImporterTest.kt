@@ -141,6 +141,18 @@ class LibraryCsvImporterTest {
     }
 
     @Test
+    fun `row width errors stop parsing at the display limit`() = runBlocking {
+        val widthErrors = List(100) { "too,few" }.joinToString("\n")
+        val source = requiredHeader() + "\n" + widthErrors + "\n\"unterminated"
+
+        val result = parse(source) as LibraryCsvParseResult.Invalid
+
+        assertEquals(100, result.errors.size)
+        assertTrue(result.errors.all { it.reason.contains("列数") })
+        assertEquals(100, result.errors.last().recordNumber)
+    }
+
+    @Test
     fun `unterminated quoted cell is rejected as malformed CSV`() = runBlocking {
         val source = requiredHeader() +
             "\n\"unterminated,著者,9784820418078,NDL,PHYSICAL,棚,READING,1"

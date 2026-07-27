@@ -82,6 +82,7 @@ class LibraryCsvImporter(
                     headerErrors.errors.addCapped(
                         ImportValidationError(row, null, "列数がヘッダーと一致しません"),
                     )
+                    if (headerErrors.errors.size >= MAX_ERRORS) break
                     continue
                 }
                 val isbn = record.value("isbn13")
