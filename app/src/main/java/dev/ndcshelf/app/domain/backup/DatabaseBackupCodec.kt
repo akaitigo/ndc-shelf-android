@@ -256,6 +256,9 @@ internal class DatabaseBackupCodec(
                     put("type", JsonPrimitive(membership.type))
                     put("createdAt", JsonPrimitive(membership.createdAt))
                     put("updatedAt", JsonPrimitive(membership.updatedAt))
+                    put("origin", JsonPrimitive(membership.origin))
+                    put("confirmedBy", JsonPrimitive(membership.confirmedBy))
+                    put("sourceTitle", JsonPrimitive(membership.sourceTitle))
                 })
             }
         })
@@ -375,6 +378,9 @@ internal class DatabaseBackupCodec(
                 type = value.requiredString("type"),
                 createdAt = value.requiredLong("createdAt"),
                 updatedAt = value.requiredLong("updatedAt"),
+                origin = if (schemaVersion < 9) "MANUAL" else value.requiredString("origin"),
+                confirmedBy = if (schemaVersion < 9) "USER" else value.requiredString("confirmedBy"),
+                sourceTitle = if (schemaVersion < 9) "" else value.requiredString("sourceTitle"),
             )
         }
         return DatabaseSnapshot(
@@ -463,6 +469,8 @@ internal class DatabaseBackupCodec(
             } || snapshot.seriesMemberships.any { item ->
                 item.volumeLabel.isBlank() ||
                     item.type !in SERIES_MEMBERSHIP_TYPES ||
+                    item.origin !in SERIES_MEMBERSHIP_ORIGINS ||
+                    item.confirmedBy != "USER" ||
                     item.createdAt < 0 ||
                     item.updatedAt < item.createdAt ||
                     !item.sortOrderKey.isValidOrderKey()
@@ -504,6 +512,7 @@ internal class DatabaseBackupCodec(
             snapshot.seriesMemberships.forEach {
                 add(it.id); add(it.seriesId); add(it.workId); add(it.sortOrderKey)
                 add(it.volumeLabel); add(it.type)
+                add(it.origin); add(it.confirmedBy); add(it.sourceTitle)
             }
         }
         if (strings.any { it.length > limits.maxStringLength }) invalid("String is too long")
@@ -603,8 +612,8 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 8
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 8
+        const val CURRENT_FORMAT_VERSION = 9
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 9
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val FORMAT_ID = "ndc-shelf-room-backup"
         private const val MANIFEST_ENTRY = "manifest.json"
@@ -619,6 +628,7 @@ internal class DatabaseBackupCodec(
             "OMNIBUS",
             "OTHER",
         )
+        private val SERIES_MEMBERSHIP_ORIGINS = setOf("TITLE_SUGGESTION", "MANUAL")
     }
 }
 

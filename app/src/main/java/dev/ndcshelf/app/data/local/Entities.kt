@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.data.local
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -55,6 +56,9 @@ data class SeriesMembershipEntity(
     val type: String,
     val createdAt: Long,
     val updatedAt: Long,
+    @ColumnInfo(defaultValue = "'MANUAL'") val origin: String = "MANUAL",
+    @ColumnInfo(defaultValue = "'USER'") val confirmedBy: String = "USER",
+    @ColumnInfo(defaultValue = "''") val sourceTitle: String = "",
 )
 
 @Entity(
@@ -305,6 +309,9 @@ data class SeriesMembershipRow(
     val type: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val origin: String = "MANUAL",
+    val confirmedBy: String = "USER",
+    val sourceTitle: String = "",
 )
 
 data class SeriesVolumeRow(
@@ -318,6 +325,9 @@ data class SeriesVolumeRow(
     val type: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val origin: String = "MANUAL",
+    val confirmedBy: String = "USER",
+    val sourceTitle: String = "",
     val ownedEditionId: String?,
     val bookstoreIsbn: String?,
     val ownedCopyCount: Int,

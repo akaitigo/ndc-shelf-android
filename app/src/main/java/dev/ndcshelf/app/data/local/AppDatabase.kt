@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 8
+const val APP_DATABASE_VERSION = 9
 
 @Database(
     entities = [
@@ -37,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_5_6,
             MIGRATION_6_7,
             MIGRATION_7_8,
+            MIGRATION_8_9,
         )
     }
 
@@ -45,6 +46,23 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun locationDao(): LocationDao
 
     abstract fun seriesDao(): SeriesDao
+}
+
+private val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE series_memberships " +
+                "ADD COLUMN origin TEXT NOT NULL DEFAULT 'MANUAL'",
+        )
+        db.execSQL(
+            "ALTER TABLE series_memberships " +
+                "ADD COLUMN confirmedBy TEXT NOT NULL DEFAULT 'USER'",
+        )
+        db.execSQL(
+            "ALTER TABLE series_memberships " +
+                "ADD COLUMN sourceTitle TEXT NOT NULL DEFAULT ''",
+        )
+    }
 }
 
 private val MIGRATION_7_8 = object : Migration(7, 8) {

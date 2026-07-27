@@ -22,10 +22,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -36,6 +41,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
 import dev.ndcshelf.app.domain.model.SeriesMembershipType
 import dev.ndcshelf.app.domain.model.SeriesOverview
 import dev.ndcshelf.app.domain.model.SeriesVolume
@@ -50,6 +56,8 @@ fun SeriesScreen(
     onSelectSeries: (String?) -> Unit,
     onOpenEdition: (String) -> Unit,
     onOpenBookstore: (String) -> Unit,
+    onManageSuggestions: () -> Unit = {},
+    onRemoveMembership: (String) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     val selectedSeries = series.firstOrNull { it.series.id == selectedSeriesId }
@@ -57,6 +65,7 @@ fun SeriesScreen(
         SeriesCatalog(
             series = series,
             onSelectSeries = onSelectSeries,
+            onManageSuggestions = onManageSuggestions,
             contentPadding = contentPadding,
         )
     } else {
@@ -65,6 +74,7 @@ fun SeriesScreen(
             onBack = { onSelectSeries(null) },
             onOpenEdition = onOpenEdition,
             onOpenBookstore = onOpenBookstore,
+            onRemoveMembership = onRemoveMembership,
             contentPadding = contentPadding,
         )
     }
@@ -74,6 +84,7 @@ fun SeriesScreen(
 private fun SeriesCatalog(
     series: List<SeriesOverview>,
     onSelectSeries: (String) -> Unit,
+    onManageSuggestions: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -92,6 +103,12 @@ private fun SeriesCatalog(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
+            OutlinedButton(
+                onClick = onManageSuggestions,
+                modifier = Modifier.padding(top = 10.dp),
+            ) {
+                Text(stringResource(R.string.series_manage_suggestions))
+            }
             Text(
                 text = stringResource(R.string.series_description),
                 modifier = Modifier.padding(top = 6.dp),
@@ -200,6 +217,7 @@ private fun SeriesDetail(
     onBack: () -> Unit,
     onOpenEdition: (String) -> Unit,
     onOpenBookstore: (String) -> Unit,
+    onRemoveMembership: (String) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val dateFormatter = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
@@ -272,7 +290,7 @@ private fun SeriesDetail(
             }
         } else {
             items(overview.volumes, key = { it.membership.id }) { volume ->
-                SeriesVolumeCard(volume, onOpenEdition, onOpenBookstore)
+                SeriesVolumeCard(volume, onOpenEdition, onOpenBookstore, onRemoveMembership)
             }
         }
     }
@@ -329,8 +347,10 @@ private fun SeriesVolumeCard(
     volume: SeriesVolume,
     onOpenEdition: (String) -> Unit,
     onOpenBookstore: (String) -> Unit,
+    onRemoveMembership: (String) -> Unit,
 ) {
     val stateLabel = volume.stateDescription()
+    var confirmRemoval by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth().semantics { stateDescription = stateLabel },
         colors = CardDefaults.cardColors(
@@ -383,6 +403,15 @@ private fun SeriesVolumeCard(
                     MaterialTheme.colorScheme.primary
                 },
             )
+            Text(
+                text = when (volume.membership.origin) {
+                    SeriesMembershipOrigin.TITLE_SUGGESTION ->
+                        stringResource(R.string.series_origin_title_suggestion)
+                    SeriesMembershipOrigin.MANUAL -> stringResource(R.string.series_origin_manual)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (volume.isMissingCandidate) {
                 Text(
                     text = stringResource(R.string.series_missing_candidate),
@@ -409,7 +438,28 @@ private fun SeriesVolumeCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            TextButton(onClick = { confirmRemoval = true }) {
+                Text(stringResource(R.string.series_remove_membership))
+            }
         }
+    }
+    if (confirmRemoval) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoval = false },
+            title = { Text(stringResource(R.string.series_remove_membership_title)) },
+            text = { Text(stringResource(R.string.series_remove_membership_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemoval = false
+                    onRemoveMembership(volume.membership.id)
+                }) { Text(stringResource(R.string.series_remove_membership_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemoval = false }) {
+                    Text(stringResource(R.string.location_cancel))
+                }
+            },
+        )
     }
 }
 

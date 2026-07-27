@@ -60,6 +60,7 @@ internal fun BookDetailScreen(
     onEditCopy: (String) -> Unit,
     onEditBibliography: () -> Unit,
     onReconcile: () -> Unit,
+    onManageSeries: (String) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     require(copies.isNotEmpty())
@@ -202,11 +203,11 @@ internal fun BookDetailScreen(
         item {
             DetailSection(stringResource(R.string.book_detail_related_section)) {
                 Text(
-                    stringResource(R.string.book_detail_series_pending),
+                    stringResource(R.string.book_detail_series_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = {}, enabled = false) {
+                TextButton(onClick = { onManageSeries(edition.workId) }) {
                     Text(stringResource(R.string.book_detail_series_action))
                 }
             }

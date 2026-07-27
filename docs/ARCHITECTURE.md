@@ -81,6 +81,8 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 
 WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻ラベルと種別は表示事実、fractional order keyは表示順として分離し、タイトルから暗黙に推測しません。`RoomSeriesRepository`はMembershipをEdition・Copy・Wishlistへ集約し、Composeへ所有・読了・購入予定状態をFlowで提供します。欠巻候補は確認済みMembershipのうち明示的な巻ラベルを持つ本編だけであり、番号の穴から未知の巻を生成しません。Room v8の外部キー・一意制約、複数所属、削除・統合・同期の判断は[シリーズモデル](SERIES_MODEL.md)と[ADR 0002](adr/0002-multiple-series-memberships.md)を参照してください。
 
+タイトル解析結果は`SeriesSuggestion`としてメモリ上だけに置き、画面表示や高信頼度を理由に自動保存しません。利用者が編集・確定した一冊または一括候補だけを単一Room transactionでMembershipへ変換し、Room v9の`origin`、`confirmedBy`、`sourceTitle`へ由来を保存します。表示後にWorkタイトルが変化した候補、重複所属、同名シリーズ作成はfail-closedで競合として扱います。
+
 ## 書籍詳細UI
 
 本棚一覧からは`BookEdition`単位の詳細へ遷移し、タイトル、著者、ISBN、出版社、出版年、表紙、NDC、書誌出典を表示します。同じEditionを参照する`OwnedCopy`は場所、読書状態、媒体、取得日とともに列挙し、棚移動、状態変更、コピー名変更、削除は選択したコピーの編集シートだけで行います。書誌・分類の手動補正と確認付きNDL照合はEdition共通操作として分離し、破壊的なコピー削除を詳細画面へ直接配置しません。

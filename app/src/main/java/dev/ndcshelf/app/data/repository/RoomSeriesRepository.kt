@@ -1,15 +1,33 @@
 package dev.ndcshelf.app.data.repository
 
+import android.database.sqlite.SQLiteConstraintException
+import androidx.room.withTransaction
 import dev.ndcshelf.app.data.local.AppDatabase
+import dev.ndcshelf.app.data.local.SeriesEntity
+import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.SeriesVolumeRow
+import dev.ndcshelf.app.domain.model.SeriesMembershipConfirmer
+import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.SeriesOverview
+import dev.ndcshelf.app.domain.model.SeriesSuggestion
+import dev.ndcshelf.app.domain.model.SeriesSuggestionParser
 import dev.ndcshelf.app.domain.model.SeriesVolume
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
 import dev.ndcshelf.app.domain.repository.SeriesRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import java.util.UUID
 
-class RoomSeriesRepository(database: AppDatabase) : SeriesRepository {
+class RoomSeriesRepository(
+    private val database: AppDatabase,
+    private val idFactory: () -> String = { UUID.randomUUID().toString() },
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) : SeriesRepository {
     private val dao = database.seriesDao()
 
     override fun observeCatalog(): Flow<List<SeriesOverview>> = combine(
@@ -23,6 +41,123 @@ class RoomSeriesRepository(database: AppDatabase) : SeriesRepository {
                 volumes = volumesBySeries[item.id].orEmpty(),
             )
         }
+    }
+
+    override fun observeSuggestions(): Flow<List<SeriesSuggestion>> =
+        dao.observeUnassignedWorks().map { works ->
+            works.mapNotNull { work -> SeriesSuggestionParser.suggest(work.id, work.title) }
+        }
+
+    override suspend fun suggestionFor(workId: String): SeriesSuggestion? {
+        val work = database.libraryDao().findWorkById(workId) ?: return null
+        return SeriesSuggestionParser.suggest(work.id, work.title)
+            ?: SeriesSuggestionParser.manual(work.id, work.title)
+    }
+
+    override suspend fun confirm(
+        target: SeriesConfirmationTarget,
+        drafts: List<SeriesConfirmationDraft>,
+    ): SeriesConfirmationResult {
+        if (!drafts.areValid()) return SeriesConfirmationResult.Invalid
+        return try {
+            database.withTransaction {
+                val now = nowMillis()
+                val existingSeries = when (target) {
+                    is SeriesConfirmationTarget.Existing -> dao.findSeriesById(target.seriesId)
+                        ?: return@withTransaction SeriesConfirmationResult.Invalid
+                    is SeriesConfirmationTarget.New -> {
+                        val name = target.name.trim()
+                        if (name.isBlank() || name.length > MAX_SERIES_NAME_LENGTH) {
+                            return@withTransaction SeriesConfirmationResult.Invalid
+                        }
+                        if (dao.findSeriesByName(name) != null) {
+                            return@withTransaction SeriesConfirmationResult.Conflict
+                        }
+                        null
+                    }
+                }
+                val prospectiveSeriesId = existingSeries?.id ?: idFactory()
+                val workDao = database.libraryDao()
+                for (draft in drafts) {
+                    val work = workDao.findWorkById(draft.workId)
+                        ?: return@withTransaction SeriesConfirmationResult.Invalid
+                    if (draft.sourceTitle != work.title.trim() || dao.findMembershipsForWork(draft.workId)
+                            .any { it.seriesId == prospectiveSeriesId }
+                    ) {
+                        return@withTransaction SeriesConfirmationResult.Conflict
+                    }
+                }
+                val series = existingSeries ?: SeriesEntity(
+                    id = prospectiveSeriesId,
+                    name = (target as SeriesConfirmationTarget.New).name.trim(),
+                    createdAt = now,
+                    updatedAt = now,
+                ).also { dao.upsertSeries(it) }
+                var left = dao.getMembershipsForSeries(series.id).lastOrNull()?.sortOrderKey
+                val membershipIds = drafts.map { draft ->
+                    val id = idFactory()
+                    val orderKey = FractionalOrderKey.between(left, null, id)
+                    dao.insertMembership(
+                        SeriesMembershipEntity(
+                            id = id,
+                            seriesId = series.id,
+                            workId = draft.workId,
+                            sortOrderKey = orderKey,
+                            volumeLabel = draft.volumeLabel.trim(),
+                            type = draft.type.name,
+                            createdAt = now,
+                            updatedAt = now,
+                            origin = draft.origin.name,
+                            confirmedBy = SeriesMembershipConfirmer.USER.name,
+                            sourceTitle = draft.sourceTitle,
+                        ),
+                    )
+                    left = orderKey
+                    id
+                }
+                dao.upsertSeries(series.copy(updatedAt = now))
+                SeriesConfirmationResult.Confirmed(series.id, membershipIds)
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: SQLiteConstraintException) {
+            SeriesConfirmationResult.Conflict
+        } catch (_: Exception) {
+            SeriesConfirmationResult.Failure
+        }
+    }
+
+    override suspend fun removeMembership(membershipId: String): Boolean = try {
+        database.withTransaction {
+            val membership = dao.findMembershipById(membershipId) ?: return@withTransaction false
+            if (dao.deleteMembership(membershipId) != 1) return@withTransaction false
+            dao.findSeriesById(membership.seriesId)?.let { series ->
+                dao.upsertSeries(series.copy(updatedAt = nowMillis()))
+            }
+            true
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun List<SeriesConfirmationDraft>.areValid(): Boolean =
+        isNotEmpty() && size <= MAX_CONFIRMATION_BATCH_SIZE &&
+            map(SeriesConfirmationDraft::workId).distinct().size == size &&
+            all { draft ->
+                draft.workId.isNotBlank() &&
+                    draft.volumeLabel.isNotBlank() &&
+                    draft.volumeLabel.length <= MAX_VOLUME_LABEL_LENGTH &&
+                    draft.sourceTitle.isNotBlank() &&
+                    draft.sourceTitle.length <= MAX_SOURCE_TITLE_LENGTH
+            }
+
+    private companion object {
+        const val MAX_CONFIRMATION_BATCH_SIZE = 500
+        const val MAX_SERIES_NAME_LENGTH = 200
+        const val MAX_VOLUME_LABEL_LENGTH = 80
+        const val MAX_SOURCE_TITLE_LENGTH = 500
     }
 }
 
@@ -53,4 +188,7 @@ private fun SeriesVolumeRow.toMembershipDomain() =
         type = enumValueOf(type),
         createdAt = createdAt,
         updatedAt = updatedAt,
+        origin = dev.ndcshelf.app.domain.model.SeriesMembershipOrigin.valueOf(origin),
+        confirmedBy = dev.ndcshelf.app.domain.model.SeriesMembershipConfirmer.valueOf(confirmedBy),
+        sourceTitle = sourceTitle,
     )
