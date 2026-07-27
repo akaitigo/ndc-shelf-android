@@ -13,6 +13,51 @@ data class BookWorkEntity(
 )
 
 @Entity(
+    tableName = "series",
+    indices = [Index(value = ["name", "id"])],
+)
+data class SeriesEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "series_memberships",
+    foreignKeys = [
+        ForeignKey(
+            entity = SeriesEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["seriesId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = BookWorkEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["workId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["seriesId"]),
+        Index(value = ["workId"]),
+        Index(value = ["seriesId", "workId"], unique = true),
+        Index(value = ["seriesId", "sortOrderKey"], unique = true),
+    ],
+)
+data class SeriesMembershipEntity(
+    @PrimaryKey val id: String,
+    val seriesId: String,
+    val workId: String,
+    val sortOrderKey: String,
+    val volumeLabel: String,
+    val type: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
     tableName = "book_editions",
     foreignKeys = [
         ForeignKey(
@@ -247,4 +292,17 @@ data class LibraryStatsRow(
     val totalCount: Int,
     val classifiedCount: Int,
     val readingCount: Int,
+)
+
+data class SeriesMembershipRow(
+    val membershipId: String,
+    val seriesId: String,
+    val workId: String,
+    val workTitle: String,
+    val primaryAuthor: String,
+    val sortOrderKey: String,
+    val volumeLabel: String,
+    val type: String,
+    val createdAt: Long,
+    val updatedAt: Long,
 )

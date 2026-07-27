@@ -34,6 +34,7 @@ class RoomDatabaseBackupManager(
 ) : DatabaseBackupManager {
     private val dao = database.libraryDao()
     private val locationDao = database.locationDao()
+    private val seriesDao = database.seriesDao()
     private val codec = DatabaseBackupCodec(APP_DATABASE_VERSION)
 
     override suspend fun createBackup(output: OutputStream): DatabaseBackupCreateResult = try {
@@ -90,12 +91,16 @@ class RoomDatabaseBackupManager(
             dao.deleteAllScanSessions()
             dao.deleteAllCopies()
             dao.deleteAllWishlistItems()
+            seriesDao.deleteAllMemberships()
+            seriesDao.deleteAllSeries()
             locationDao.deleteAllTiers()
             locationDao.deleteAllShelves()
             locationDao.deleteAllRooms()
             dao.deleteAllEditions()
             dao.deleteAllWorks()
             dao.upsertWorks(preview.snapshot.works)
+            seriesDao.upsertSeriesItems(preview.snapshot.series)
+            seriesDao.upsertMemberships(preview.snapshot.seriesMemberships)
             dao.upsertEditions(preview.snapshot.editions)
             dao.upsertWishlistItems(preview.snapshot.wishlistItems)
             locationDao.upsertRooms(preview.snapshot.rooms)
@@ -126,6 +131,8 @@ class RoomDatabaseBackupManager(
         shelves = locationDao.getAllShelves(),
         tiers = locationDao.getAllTiers(),
         wishlistItems = dao.getAllWishlistItems(),
+        series = seriesDao.getAllSeries(),
+        seriesMemberships = seriesDao.getAllMemberships(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {

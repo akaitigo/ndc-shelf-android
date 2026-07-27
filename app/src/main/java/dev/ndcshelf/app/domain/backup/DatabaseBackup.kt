@@ -6,6 +6,8 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
+import dev.ndcshelf.app.data.local.SeriesEntity
+import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 
 data class DatabaseSnapshot(
@@ -16,6 +18,8 @@ data class DatabaseSnapshot(
     val shelves: List<LocationShelfEntity> = emptyList(),
     val tiers: List<LocationTierEntity> = emptyList(),
     val wishlistItems: List<WishlistItemEntity> = emptyList(),
+    val series: List<SeriesEntity> = emptyList(),
+    val seriesMemberships: List<SeriesMembershipEntity> = emptyList(),
 )
 
 data class DatabaseBackupMetadata(
@@ -27,6 +31,8 @@ data class DatabaseBackupMetadata(
     val editionCount: Int,
     val copyCount: Int,
     val wishlistCount: Int = 0,
+    val seriesCount: Int = 0,
+    val seriesMembershipCount: Int = 0,
 )
 
 class DatabaseBackupPreview internal constructor(
