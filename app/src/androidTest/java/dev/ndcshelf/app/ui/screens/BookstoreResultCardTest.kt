@@ -26,6 +26,7 @@ class BookstoreResultCardTest {
                 BookstoreResultCard(
                     state = BookstoreUiState.Result(book()),
                     onRetry = {},
+                    onCameraRetry = {},
                     onClear = {},
                     onChangeState = { transition = it },
                 )

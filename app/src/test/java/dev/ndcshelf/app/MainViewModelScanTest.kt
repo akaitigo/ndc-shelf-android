@@ -113,6 +113,23 @@ class MainViewModelScanTest {
     }
 
     @Test
+    fun cameraConflictMessageIsKeptForBothScanModes() = runTest(dispatcher) {
+        val viewModel = MainViewModel(FakeRepository(ArrayDeque()), dispatcher, dispatcher)
+
+        viewModel.reportCameraError("別のアプリがカメラを使用しています")
+        viewModel.reportBookstoreCameraError("別のアプリがカメラを使用しています")
+
+        assertEquals(
+            "別のアプリがカメラを使用しています",
+            (viewModel.scanState.value as ScanUiState.Error).message,
+        )
+        assertEquals(
+            "別のアプリがカメラを使用しています",
+            (viewModel.bookstoreState.value as BookstoreUiState.Error).message,
+        )
+    }
+
+    @Test
     fun duplicateCanBeConfirmedOrAddedAsAnotherCopy() = runTest(dispatcher) {
         val existing = book()
         val repository = FakeRepository(

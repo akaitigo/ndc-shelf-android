@@ -7,6 +7,7 @@
 ## できること
 
 - ISBN（EAN-13）をカメラで連続スキャン
+- トーチ、ピンチズーム、タップフォーカス、成功フィードバック付きカメラスキャン
 - ISBN-10 / ISBN-13のチェックデジット検証
 - 国立国会図書館サーチからタイトル、著者、出版社、出版年、NDCを取得
 - Roomによる端末内の蔵書保存
@@ -85,6 +86,8 @@ cd ndc-shelf-android
 ```
 
 カメラやスキャン処理を変更した場合は、エミュレーターだけでなく実機でも確認してください。Codexなどの開発エージェント向けの作業ルールは [AGENTS.md](AGENTS.md) にまとめています。
+
+暗所・小型バーコード・100冊連続・端末差の確認条件は[スキャン実機検証手順](docs/SCAN_DEVICE_TESTING.md)を使用してください。
 
 Room schemaとRepositoryのテスト構成、Migration追加手順は[docs/DATABASE_TESTING.md](docs/DATABASE_TESTING.md)を参照してください。
 
