@@ -24,6 +24,13 @@ class LibraryCsvImporterTest {
         val exported = LibraryExporter.export(listOf(original), LibraryExportFormat.CSV)
 
         val parsed = importer().parse(ByteArrayInputStream(exported)) as LibraryCsvParseResult.Valid
+        val record = parsed.batch.records.single()
+        assertEquals(original.title, record.title)
+        assertEquals(original.primaryAuthor, record.primaryAuthor)
+        assertEquals(original.publisher.orEmpty(), record.publisher)
+        assertEquals(original.location, record.location)
+        assertEquals(original.copyLabel, record.copyLabel)
+
         val planned = planner().preview(
             parsed.batch,
             existingBooks = emptyList(),
@@ -47,6 +54,13 @@ class LibraryCsvImporterTest {
         val exported = LibraryExporter.export(listOf(original), LibraryExportFormat.CSV)
 
         val parsed = importer().parse(ByteArrayInputStream(exported)) as LibraryCsvParseResult.Valid
+        val record = parsed.batch.records.single()
+        assertEquals(original.title, record.title)
+        assertEquals(original.primaryAuthor, record.primaryAuthor)
+        assertEquals(original.publisher, record.publisher)
+        assertEquals(original.location, record.location)
+        assertEquals(original.copyLabel, record.copyLabel)
+
         val planned = planner().preview(
             parsed.batch,
             existingBooks = emptyList(),
