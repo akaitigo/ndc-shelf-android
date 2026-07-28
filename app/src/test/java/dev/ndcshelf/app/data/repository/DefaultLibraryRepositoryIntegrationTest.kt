@@ -383,7 +383,7 @@ class DefaultLibraryRepositoryIntegrationTest {
     }
 
     @Test
-    fun scanUndoRejectsCopyEditedOutsideSessionWithoutDeletingAnything() = runBlocking {
+    fun scanUndoRejectsSharedBookMetadataEditedOutsideSessionWithoutDeletingAnything() = runBlocking {
         val repository = repository(
             ids = listOf("session-1", "work-1", "edition-1", "copy-1", "attempt-1"),
             service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
@@ -391,15 +391,10 @@ class DefaultLibraryRepositoryIntegrationTest {
         val sessionId = repository.startScanSession()!!
         val added = repository.addFromIsbn(ISBN) as AddBookResult.Added
         repository.recordScanAttempt(sessionId, ISBN, added)
-        database.libraryDao().updateCopy(
-            copyId = added.book.copyId,
-            location = "書斎",
-            readingStatus = added.book.readingStatus.name,
-            copyLabel = added.book.copyLabel,
-        )
+        database.libraryDao().updateWork(added.book.workId, "編集後の題名", added.book.primaryAuthor)
 
         assertEquals(ScanUndoResult.Conflict, repository.undoScanSession(sessionId))
-        assertEquals("書斎", database.libraryDao().findCopyById(added.book.copyId)?.location)
+        assertEquals("編集後の題名", database.libraryDao().findOwnedByCopyId(added.book.copyId)?.title)
     }
 
     @Test

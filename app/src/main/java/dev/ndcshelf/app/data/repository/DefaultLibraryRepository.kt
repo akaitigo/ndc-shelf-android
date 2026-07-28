@@ -97,6 +97,14 @@ class DefaultLibraryRepository(
         null
     }
 
+    override suspend fun activeScanSessionId(): String? = try {
+        dao.findActiveScanSession()?.id
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        null
+    }
+
     override suspend fun finishScanSession(sessionId: String): Boolean = try {
         database.withTransaction {
             dao.finishScanSession(sessionId, nowMillis()) == 1
@@ -115,10 +123,15 @@ class DefaultLibraryRepository(
         database.withTransaction {
             val active = dao.findActiveScanSession()
             if (active?.id != sessionId) return@withTransaction false
-            val addedCopy = if (result is AddBookResult.Added) {
-                dao.findCopyById(result.book.copyId) ?: return@withTransaction false
+            val addedResult = result as? AddBookResult.Added
+            val addedBook = if (addedResult != null) {
+                dao.findOwnedByCopyId(addedResult.book.copyId)?.toDomain()
+                    ?: return@withTransaction false
             } else {
                 null
+            }
+            if (addedBook != null && addedBook.snapshotHash() != addedResult?.book?.snapshotHash()) {
+                return@withTransaction false
             }
             val outcome = when (result) {
                 is AddBookResult.Added -> ScanAttemptOutcome.ADDED
@@ -141,8 +154,8 @@ class DefaultLibraryRepository(
                     sessionId = sessionId,
                     isbn = isbn,
                     outcome = outcome.name,
-                    copyId = addedCopy?.id,
-                    copySnapshot = addedCopy?.snapshotHash(),
+                    copyId = addedBook?.copyId,
+                    copySnapshot = addedBook?.snapshotHash(),
                     attemptedAt = nowMillis(),
                     undoneAt = null,
                 ),
@@ -181,29 +194,29 @@ class DefaultLibraryRepository(
     }
 
     private suspend fun undoAttempts(attempts: List<ScanAttemptEntity>): ScanUndoResult {
-        val copies = attempts.map { attempt ->
+        val books = attempts.map { attempt ->
             if (attempt.outcome != ScanAttemptOutcome.ADDED.name ||
                 attempt.undoneAt != null || attempt.copyId == null || attempt.copySnapshot == null
             ) return ScanUndoResult.Conflict
-            val copy = dao.findCopyById(attempt.copyId) ?: return ScanUndoResult.Conflict
-            if (copy.snapshotHash() != attempt.copySnapshot) return ScanUndoResult.Conflict
-            attempt to copy
+            val book = dao.findOwnedByCopyId(attempt.copyId)?.toDomain()
+                ?: return ScanUndoResult.Conflict
+            if (book.snapshotHash() != attempt.copySnapshot) return ScanUndoResult.Conflict
+            attempt to book
         }
         val now = nowMillis()
-        copies.forEach { (attempt, copy) ->
-            check(dao.deleteCopyById(copy.id) == 1)
+        books.forEach { (attempt, book) ->
+            check(dao.deleteCopyById(book.copyId) == 1)
             check(dao.markScanAttemptUndone(attempt.id, now) == 1)
-            if (dao.countCopiesForEdition(copy.editionId) == 0 &&
-                dao.findWishlistByEditionId(copy.editionId) == null
+            if (dao.countCopiesForEdition(book.editionId) == 0 &&
+                dao.findWishlistByEditionId(book.editionId) == null
             ) {
-                val edition = dao.findEditionById(copy.editionId)
-                check(dao.deleteEditionById(copy.editionId) == 1)
-                if (edition != null && dao.countEditionsForWork(edition.workId) == 0) {
-                    dao.deleteWorkById(edition.workId)
+                check(dao.deleteEditionById(book.editionId) == 1)
+                if (dao.countEditionsForWork(book.workId) == 0) {
+                    dao.deleteWorkById(book.workId)
                 }
             }
         }
-        return ScanUndoResult.Undone(copies.size)
+        return ScanUndoResult.Undone(books.size)
     }
 
     override suspend fun addFromIsbn(rawIsbn: String): AddBookResult {
@@ -933,18 +946,30 @@ private fun toScanSessions(rows: List<ScanSessionAttemptRow>): List<ScanSession>
         )
     }
 
-private fun OwnedCopyEntity.snapshotHash(): String {
+private fun LibraryBook.snapshotHash(): String {
     val canonical = listOf(
-        id,
+        copyId,
+        workId,
         editionId,
-        mediaType,
+        title,
+        primaryAuthor,
+        isbn13,
+        publisher,
+        publishedYear?.toString(),
+        coverUrl,
+        ndcCode,
+        ndcEdition,
+        classificationSource.name,
+        mediaType.name,
         location,
-        readingStatus,
+        readingStatus.name,
         addedAt.toString(),
-        tierId.orEmpty(),
-        shelfOrderKey.orEmpty(),
+        locationTierId,
+        shelfOrderKey,
         copyLabel,
-    ).joinToString("\u001f")
+    ).joinToString(separator = "") { value ->
+        value?.let { "${it.length}:$it" } ?: "-1:"
+    }
     return MessageDigest.getInstance("SHA-256")
         .digest(canonical.toByteArray(Charsets.UTF_8))
         .joinToString("") { byte -> "%02x".format(byte) }

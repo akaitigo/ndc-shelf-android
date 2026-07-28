@@ -25,6 +25,8 @@ interface LibraryRepository {
 
     suspend fun startScanSession(): String? = null
 
+    suspend fun activeScanSessionId(): String? = null
+
     suspend fun finishScanSession(sessionId: String): Boolean = false
 
     suspend fun recordScanAttempt(

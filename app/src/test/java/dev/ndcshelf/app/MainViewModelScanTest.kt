@@ -185,6 +185,19 @@ class MainViewModelScanTest {
         assertEquals(ScanSessionUiState.Undone(1), viewModel.scanSessionState.value)
     }
 
+    @Test
+    fun unfinishedSessionIsRecoveredBeforeFlowEmits() = runTest(dispatcher) {
+        val added = AddBookResult.Added(book())
+        val repository = FakeRepository(ArrayDeque(listOf(added))).apply {
+            activeSessionResult = "session-recovered"
+        }
+        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
+
+        viewModel.submitIsbn(ISBN)
+
+        assertEquals(Triple("session-recovered", ISBN, added), repository.recordedAttempt)
+    }
+
     private class FakeRepository(
         private val results: ArrayDeque<AddBookResult>,
     ) : LibraryRepository {
@@ -197,6 +210,7 @@ class MainViewModelScanTest {
         var bookstoreChangeResult: BookstoreChangeResult = BookstoreChangeResult.Failure
         var requestedTransition: PurchaseTransition? = null
         var startSessionResult: String? = null
+        var activeSessionResult: String? = null
         var recordedAttempt: Triple<String, String, AddBookResult>? = null
         var undoResult: ScanUndoResult = ScanUndoResult.Failure
         private val sessions = MutableStateFlow(emptyList<ScanSession>())
@@ -206,6 +220,8 @@ class MainViewModelScanTest {
         override fun observeScanSessions(): Flow<List<ScanSession>> = sessions
 
         override suspend fun startScanSession(): String? = startSessionResult
+
+        override suspend fun activeScanSessionId(): String? = activeSessionResult
 
         override suspend fun recordScanAttempt(
             sessionId: String,

@@ -326,7 +326,9 @@ class MainViewModel(
     private suspend fun recordCurrentScanAttempt(rawIsbn: String, result: AddBookResult) {
         val sessionId = activeScanSessionId
             ?: scanSessions.value.firstOrNull(ScanSession::isActive)?.id
+            ?: repository.activeScanSessionId()
             ?: return
+        activeScanSessionId = sessionId
         if (!repository.recordScanAttempt(sessionId, rawIsbn, result)) {
             _scanSessionState.value = ScanSessionUiState.Error
         }

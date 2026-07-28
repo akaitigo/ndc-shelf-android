@@ -6,6 +6,8 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
+import dev.ndcshelf.app.data.local.ScanAttemptEntity
+import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -63,11 +65,19 @@ class DatabaseBackupCodecTest {
 
     @Test
     fun `manifest format and payload schema versions must match`() {
-        val (archive, _) = codec.encode(sampleSnapshot().copy(wishlistItems = emptyList()), "0.1.2", 1)
+        val (archive, _) = codec.encode(
+            sampleSnapshot().copy(
+                wishlistItems = emptyList(),
+                scanSessions = emptyList(),
+                scanAttempts = emptyList(),
+            ),
+            "0.1.2",
+            1,
+        )
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val changedPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":6", "\"schemaVersion\":5")
+            .replace("\"schemaVersion\":7", "\"schemaVersion\":6")
             .encodeToByteArray()
         entries["database.json"] = changedPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
@@ -190,6 +200,25 @@ class DatabaseBackupCodecTest {
                 status = "RESERVED",
                 createdAt = 1_600_000_000_000,
                 updatedAt = 1_700_000_000_000,
+            ),
+        ),
+        scanSessions = listOf(
+            ScanSessionEntity(
+                id = "session-1",
+                startedAt = 1_600_000_000_000,
+                endedAt = 1_700_000_000_000,
+            ),
+        ),
+        scanAttempts = listOf(
+            ScanAttemptEntity(
+                id = "attempt-1",
+                sessionId = "session-1",
+                isbn = "9784101010014",
+                outcome = "ADDED",
+                copyId = "copy-1",
+                copySnapshot = "b".repeat(64),
+                attemptedAt = 1_650_000_000_000,
+                undoneAt = null,
             ),
         ),
     )
