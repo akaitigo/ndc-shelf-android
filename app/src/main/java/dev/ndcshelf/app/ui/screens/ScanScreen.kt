@@ -54,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -142,6 +143,7 @@ fun ScanScreen(
     }
     var successSequence by remember { mutableIntStateOf(0) }
     var showSuccessFeedback by remember { mutableStateOf(false) }
+    var cameraRestartSequence by remember { mutableIntStateOf(0) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -252,23 +254,25 @@ fun ScanScreen(
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.Black),
                 ) {
-                    CameraPreview(
-                        onIsbnDetected = { isbn ->
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            successSequence += 1
-                            if (mode == ScanMode.LIBRARY) {
-                                onSubmitIsbn(isbn)
+                    key(cameraRestartSequence) {
+                        CameraPreview(
+                            onIsbnDetected = { isbn ->
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                successSequence += 1
+                                if (mode == ScanMode.LIBRARY) {
+                                    onSubmitIsbn(isbn)
+                                } else {
+                                    onLookupBookstore(isbn)
+                                }
+                            },
+                            onCameraError = if (mode == ScanMode.LIBRARY) {
+                                onCameraError
                             } else {
-                                onLookupBookstore(isbn)
-                            }
-                        },
-                        onCameraError = if (mode == ScanMode.LIBRARY) {
-                            onCameraError
-                        } else {
-                            onBookstoreCameraError
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                                onBookstoreCameraError
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -349,6 +353,10 @@ fun ScanScreen(
                 ScanResultCard(
                     state = scanState,
                     onRetry = onRetry,
+                    onCameraRetry = {
+                        onClearState()
+                        cameraRestartSequence += 1
+                    },
                     onClear = onClearState,
                     onAddDuplicateCopy = onAddDuplicateCopy,
                 )
@@ -356,6 +364,10 @@ fun ScanScreen(
                 BookstoreResultCard(
                     state = bookstoreState,
                     onRetry = onRetryBookstore,
+                    onCameraRetry = {
+                        onClearBookstoreState()
+                        cameraRestartSequence += 1
+                    },
                     onClear = onClearBookstoreState,
                     onChangeState = onChangePurchaseState,
                 )
@@ -697,9 +709,10 @@ private const val CAMERA_PERMISSION_PREFERENCES = "camera-permission"
 private const val CAMERA_PERMISSION_REQUESTED = "requested"
 
 @Composable
-private fun ScanResultCard(
+internal fun ScanResultCard(
     state: ScanUiState,
     onRetry: () -> Unit,
+    onCameraRetry: () -> Unit,
     onClear: () -> Unit,
     onAddDuplicateCopy: (String) -> Unit,
 ) {
@@ -798,8 +811,14 @@ private fun ScanResultCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Column(horizontalAlignment = Alignment.End) {
-                    if (state.retryIsbn != null) {
-                        TextButton(onClick = onRetry) {
+                    if (state.failure == ScanFailure.CAMERA || state.retryIsbn != null) {
+                        TextButton(
+                            onClick = if (state.failure == ScanFailure.CAMERA) {
+                                onCameraRetry
+                            } else {
+                                onRetry
+                            },
+                        ) {
                             Text(stringResource(R.string.scan_retry))
                         }
                     }
@@ -816,6 +835,7 @@ private fun ScanResultCard(
 internal fun BookstoreResultCard(
     state: BookstoreUiState,
     onRetry: () -> Unit,
+    onCameraRetry: () -> Unit,
     onClear: () -> Unit,
     onChangeState: (PurchaseTransition) -> Unit,
 ) {
@@ -870,8 +890,16 @@ internal fun BookstoreResultCard(
                 modifier = Modifier.weight(1f),
             )
             Column(horizontalAlignment = Alignment.End) {
-                if (state.retryIsbn != null) {
-                    TextButton(onClick = onRetry) { Text(stringResource(R.string.scan_retry)) }
+                if (state.failure == ScanFailure.CAMERA || state.retryIsbn != null) {
+                    TextButton(
+                        onClick = if (state.failure == ScanFailure.CAMERA) {
+                            onCameraRetry
+                        } else {
+                            onRetry
+                        },
+                    ) {
+                        Text(stringResource(R.string.scan_retry))
+                    }
                 }
                 IconButton(onClick = onClear) {
                     Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.import_close))
