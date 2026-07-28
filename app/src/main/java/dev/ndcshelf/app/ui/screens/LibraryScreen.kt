@@ -83,6 +83,8 @@ import java.util.Date
 @Composable
 fun LibraryScreen(
     books: List<LibraryBook>,
+    initialEditionId: String? = null,
+    onInitialEditionHandled: () -> Unit = {},
     onSaveBook: (String, BookEditDraft) -> Unit,
     onDeleteBook: (String) -> Unit,
     bookEditState: BookEditUiState,
@@ -106,116 +108,146 @@ fun LibraryScreen(
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    var selectedBook by remember { mutableStateOf<LibraryBook?>(null) }
+    var selectedEditionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingCopyId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLocationManager by rememberSaveable { mutableStateOf(false) }
     val visibleBooks = remember(books, query) {
         books.filter { it.matches(query) }
     }
     val editionCounts = remember(books) { books.groupingBy { it.editionId }.eachCount() }
+    val editingBook = remember(books, editingCopyId) {
+        books.firstOrNull { it.copyId == editingCopyId }
+    }
+    val selectedCopies = remember(books, selectedEditionId) {
+        books.filter { it.editionId == selectedEditionId }
+    }
+
+    fun openEditor(copyId: String) {
+        onClearBookEditState()
+        onClearBookDeleteState()
+        onClearManualReconciliation()
+        editingCopyId = copyId
+    }
+
+    LaunchedEffect(initialEditionId, books) {
+        if (initialEditionId != null && books.any { it.editionId == initialEditionId }) {
+            selectedEditionId = initialEditionId
+            onInitialEditionHandled()
+        }
+    }
 
     LaunchedEffect(bookEditState) {
         val saved = bookEditState as? BookEditUiState.Saved ?: return@LaunchedEffect
-        if (selectedBook?.copyId == saved.current.copyId) selectedBook = null
+        if (editingCopyId == saved.current.copyId) editingCopyId = null
     }
     LaunchedEffect(bookDeleteState) {
         val deleted = bookDeleteState as? BookDeleteUiState.Deleted ?: return@LaunchedEffect
-        if (selectedBook?.copyId == deleted.book.copyId) selectedBook = null
+        if (editingCopyId == deleted.book.copyId) editingCopyId = null
+        if (books.none { it.editionId == deleted.book.editionId && it.copyId != deleted.book.copyId }) {
+            selectedEditionId = null
+        }
     }
     LaunchedEffect(manualReconciliationState) {
         if (manualReconciliationState === ManualReconciliationUiState.Applied) {
-            selectedBook = null
+            editingCopyId = null
             onClearManualReconciliation()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = contentPadding.calculateTopPadding()),
-    ) {
+    if (selectedCopies.isNotEmpty()) {
+        BookDetailScreen(
+            copies = selectedCopies,
+            onBack = { selectedEditionId = null },
+            onEditCopy = ::openEditor,
+            onEditBibliography = { openEditor(selectedCopies.first().copyId) },
+            onReconcile = { openEditor(selectedCopies.first().copyId) },
+            contentPadding = contentPadding,
+        )
+    } else {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = contentPadding.calculateTopPadding()),
         ) {
-            Text(
-                text = "My Library",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "${books.size}冊の本を、ちゃんと見つけられる場所。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("タイトル・著者・ISBN・NDC・棚で検索") },
-                leadingIcon = {
-                    Icon(Icons.Rounded.Search, contentDescription = null)
-                },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Rounded.Clear, contentDescription = "検索をクリア")
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) {
+                Text(
+                    text = "My Library",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "${books.size}冊の本を、ちゃんと見つけられる場所。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("タイトル・著者・ISBN・NDC・棚で検索") },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Search, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Rounded.Clear, contentDescription = "検索をクリア")
+                            }
                         }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(18.dp),
-            )
-            Spacer(Modifier.height(12.dp))
-            LibrarySummary(books)
-            TextButton(
-                onClick = { showLocationManager = true },
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Icon(Icons.Rounded.LocationOn, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.location_manage_action))
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(18.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                LibrarySummary(books)
+                TextButton(
+                    onClick = { showLocationManager = true },
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Icon(Icons.Rounded.LocationOn, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.location_manage_action))
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
-        }
 
-        if (visibleBooks.isEmpty()) {
-            EmptyLibrary(
-                isSearching = query.isNotBlank(),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = contentPadding.calculateBottomPadding()),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = 8.dp,
-                    end = 16.dp,
-                    bottom = contentPadding.calculateBottomPadding() + 16.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(
-                    items = visibleBooks,
-                    key = LibraryBook::copyId,
-                ) { book ->
-                    BookCard(
-                        book = book,
-                        editionCopyCount = editionCounts[book.editionId] ?: 1,
-                        onClick = {
-                            onClearBookEditState()
-                            onClearBookDeleteState()
-                            onClearManualReconciliation()
-                            selectedBook = book
-                        },
-                    )
+            if (visibleBooks.isEmpty()) {
+                EmptyLibrary(
+                    isSearching = query.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = contentPadding.calculateBottomPadding()),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        top = 8.dp,
+                        end = 16.dp,
+                        bottom = contentPadding.calculateBottomPadding() + 16.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(
+                        items = visibleBooks,
+                        key = LibraryBook::copyId,
+                    ) { book ->
+                        BookCard(
+                            book = book,
+                            editionCopyCount = editionCounts[book.editionId] ?: 1,
+                            onClick = { selectedEditionId = book.editionId },
+                        )
+                    }
                 }
             }
         }
     }
 
-    selectedBook?.let { book ->
+    editingBook?.let { book ->
         EditBookSheet(
             book = book,
             editionCopyCount = editionCounts[book.editionId] ?: 1,
@@ -229,7 +261,7 @@ fun LibraryScreen(
                 onClearBookDeleteState()
                 onClearShelfMoveState()
                 onClearManualReconciliation()
-                selectedBook = null
+                editingCopyId = null
             },
             onClearErrors = onClearBookEditState,
             onSave = { draft -> onSaveBook(book.copyId, draft) },

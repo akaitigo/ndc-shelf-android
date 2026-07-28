@@ -77,6 +77,12 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 
 完全バックアップの形式、入力上限、復元ロールバックは[DATABASE_BACKUP.md](DATABASE_BACKUP.md)を参照してください。
 
+## 書籍詳細UI
+
+本棚一覧からは`BookEdition`単位の詳細へ遷移し、タイトル、著者、ISBN、出版社、出版年、表紙、NDC、書誌出典を表示します。同じEditionを参照する`OwnedCopy`は場所、読書状態、媒体、取得日とともに列挙し、棚移動、状態変更、コピー名変更、削除は選択したコピーの編集シートだけで行います。書誌・分類の手動補正と確認付きNDL照合はEdition共通操作として分離し、破壊的なコピー削除を詳細画面へ直接配置しません。
+
+詳細選択と編集中のcopy IDは`rememberSaveable`で保持します。外部からの`ndcshelf://book/{editionId}`は、英数字と`._:-`だけからなる128文字以下のローカルEdition IDに限定し、該当する端末内データがある場合だけ詳細を開きます。MainActivityは`singleTop`で、起動中のリンクを`onNewIntent`へ集約しActivityの多重生成を防ぎます。カスタムスキームはドメイン検証されたApp Linkではないため他アプリによる横取りを防げませんが、リンクから蔵書データの読出しや変更は行わず、ローカル画面への移動だけを許可します。処理待ちIDはActivityの保存状態で管理し、消費済みリンクを画面回転後に再実行しません。
+
 ## データモデル
 
 ```mermaid

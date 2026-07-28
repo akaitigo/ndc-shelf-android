@@ -59,7 +59,11 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun NdcShelfApp(viewModel: MainViewModel) {
+fun NdcShelfApp(
+    viewModel: MainViewModel,
+    requestedEditionId: String? = null,
+    onBookDetailRequestHandled: () -> Unit = {},
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
@@ -81,6 +85,10 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val locationMutationState by viewModel.locationMutationState.collectAsStateWithLifecycle()
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
+
+    LaunchedEffect(requestedEditionId) {
+        if (requestedEditionId != null) selected = AppDestination.LIBRARY
+    }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
         if (uri == null) {
@@ -368,6 +376,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
         when (selected) {
             AppDestination.LIBRARY -> LibraryScreen(
                 books = books,
+                initialEditionId = requestedEditionId,
+                onInitialEditionHandled = onBookDetailRequestHandled,
                 onSaveBook = viewModel::saveBookEdit,
                 onDeleteBook = viewModel::deleteBook,
                 bookEditState = bookEditState,
