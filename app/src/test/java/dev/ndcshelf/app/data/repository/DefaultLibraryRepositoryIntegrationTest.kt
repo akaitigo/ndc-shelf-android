@@ -266,11 +266,13 @@ class DefaultLibraryRepositoryIntegrationTest {
             service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
         )
         val candidate = (repository.lookupBookstore(ISBN) as BookstoreLookupResult.Found).book
+        val wanted = repository.changePurchaseState(candidate, PurchaseTransition.WANTED)
+            as BookstoreChangeResult.Updated
 
         val results = coroutineScope {
             listOf(PurchaseTransition.WANTED, PurchaseTransition.RESERVED).map { transition ->
                 async(Dispatchers.Default) {
-                    repository.changePurchaseState(candidate, transition)
+                    repository.changePurchaseState(wanted.book, transition)
                 }
             }.awaitAll()
         }
@@ -350,6 +352,9 @@ class DefaultLibraryRepositoryIntegrationTest {
         assertEquals(1, database.libraryDao().getAllEditions().size)
         val copy = database.libraryDao().getAllCopies().single()
         assertEquals("edition-wish", copy.editionId)
+        val libraryBook = database.libraryDao().findOwnedByCopyId(copy.id)
+        assertEquals("題名", libraryBook?.title)
+        assertEquals("著者A・著者B", libraryBook?.primaryAuthor)
     }
 
     @Test

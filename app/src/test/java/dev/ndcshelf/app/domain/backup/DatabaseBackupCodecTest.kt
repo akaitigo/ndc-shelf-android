@@ -62,6 +62,27 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `manifest format and payload schema versions must match`() {
+        val (archive, _) = codec.encode(sampleSnapshot().copy(wishlistItems = emptyList()), "0.1.2", 1)
+        val entries = unzip(archive).toMutableMap()
+        val originalPayload = requireNotNull(entries["database.json"])
+        val changedPayload = originalPayload.decodeToString()
+            .replace("\"schemaVersion\":6", "\"schemaVersion\":5")
+            .encodeToByteArray()
+        entries["database.json"] = changedPayload
+        entries["manifest.json"] = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace(originalPayload.sha256(), changedPayload.sha256())
+            .encodeToByteArray()
+
+        val error = assertThrows(BackupCodecException::class.java) {
+            codec.decode(ByteArrayInputStream(zip(entries)))
+        }
+
+        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
     fun `format one payload migrates fields added in format two`() {
         val payload = """
             {

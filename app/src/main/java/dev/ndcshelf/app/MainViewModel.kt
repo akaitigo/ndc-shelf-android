@@ -314,10 +314,12 @@ class MainViewModel(
                 BookstoreChangeResult.Conflict -> BookstoreUiState.Error(
                     ScanFailure.SAVE,
                     isbn13 = book.isbn13,
+                    retryIsbn = book.isbn13,
                 )
                 BookstoreChangeResult.Failure -> BookstoreUiState.Error(
                     ScanFailure.SAVE,
                     isbn13 = book.isbn13,
+                    retryIsbn = book.isbn13,
                 )
             }
         }

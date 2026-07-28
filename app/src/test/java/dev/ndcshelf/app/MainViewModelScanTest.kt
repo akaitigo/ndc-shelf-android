@@ -127,6 +127,26 @@ class MainViewModelScanTest {
         assertEquals(BookstoreUiState.Result(purchased), viewModel.bookstoreState.value)
     }
 
+    @Test
+    fun bookstoreConflictCanReloadPersistedState() = runTest(dispatcher) {
+        val candidate = bookstoreBook(PurchaseStatus.WANTED, ownedCount = 0)
+        val repository = FakeRepository(ArrayDeque()).apply {
+            bookstoreLookupResult = BookstoreLookupResult.Found(candidate)
+            bookstoreChangeResult = BookstoreChangeResult.Conflict
+        }
+        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
+        viewModel.lookupBookstore(ISBN)
+
+        viewModel.changePurchaseState(PurchaseTransition.RESERVED)
+
+        assertEquals(
+            BookstoreUiState.Error(ScanFailure.SAVE, ISBN, retryIsbn = ISBN),
+            viewModel.bookstoreState.value,
+        )
+        viewModel.retryBookstoreLookup()
+        assertEquals(BookstoreUiState.Result(candidate), viewModel.bookstoreState.value)
+    }
+
     private class FakeRepository(
         private val results: ArrayDeque<AddBookResult>,
     ) : LibraryRepository {

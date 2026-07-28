@@ -301,6 +301,8 @@ class DefaultLibraryRepository(
             }
             val currentCopyCount = dao.countCopiesForEdition(editionId)
             if (persistedStatus != book.purchaseStatus ||
+                previous?.createdAt != book.createdAt ||
+                previous?.updatedAt != book.updatedAt ||
                 currentCopyCount != book.ownedCopyCount
             ) {
                 return@withTransaction BookstoreChangeResult.Conflict
@@ -312,12 +314,13 @@ class DefaultLibraryRepository(
                 PurchaseTransition.PURCHASED -> null
             }
             if (status != null) {
+                val updatedAt = maxOf(now, (previous?.updatedAt ?: -1L) + 1L)
                 dao.upsertWishlistItem(
                     WishlistItemEntity(
                         editionId = editionId,
                         status = status.name,
                         createdAt = previous?.createdAt ?: now,
-                        updatedAt = now,
+                        updatedAt = updatedAt,
                     ),
                 )
             } else {
@@ -584,9 +587,31 @@ class DefaultLibraryRepository(
         importCommitter.commit(preview)
 
     private suspend fun writeImportedBooks(books: List<LibraryBook>) {
+        val existingEditionsByIsbn = dao.getAllEditions().associateBy(BookEditionEntity::isbn13)
+        val existingWorksById = dao.getAllWorks().associateBy(BookWorkEntity::id)
+        val wishlistEditionIds = dao.getAllWishlistItems().mapTo(hashSetOf(), WishlistItemEntity::editionId)
+        val ownedEditionIds = dao.getAllCopies().mapTo(hashSetOf(), OwnedCopyEntity::editionId)
         val resolved = books.map { book ->
-            dao.findEditionByIsbn(book.isbn13)?.let { existing ->
-                book.copy(workId = existing.workId, editionId = existing.id)
+            existingEditionsByIsbn[book.isbn13]?.let { existing ->
+                val resolvedIds = book.copy(workId = existing.workId, editionId = existing.id)
+                val wishlistOnly = existing.id in wishlistEditionIds && existing.id !in ownedEditionIds
+                if (!wishlistOnly) {
+                    resolvedIds
+                } else {
+                    val existingWork = requireNotNull(existingWorksById[existing.workId])
+                    resolvedIds.copy(
+                        title = existingWork.title,
+                        primaryAuthor = existingWork.primaryAuthor,
+                        publisher = existing.publisher,
+                        publishedYear = existing.publishedYear,
+                        coverUrl = existing.coverUrl,
+                        ndcCode = existing.ndcCode,
+                        ndcEdition = existing.ndcEdition,
+                        classificationSource = existing.classificationSource.toEnumOrDefault(
+                            ClassificationSource.UNKNOWN,
+                        ),
+                    )
+                }
             } ?: book
         }
         dao.upsertWorks(
