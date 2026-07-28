@@ -52,6 +52,8 @@
     <string name="book_edit_copy_label">このコピーの識別名</string>
     <string name="book_copy_count">同じ版を%1$d冊所蔵</string>
     <string name="book_added_at">取得日時: %1$s</string>
+    <string name="book_copy_details">コピーごとの情報</string>
+    <string name="book_edition_details">同じ版で共通の情報</string>
     <string name="book_edit_author">著者</string>
     <string name="book_edit_publisher">出版社（任意）</string>
     <string name="book_edit_published_year">出版年（任意）</string>

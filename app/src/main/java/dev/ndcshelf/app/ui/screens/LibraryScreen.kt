@@ -476,6 +476,9 @@ private fun EditBookSheet(
         ?.takeIf { it.copyId == book.copyId }
         ?.errors
         .orEmpty()
+    val formattedAddedAt = remember(book.addedAt) {
+        DateFormat.getDateTimeInstance().format(Date(book.addedAt))
+    }
     val unsetLocation = stringResource(R.string.location_unset_value)
     val orderedTierBooks = remember(allBooks, book.locationTierId) {
         allBooks.filter { it.locationTierId == book.locationTierId && it.locationTierId != null }
@@ -536,10 +539,11 @@ private fun EditBookSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = stringResource(
-                    R.string.book_added_at,
-                    DateFormat.getDateTimeInstance().format(Date(book.addedAt)),
-                ),
+                text = stringResource(R.string.book_copy_details),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.book_added_at, formattedAddedAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -557,6 +561,10 @@ private fun EditBookSheet(
                 supportingText = error(BookEditField.COPY_LABEL)?.let { message -> { Text(message) } },
                 enabled = !busy,
                 singleLine = true,
+            )
+            Text(
+                text = stringResource(R.string.book_edition_details),
+                style = MaterialTheme.typography.titleSmall,
             )
             OutlinedTextField(
                 value = title,

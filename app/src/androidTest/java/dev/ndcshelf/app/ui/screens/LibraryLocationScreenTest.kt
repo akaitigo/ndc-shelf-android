@@ -76,6 +76,10 @@ class LibraryLocationScreenTest {
 
         composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
         composeRule.onNodeWithText("貸出用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
+
+        composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").performClick()
+        composeRule.onNodeWithText("コピーごとの情報").assertIsDisplayed()
+        composeRule.onNodeWithText("同じ版で共通の情報").assertIsDisplayed()
     }
 
     private fun setLibraryContent(books: List<LibraryBook>) {

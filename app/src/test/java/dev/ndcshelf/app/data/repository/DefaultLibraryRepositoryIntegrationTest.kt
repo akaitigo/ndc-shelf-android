@@ -177,7 +177,7 @@ class DefaultLibraryRepositoryIntegrationTest {
     }
 
     @Test
-    fun concurrentDuplicateAdds_createDistinctCopiesInOneEdition() = runBlocking {
+    fun concurrentDuplicateAdds_createDistinctAutoLabeledCopiesInOneEdition() = runBlocking {
         val repository = repository(
             ids = listOf("work-1", "edition-1", "copy-1", "copy-2", "copy-3"),
             service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
@@ -185,8 +185,8 @@ class DefaultLibraryRepositoryIntegrationTest {
         repository.addFromIsbn(ISBN)
 
         val results = coroutineScope {
-            listOf("保存用", "貸出用").map { label ->
-                async(Dispatchers.Default) { repository.addAnotherCopy(ISBN, label) }
+            List(2) {
+                async(Dispatchers.Default) { repository.addAnotherCopy(ISBN, "") }
             }.awaitAll()
         }
 
@@ -194,7 +194,7 @@ class DefaultLibraryRepositoryIntegrationTest {
         val copies = database.libraryDao().getAllCopies()
         assertEquals(3, copies.size)
         assertEquals(3, copies.map { it.id }.distinct().size)
-        assertEquals(setOf("1冊目", "保存用", "貸出用"), copies.map { it.copyLabel }.toSet())
+        assertEquals(setOf("1冊目", "2冊目", "3冊目"), copies.map { it.copyLabel }.toSet())
         assertEquals(1, copies.map { it.editionId }.distinct().size)
     }
 

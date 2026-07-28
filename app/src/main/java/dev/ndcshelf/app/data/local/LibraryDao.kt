@@ -216,7 +216,7 @@ interface LibraryDao {
         readingStatus: String,
         tierId: String? = null,
         shelfOrderKey: String? = null,
-        copyLabel: String = "所蔵本",
+        copyLabel: String,
     )
 
     @Query("UPDATE book_works SET title = :title, primaryAuthor = :primaryAuthor WHERE id = :workId")
