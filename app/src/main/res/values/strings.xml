@@ -35,7 +35,8 @@
     <string name="reconciliation_save_error">照合結果を保存できませんでした。手動書誌は変更していません。</string>
     <string name="reconciliation_preview_title">NDL書誌への置き換え確認</string>
     <string name="reconciliation_preview_warning">以下の差分を確認してください。確定するまで書誌情報は変更されません。</string>
-    <string name="reconciliation_merge_notice">同じISBNの版がすでにあります（所有%1$d冊）。確定すると所有コピーをその版へ統合し、手動書誌を削除します。</string>
+    <string name="reconciliation_merge_notice">同じISBNの版がすでにあります（既存%1$d冊）。確定すると、この手動版の%2$d冊をその版へ統合し、手動書誌を削除します。</string>
+    <string name="reconciliation_shared_notice">この手動書誌は%1$d冊で共有されています。確定するとすべてのコピーへNDL書誌を適用します。</string>
     <string name="reconciliation_confirm">確認して置き換える</string>
     <string name="camera_torch_on">ライトを点ける</string>
     <string name="camera_torch_off">ライトを消す</string>

@@ -186,4 +186,21 @@ data class ManualReconciliationPreview(
     val candidate: NdlReconciliationCandidate,
     val existingEditionId: String?,
     val existingCopyCount: Int,
+    val currentEditionCopyCount: Int,
+    val existingEditionSnapshot: ReconciliationEditionSnapshot?,
+)
+
+data class ReconciliationEditionSnapshot(
+    val workId: String,
+    val editionId: String,
+    val title: String,
+    val primaryAuthor: String,
+    val isbn13: String?,
+    val publisher: String?,
+    val publishedYear: Int?,
+    val coverUrl: String?,
+    val ndcCode: String?,
+    val ndcEdition: String?,
+    val classificationSource: ClassificationSource,
+    val bibliographicSource: BibliographicSource,
 )

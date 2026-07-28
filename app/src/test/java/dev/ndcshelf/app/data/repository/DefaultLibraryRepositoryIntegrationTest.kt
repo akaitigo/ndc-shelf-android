@@ -657,6 +657,60 @@ class DefaultLibraryRepositoryIntegrationTest {
         assertNull(database.libraryDao().findEditionById(manual.editionId)?.isbn13)
     }
 
+    @Test
+    fun reconciliationRejectsConcurrentEditToExistingTarget() = runBlocking {
+        val repository = repository(
+            ids = listOf(
+                "ndl-work", "ndl-edition", "ndl-copy",
+                "manual-work", "manual-edition", "manual-copy",
+            ),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val ndl = (repository.addFromIsbn(ISBN) as AddBookResult.Added).book
+        val manual = (repository.addManualBook(ManualBookDraft(title = "仮題"))
+            as ManualBookResult.Added).book
+        val preview = (repository.previewManualReconciliation(manual.copyId, ISBN)
+            as ManualReconciliationLookupResult.Ready).preview
+        database.libraryDao().updateWork(ndl.workId, "統合先の並行編集", ndl.primaryAuthor)
+
+        assertSame(
+            ManualReconciliationApplyResult.Conflict,
+            repository.confirmManualReconciliation(preview),
+        )
+        assertEquals("統合先の並行編集", database.libraryDao().findWorkById(ndl.workId)?.title)
+        assertEquals(manual.editionId, database.libraryDao().findCopyById(manual.copyId)?.editionId)
+    }
+
+    @Test
+    fun reconciliationRejectsCopyAddedToManualEditionAfterPreview() = runBlocking {
+        val repository = repository(
+            ids = listOf("manual-work", "manual-edition", "manual-copy"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val manual = (repository.addManualBook(ManualBookDraft(title = "仮題"))
+            as ManualBookResult.Added).book
+        val preview = (repository.previewManualReconciliation(manual.copyId, ISBN)
+            as ManualReconciliationLookupResult.Ready).preview
+        database.libraryDao().insertCopy(
+            OwnedCopyEntity(
+                id = "concurrent-copy",
+                editionId = manual.editionId,
+                mediaType = MediaType.PHYSICAL.name,
+                location = "未設定",
+                readingStatus = ReadingStatus.UNREAD.name,
+                addedAt = 2,
+                copyLabel = "2冊目",
+            ),
+        )
+
+        assertSame(
+            ManualReconciliationApplyResult.Conflict,
+            repository.confirmManualReconciliation(preview),
+        )
+        assertNull(database.libraryDao().findEditionById(manual.editionId)?.isbn13)
+        assertEquals(2, database.libraryDao().countCopiesForEdition(manual.editionId))
+    }
+
     private fun repository(
         ids: List<String>,
         service: BookMetadataService,

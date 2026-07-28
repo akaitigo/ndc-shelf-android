@@ -17,7 +17,7 @@ NDL Searchに書誌がない資料や、通信できない状況でも蔵書へ�
 
 - Room DBはv7。v6以前のEditionは`bibliographicSource = NDL`へ移行する。
 - JSON/CSVは書誌由来を保持する。JSON schema v3では`MANUAL`に限り`isbn13: null`を許可する。
-- 完全バックアップはformat/payload v7。旧形式はISBN必須かつ`NDL`由来として復元する。
+- 完全バックアップはformat/payload v8。v7以前はISBN必須かつ`NDL`由来として復元する。
 - SQLiteの一意インデックスは非NULL ISBNの重複を拒否し、複数のNULL ISBNを許可する。
 
 ## セキュリティ・運用

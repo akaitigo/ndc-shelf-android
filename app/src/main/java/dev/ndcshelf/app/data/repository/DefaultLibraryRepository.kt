@@ -37,6 +37,7 @@ import dev.ndcshelf.app.domain.model.ManualBookValidator
 import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
 import dev.ndcshelf.app.domain.model.NdlReconciliationCandidate
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.ReconciliationEditionSnapshot
 import dev.ndcshelf.app.domain.model.ScanAttempt
 import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
 import dev.ndcshelf.app.domain.model.ScanSession
@@ -455,6 +456,10 @@ class DefaultLibraryRepository(
             )
         }
         val existing = dao.findEditionByIsbn(isbn13)?.takeIf { it.id != current.editionId }
+        val existingWork = existing?.let { dao.findWorkById(it.workId) }
+        if (existing != null && existingWork == null) {
+            return ManualReconciliationLookupResult.Failure(AddBookFailure.SAVE)
+        }
         val candidate = if (
             existing == null || existing.bibliographicSource == BibliographicSource.MANUAL.name
         ) {
@@ -475,8 +480,7 @@ class DefaultLibraryRepository(
                 classificationSource = classificationSource,
             )
         } else {
-            val work = dao.findWorkById(existing.workId)
-                ?: return ManualReconciliationLookupResult.Failure(AddBookFailure.SAVE)
+            val work = requireNotNull(existingWork)
             NdlReconciliationCandidate(
                 isbn13 = isbn13,
                 title = work.title,
@@ -497,6 +501,10 @@ class DefaultLibraryRepository(
                 candidate = candidate,
                 existingEditionId = existing?.id,
                 existingCopyCount = existing?.let { dao.countCopiesForEdition(it.id) } ?: 0,
+                currentEditionCopyCount = dao.countCopiesForEdition(current.editionId),
+                existingEditionSnapshot = existing?.toReconciliationSnapshot(
+                    requireNotNull(existingWork),
+                ),
             ),
         )
     }
@@ -513,12 +521,24 @@ class DefaultLibraryRepository(
                 return@withTransaction ManualReconciliationApplyResult.Conflict
             }
             val isbnEdition = dao.findEditionByIsbn(preview.candidate.isbn13)
-            val targetId = isbnEdition?.id?.takeIf { it != current.editionId }
-            if (targetId != preview.existingEditionId) {
+                ?.takeIf { it.id != current.editionId }
+            val targetWork = isbnEdition?.let { dao.findWorkById(it.workId) }
+            val targetSnapshot = if (isbnEdition != null && targetWork != null) {
+                isbnEdition.toReconciliationSnapshot(targetWork)
+            } else {
+                null
+            }
+            val targetCopyCount = isbnEdition?.let { dao.countCopiesForEdition(it.id) } ?: 0
+            if (isbnEdition?.id != preview.existingEditionId ||
+                targetSnapshot != preview.existingEditionSnapshot ||
+                targetCopyCount != preview.existingCopyCount ||
+                dao.countCopiesForEdition(current.editionId) != preview.currentEditionCopyCount
+            ) {
                 return@withTransaction ManualReconciliationApplyResult.Conflict
             }
+            val targetId = isbnEdition?.id
             if (targetId != null) {
-                val target = requireNotNull(isbnEdition)
+                val target = isbnEdition
                 if (target.bibliographicSource == BibliographicSource.MANUAL.name) {
                     dao.updateWork(
                         target.workId,
@@ -1215,6 +1235,23 @@ private fun LibraryBook.snapshotHash(): String {
         .digest(canonical.toByteArray(Charsets.UTF_8))
         .joinToString("") { byte -> "%02x".format(byte) }
 }
+
+private fun BookEditionEntity.toReconciliationSnapshot(
+    work: BookWorkEntity,
+) = ReconciliationEditionSnapshot(
+    workId = work.id,
+    editionId = id,
+    title = work.title,
+    primaryAuthor = work.primaryAuthor,
+    isbn13 = isbn13,
+    publisher = publisher,
+    publishedYear = publishedYear,
+    coverUrl = coverUrl,
+    ndcCode = ndcCode,
+    ndcEdition = ndcEdition,
+    classificationSource = classificationSource.toEnumOrDefault(ClassificationSource.UNKNOWN),
+    bibliographicSource = bibliographicSource.toEnumOrDefault(BibliographicSource.NDL),
+)
 
 private const val RECENT_SCAN_SESSION_LIMIT = 20
 private const val MAX_RECORDED_ISBN_LENGTH = 32

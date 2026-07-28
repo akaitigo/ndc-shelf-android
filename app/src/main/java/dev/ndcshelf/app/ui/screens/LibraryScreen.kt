@@ -980,6 +980,16 @@ private fun EditBookSheet(
                             stringResource(
                                 R.string.reconciliation_merge_notice,
                                 preview.existingCopyCount,
+                                preview.currentEditionCopyCount,
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (preview.existingEditionId == null && preview.currentEditionCopyCount > 1) {
+                        Text(
+                            stringResource(
+                                R.string.reconciliation_shared_notice,
+                                preview.currentEditionCopyCount,
                             ),
                             color = MaterialTheme.colorScheme.error,
                         )

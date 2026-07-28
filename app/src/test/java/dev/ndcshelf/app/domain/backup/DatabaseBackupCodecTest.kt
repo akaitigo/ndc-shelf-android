@@ -110,7 +110,10 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val changedPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":7", "\"schemaVersion\":6")
+            .replace(
+                "\"schemaVersion\":${DatabaseBackupCodec.CURRENT_FORMAT_VERSION}",
+                "\"schemaVersion\":${DatabaseBackupCodec.CURRENT_FORMAT_VERSION - 1}",
+            )
             .encodeToByteArray()
         entries["database.json"] = changedPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
@@ -123,6 +126,29 @@ class DatabaseBackupCodecTest {
         }
 
         assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `format seven backup keeps scan history and migrates bibliographic source`() {
+        val (archive, _) = codec.encode(sampleSnapshot(), "0.2.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        val originalPayload = requireNotNull(entries["database.json"])
+        val oldPayload = originalPayload.decodeToString()
+            .replace("\"schemaVersion\":8", "\"schemaVersion\":7")
+            .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
+            .encodeToByteArray()
+        entries["database.json"] = oldPayload
+        entries["manifest.json"] = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace("\"formatVersion\":8", "\"formatVersion\":7")
+            .replace(originalPayload.sha256(), oldPayload.sha256())
+            .encodeToByteArray()
+
+        val preview = codec.decode(ByteArrayInputStream(zip(entries)))
+
+        assertEquals("NDL", preview.snapshot.editions.single().bibliographicSource)
+        assertEquals(sampleSnapshot().scanSessions, preview.snapshot.scanSessions)
+        assertEquals(sampleSnapshot().scanAttempts, preview.snapshot.scanAttempts)
     }
 
     @Test

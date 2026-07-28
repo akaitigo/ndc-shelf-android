@@ -63,6 +63,7 @@ class CameraPermissionCardTest {
                     onCameraRetry = { restarts += 1 },
                     onClear = {},
                     onAddDuplicateCopy = {},
+                    onOpenManualRegistration = {},
                 )
             }
         }
