@@ -228,3 +228,9 @@ NDCコードまたはNDC版を変更した場合、`classificationSource`を`MAN
 - 書誌情報の検索時にISBNをNDL Searchへ送信します。
 - アナリティクスSDKや広告SDKは組み込みません。
 - 将来の同期やAI機能は明示的なオプトインにします。
+
+## Optional sync boundary
+
+任意同期はRoomを正本とするE2EE operation logとして設計し、backendへdomain payloadの平文を渡しません。同期対象、除外data、公開wire format、因果順序、remove-wins削除、端末追加・失効、鍵紛失、backend交換の規則は[ADR 0005](adr/0005-optional-e2ee-sync.md)と[同期protocol](SYNC_PROTOCOL.md)を正本とします。信頼境界、STRIDE分析、復旧と残存riskは[同期脅威モデル](SYNC_THREAT_MODEL.md)を参照してください。
+
+後続実装は、local mutationとoutboxを同一transactionで記録し、受信batchを署名・AEAD・schema・因果関係・DB制約の順に検証してから単一transactionで適用します。同期OFF、同意撤回、sign-out後は同期先へrequestを作成しません。wall clock、backend固有timestamp、全量last-writer-winsを競合解決へ使用してはいけません。
