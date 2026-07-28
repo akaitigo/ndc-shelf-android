@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.about.libraries)
+    alias(libs.plugins.cyclonedx)
 }
 
 android {
@@ -108,14 +109,25 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
+val generatedLicenseReport = layout.buildDirectory.file(
+    "generated/aboutLibraries/release/res/raw/aboutlibraries.json",
+)
+
+val generateThirdPartyNotices by tasks.registering(Copy::class) {
+    group = "documentation"
+    description = "Generates the third-party notice artifact from release dependencies."
+    dependsOn("prepareLibraryDefinitionsRelease")
+    from(generatedLicenseReport)
+    into(layout.buildDirectory.dir("reports/licenses"))
+    rename { "THIRD-PARTY-NOTICES.json" }
+}
+
 val verifyLicenseReport by tasks.registering {
     group = "verification"
     description = "Verifies that the release license report covers direct and transitive dependencies."
-    dependsOn("prepareLibraryDefinitionsRelease")
+    dependsOn(generateThirdPartyNotices)
 
-    val report = layout.buildDirectory.file(
-        "generated/aboutLibraries/release/res/raw/aboutlibraries.json",
-    )
+    val report = layout.buildDirectory.file("reports/licenses/THIRD-PARTY-NOTICES.json")
     inputs.file(report)
     doLast {
         val contents = report.get().asFile.readText()
@@ -149,6 +161,16 @@ val verifyLicenseReport by tasks.registering {
 
 tasks.named("check") {
     dependsOn(verifyLicenseReport)
+}
+
+tasks.cyclonedxDirectBom {
+    includeConfigs = listOf("releaseRuntimeClasspath")
+    projectType = org.cyclonedx.model.Component.Type.APPLICATION
+    componentName = "NDC Shelf"
+    componentVersion = android.defaultConfig.versionName ?: "unspecified"
+    includeLicenseText = false
+    jsonOutput = layout.buildDirectory.file("reports/cyclonedx/ndc-shelf.cdx.json")
+    xmlOutput.unsetConvention()
 }
 
 val verifyBackupPolicy by tasks.registering {

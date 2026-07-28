@@ -1,0 +1,4 @@
+# Vulnerability exceptions are intentionally empty. Each future [[IgnoredVulns]]
+# entry must include id, ignoreUntil, and a reason formatted as:
+# reason = "owner=@github-handle; rationale=why the vulnerable path is not exploitable"
+# The CI validator rejects missing, expired, duplicate, or overlong exceptions.
