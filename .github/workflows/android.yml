@@ -43,11 +43,12 @@ jobs:
           testDebugUnitTest
           lintDebug
           assembleDebug
-          compileDebugAndroidTestKotlin
+          assembleDebugAndroidTest
           --stacktrace
 
       - name: Verify exported Room schemas are committed
         run: git diff --exit-code -- app/schemas
+
       - name: Verify vulnerability exceptions
         run: .github/scripts/verify-osv-exceptions.sh
 

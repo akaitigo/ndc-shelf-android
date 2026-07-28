@@ -146,19 +146,25 @@ class V04SeriesReleaseTest {
         results += found("record-1", "匿名年代記 1巻")
         assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.isEmpty())
 
-        now = 200
         results += found("record-2", "匿名年代記 2巻")
+        now += 1_000
+        assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.isEmpty())
+        assertEquals(1, calls)
+
+        now = 100L + SUCCESS_INTERVAL_MILLIS
         val notification = (repository.checkEnabledWatches() as SeriesWatchCheckResult.Success)
             .notifications.single()
         repository.markNotified(notification.candidateIds)
-        now = 300
+        now += SUCCESS_INTERVAL_MILLIS
         results += found("record-2", "匿名年代記 2巻")
         assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.isEmpty())
 
+        now += SUCCESS_INTERVAL_MILLIS
         results += SeriesReleaseSourceResult.Failure(SeriesReleaseSourceFailure.OFFLINE)
         val outage = repository.checkEnabledWatches() as SeriesWatchCheckResult.PartialFailure
         assertTrue(outage.retryable)
         assertEquals(2, repository.observeWatches().first().single().candidates.size)
+        assertEquals(4, calls)
     }
 
     private suspend fun seedAnonymousWorks() {
@@ -214,4 +220,8 @@ class V04SeriesReleaseTest {
     private fun found(id: String, title: String) = SeriesReleaseSourceResult.Found(
         listOf(SeriesReleaseSourceCandidate(id, title, "匿名著者", null, "匿名出版社", "2026")),
     )
+
+    private companion object {
+        const val SUCCESS_INTERVAL_MILLIS = 7L * 24 * 60 * 60 * 1_000
+    }
 }

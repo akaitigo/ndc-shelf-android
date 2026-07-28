@@ -7,13 +7,12 @@
 ## Current State
 
 - branch: `agent/issue-35-v04-release`
-- base: `agent/issue-34-series-release-watch`
-- base HEAD: `8365947`
-- upstream: 未設定
+- base: `main`
+- base HEAD: `64ba4bb`
+- upstream: `origin/agent/issue-35-v04-release`
 - related Issue: #35
 - dependency: v0.4 milestoneのP0 Issue #30、#32、#33、#34の実装branch
-- dirty files: CI、version設定、Migration回帰テスト、v0.4匿名release fixture test
-- ownership: 上記の未コミット変更はこのIssueの既存作業として保持する
+- ownership: この契約に列挙したrelease gateの変更だけを扱い、他Issueの変更を混在させない
 
 ## Decision
 
@@ -56,7 +55,7 @@
 
 - `V04SeriesReleaseTest`: 匿名fixture、欠巻の保守性、所属解除・再設定、版関連の可逆性、watchのopt-in・baseline・重複抑止・offline縮退
 - `AppDatabaseMigrationTest`: Room v7→v11の蔵書・場所保持、シリーズ関連tableの空初期化、foreign key整合
-- 全debug unit test、lint、debug assemble、androidTest Kotlin compile
+- 全debug unit test、lint、debug assemble、androidTest APK assemble
 - 利用可能なAVDで`connectedDebugAndroidTest`
 - 実機のみの通知権限、再起動、時計変更、offline復帰はrelease checklistに手順と証跡欄を残す
 
@@ -70,7 +69,7 @@
   testDebugUnitTest \
   lintDebug \
   assembleDebug \
-  compileDebugAndroidTestKotlin
+  assembleDebugAndroidTest
 ./gradlew connectedDebugAndroidTest
 git diff --check
 git diff --exit-code -- app/schemas

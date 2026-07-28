@@ -107,7 +107,7 @@ NDL Searchへの書誌・表紙通信、障害分類、再試行、表紙キャ�
 
 大規模蔵書の代表データ、検索性能予算、Room・索引・Pagingの採否は[docs/LIBRARY_SEARCH_PERFORMANCE.md](docs/LIBRARY_SEARCH_PERFORMANCE.md)を参照してください。
 
-利用者向け変更は[CHANGELOG.md](CHANGELOG.md)、v0.2の公開判定は[リリースチェックリスト](docs/releases/V0.2_RELEASE_CHECKLIST.md)、v0.3候補は[release notes](docs/releases/V0.3_RELEASE_NOTES.md)、[release checklist](docs/releases/V0.3_RELEASE_CHECKLIST.md)、[rollback手順](docs/releases/V0.3_ROLLBACK.md)、現在のv0.4候補は[release checklist](docs/releases/V0.4_RELEASE_CHECKLIST.md)と[rollback手順](docs/releases/V0.4_ROLLBACK.md)を参照してください。
+利用者向け変更は[CHANGELOG.md](CHANGELOG.md)、v0.2の公開判定は[リリースチェックリスト](docs/releases/V0.2_RELEASE_CHECKLIST.md)、v0.3候補は[release notes](docs/releases/V0.3_RELEASE_NOTES.md)、[release checklist](docs/releases/V0.3_RELEASE_CHECKLIST.md)、[rollback手順](docs/releases/V0.3_ROLLBACK.md)、現在のv0.4候補は[release notes](docs/releases/V0.4_RELEASE_NOTES.md)、[release checklist](docs/releases/V0.4_RELEASE_CHECKLIST.md)、[rollback手順](docs/releases/V0.4_ROLLBACK.md)を参照してください。
 
 NDL Search APIの利用にAPIキーは不要です。ISBN検索時は対象ISBNだけを送信し、シリーズの定期確認を明示的に有効にした場合だけ対象シリーズ名と検索開始年をシリーズごとに週1回送信します。一時障害時は失敗した確認だけを指数バックオフで再試行します。蔵書データは端末内に保存され、Androidのクラウドバックアップからも除外されます。Android 9以降の端末間転送ではRoom DBだけを移行対象にします。表紙表示時はNDL SearchのHTTPS画像URLへ接続し、最大50MiBの端末キャッシュを利用します。バーコード画像と認識結果はML Kitにより端末内処理されますが、同SDKは診断・利用分析メトリクスをGoogleへ送信します。詳しい取扱いは[PRIVACY.md](PRIVACY.md)、バックアップ判断は[docs/BACKUP_THREAT_MODEL.md](docs/BACKUP_THREAT_MODEL.md)を参照してください。
 
