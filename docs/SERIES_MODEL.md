@@ -23,7 +23,7 @@
 
 ## Migrationと互換性
 
-v7からv8は2テーブルとindexだけを追加し、既存Work・Edition・Copyを更新しません。完全バックアップ形式もv8へ上げ、SeriesとMembershipを外部キー順で検証・復元します。v1からv7のバックアップはSeriesなしとして引き続き読めます。
+DB v7からv8は2テーブルとindexだけを追加し、既存Work・Edition・Copyを更新しません。完全バックアップ形式は既存の形式8を再利用せず形式9へ上げ、SeriesとMembershipを外部キー順で検証・復元します。形式1から8のバックアップはSeriesなしとして引き続き読めます。
 
 ## セキュリティ・運用
 

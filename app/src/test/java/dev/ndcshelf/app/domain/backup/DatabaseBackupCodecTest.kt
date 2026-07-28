@@ -154,6 +154,34 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `format eight backup keeps scan history and bibliographic source without series`() {
+        val snapshot = sampleSnapshot().copy(series = emptyList(), seriesMemberships = emptyList())
+        val (archive, _) = codec.encode(snapshot, "0.3.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        val originalPayload = requireNotNull(entries["database.json"])
+        val oldPayload = originalPayload.decodeToString()
+            .replace("\"schemaVersion\":9", "\"schemaVersion\":8")
+            .replace(",\"series\":[]", "")
+            .replace(",\"seriesMemberships\":[]", "")
+            .encodeToByteArray()
+        entries["database.json"] = oldPayload
+        entries["manifest.json"] = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace("\"formatVersion\":9", "\"formatVersion\":8")
+            .replace(",\"seriesCount\":0,\"seriesMembershipCount\":0", "")
+            .replace(originalPayload.sha256(), oldPayload.sha256())
+            .encodeToByteArray()
+
+        val preview = codec.decode(ByteArrayInputStream(zip(entries)))
+
+        assertEquals("NDL", preview.snapshot.editions.single().bibliographicSource)
+        assertEquals(snapshot.scanSessions, preview.snapshot.scanSessions)
+        assertEquals(snapshot.scanAttempts, preview.snapshot.scanAttempts)
+        assertEquals(emptyList<SeriesEntity>(), preview.snapshot.series)
+        assertEquals(emptyList<SeriesMembershipEntity>(), preview.snapshot.seriesMemberships)
+    }
+
+    @Test
     fun `format one payload migrates fields added in format two`() {
         val payload = """
             {
@@ -193,14 +221,15 @@ class DatabaseBackupCodecTest {
               "schemaVersion":7,
               "works":[{"id":"work-1","title":"第一巻","primaryAuthor":"著者"}],
               "editions":[],"copies":[],"rooms":[],"shelves":[],"tiers":[],
-              "wishlistItems":[]
+              "wishlistItems":[],"scanSessions":[],"scanAttempts":[]
             }
         """.trimIndent().encodeToByteArray()
         val manifest = """
             {
               "format":"ndc-shelf-room-backup","formatVersion":7,"databaseVersion":7,
               "createdAt":1,"appVersion":"0.3.0","payloadSha256":"${payload.sha256()}",
-              "workCount":1,"editionCount":0,"copyCount":0,"wishlistCount":0
+              "workCount":1,"editionCount":0,"copyCount":0,"wishlistCount":0,
+              "scanSessionCount":0,"scanAttemptCount":0
             }
         """.trimIndent().encodeToByteArray()
 
