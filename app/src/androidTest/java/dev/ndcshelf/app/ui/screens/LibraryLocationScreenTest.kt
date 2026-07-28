@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasContentDescription
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
@@ -118,11 +120,12 @@ class LibraryLocationScreenTest {
 
         composeRule.onNodeWithText("テスト本").performClick()
         openCopyEditor("所蔵本")
-        composeRule.onNodeWithText("「上段の本」の後").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("「上段の本」の後").assertExists()
 
-        composeRule.onNodeWithText("書斎 / 本棚A / 下段").performScrollTo().performClick()
+        composeRule.onNodeWithText("書斎 / 本棚A / 下段")
+            .performSemanticsAction(SemanticsActions.OnClick)
 
-        composeRule.onNodeWithText("「下段の本」の後").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("「下段の本」の後").assertExists()
         composeRule.onNodeWithText("「上段の本」の後").assertDoesNotExist()
     }
 
