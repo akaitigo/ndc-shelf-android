@@ -3,13 +3,16 @@ package dev.ndcshelf.app.ui.screens
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
@@ -50,7 +53,8 @@ class LibraryLocationScreenTest {
         openCopyEditor("所蔵本")
 
         composeRule.onNodeWithText("登録済みの段").performScrollTo().assertIsDisplayed()
-        composeRule.onNode(hasText("書斎 / 本棚A / 上段") and hasClickAction())
+        composeRule.onAllNodesWithText("書斎 / 本棚A / 上段")
+            .onFirst()
             .performScrollTo()
             .assertIsDisplayed()
     }
@@ -131,8 +135,12 @@ class LibraryLocationScreenTest {
     }
 
     private fun openCopyEditor(copyLabel: String) {
+        val description =
+            "$copyLabel、場所 書斎 / 本棚A / 上段、未読、紙。タップして編集"
+        composeRule.onNodeWithTag(BOOK_DETAIL_TEST_TAG)
+            .performScrollToNode(hasContentDescription(description))
         composeRule.onNodeWithContentDescription(
-            "$copyLabel、場所 書斎 / 本棚A / 上段、未読、紙。タップして編集",
+            description,
         ).performClick()
     }
 
