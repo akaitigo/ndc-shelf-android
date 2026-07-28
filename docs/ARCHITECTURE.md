@@ -77,6 +77,10 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 
 完全バックアップの形式、入力上限、復元ロールバックは[DATABASE_BACKUP.md](DATABASE_BACKUP.md)を参照してください。
 
+## シリーズモデル
+
+WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻ラベルと種別は表示事実、fractional order keyは表示順として分離し、タイトルから暗黙に推測しません。Room v8の外部キー・一意制約、複数所属、削除・統合・同期の判断は[シリーズモデル](SERIES_MODEL.md)と[ADR 0002](adr/0002-multiple-series-memberships.md)を参照してください。
+
 ## 書籍詳細UI
 
 本棚一覧からは`BookEdition`単位の詳細へ遷移し、タイトル、著者、ISBN、出版社、出版年、表紙、NDC、書誌出典を表示します。同じEditionを参照する`OwnedCopy`は場所、読書状態、媒体、取得日とともに列挙し、棚移動、状態変更、コピー名変更、削除は選択したコピーの編集シートだけで行います。書誌・分類の手動補正と確認付きNDL照合はEdition共通操作として分離し、破壊的なコピー削除を詳細画面へ直接配置しません。
