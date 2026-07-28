@@ -31,10 +31,15 @@ class FractionalOrderKeyTest {
     }
 
     @Test
-    fun tenThousandRepeatedInsertionsRemainOrderedWithoutRewritingExistingKeys() {
+    fun tenThousandRepeatedInsertionsRemainOrderedWithBoundedKeyLength() {
         val keys = mutableListOf<String>()
         val elapsed = measureTimeMillis {
             repeat(10_000) { index ->
+                if (FractionalOrderKey.requiresCompaction(keys)) {
+                    keys.indices.forEach { keyIndex ->
+                        keys[keyIndex] = FractionalOrderKey.compact(keyIndex, keys.size)
+                    }
+                }
                 val left = keys.lastOrNull()
                 keys += FractionalOrderKey.between(left, null, "copy-$index")
             }
@@ -42,6 +47,7 @@ class FractionalOrderKeyTest {
 
         assertEquals(keys.sorted(), keys)
         assertEquals(10_000, keys.distinct().size)
+        assertTrue(keys.maxOf(String::length) <= FractionalOrderKey.MAX_GENERATED_LENGTH)
         assertTrue("10,000 keys took ${elapsed}ms", elapsed < 5_000)
     }
 }

@@ -406,12 +406,10 @@ class DefaultLibraryRepository(
 
     private suspend fun ensureTierKeys(tierId: String) {
         val copies = database.locationDao().getOrderedCopies(tierId)
-        if (copies.none { it.shelfOrderKey == null }) return
-        var previous: String? = null
-        copies.forEach { copy ->
-            val key = FractionalOrderKey.between(previous, null, copy.id)
+        if (!FractionalOrderKey.requiresCompaction(copies.map { it.shelfOrderKey })) return
+        copies.forEachIndexed { index, copy ->
+            val key = FractionalOrderKey.compact(index, copies.size)
             check(database.locationDao().updateCopyOrder(copy.id, key) == 1)
-            previous = key
         }
     }
 }

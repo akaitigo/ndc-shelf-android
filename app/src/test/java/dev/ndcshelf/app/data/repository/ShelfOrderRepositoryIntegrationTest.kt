@@ -99,6 +99,22 @@ class ShelfOrderRepositoryIntegrationTest {
     }
 
     @Test
+    fun movingCompactsAnOverlongTierBeforeCreatingTheNextKey() = runBlocking {
+        database.locationDao().updateCopyOrder("copy-b", "40" + "00".repeat(32))
+
+        assertSame(
+            ShelfMoveResult.Moved,
+            repository.moveBookWithinTier("copy-b", ShelfMoveDirection.RIGHT),
+        )
+
+        val ordered = database.locationDao().getOrderedCopies("tier-1")
+        assertEquals(listOf("copy-a", "copy-c", "copy-b"), ordered.map { it.id })
+        val keys = ordered.mapNotNull { it.shelfOrderKey }
+        assertEquals(ordered.size, keys.size)
+        assertTrue(keys.maxOf(String::length) <= FractionalOrderKey.MAX_GENERATED_LENGTH)
+    }
+
+    @Test
     fun movingOneCopyInTenThousandCompletesWithinBudget() = runBlocking {
         val copies = (0 until 10_000).map { index ->
             OwnedCopyEntity(
