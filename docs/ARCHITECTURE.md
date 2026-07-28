@@ -83,6 +83,12 @@ Storage Access FrameworkのActivity Result launcherは、遷移先画面では�
 
 詳細選択と編集中のcopy IDは`rememberSaveable`で保持します。外部からの`ndcshelf://book/{editionId}`は、英数字と`._:-`だけからなる128文字以下のローカルEdition IDに限定し、該当する端末内データがある場合だけ詳細を開きます。MainActivityは`singleTop`で、起動中のリンクを`onNewIntent`へ集約しActivityの多重生成を防ぎます。カスタムスキームはドメイン検証されたApp Linkではないため他アプリによる横取りを防げませんが、リンクから蔵書データの読出しや変更は行わず、ローカル画面への移動だけを許可します。処理待ちIDはActivityの保存状態で管理し、消費済みリンクを画面回転後に再実行しません。
 
+## 蔵書検索
+
+本棚の検索・読書状態・並び順は`LibrarySearchCriteria`で表し、250msの入力待機後に`flatMapLatest`でRoomのObservable Queryを切り替えます。UIへは適用済み条件と結果を同じ`LibrarySearchResult`として渡し、入力中の条件と一致しない古い結果を表示しません。検索語は100文字に制限し、SQL `LIKE`の`%`、`_`、エスケープ文字はリテラルとして扱います。
+
+検索語、読書状態、並び順はアプリ専用SharedPreferencesへ保存し、詳細表示中だけ使うEdition IDは永続化しません。全蔵書Flowは本棚または分析画面の表示中だけ購読し、データ画面の件数は集計クエリ、エクスポートは実行時スナップショットを使います。代表データ、性能予算、索引・FTS・Pagingの判断は[LIBRARY_SEARCH_PERFORMANCE.md](LIBRARY_SEARCH_PERFORMANCE.md)を正本とします。
+
 ## データモデル
 
 ```mermaid

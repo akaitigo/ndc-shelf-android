@@ -39,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -54,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +69,9 @@ import dev.ndcshelf.app.ReconciliationFailure
 import dev.ndcshelf.app.ShelfMoveUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
+import dev.ndcshelf.app.domain.model.LibrarySort
+import dev.ndcshelf.app.domain.model.LibraryStats
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationTree
@@ -83,6 +88,13 @@ import java.util.Date
 @Composable
 fun LibraryScreen(
     books: List<LibraryBook>,
+    searchCriteria: LibrarySearchCriteria? = null,
+    searchIsCurrent: Boolean = true,
+    libraryStats: LibraryStats? = null,
+    onQueryChange: (String) -> Unit = {},
+    onReadingStatusChange: (ReadingStatus?) -> Unit = {},
+    onSortChange: (LibrarySort) -> Unit = {},
+    onSelectedEditionChange: (String?) -> Unit = {},
     initialEditionId: String? = null,
     onInitialEditionHandled: () -> Unit = {},
     onSaveBook: (String, BookEditDraft) -> Unit,
@@ -107,12 +119,13 @@ fun LibraryScreen(
     onClearManualReconciliation: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
+    var localQuery by rememberSaveable { mutableStateOf("") }
     var selectedEditionId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingCopyId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLocationManager by rememberSaveable { mutableStateOf(false) }
-    val visibleBooks = remember(books, query) {
-        books.filter { it.matches(query) }
+    val query = searchCriteria?.query ?: localQuery
+    val visibleBooks = remember(books, query, searchCriteria) {
+        if (searchCriteria == null) books.filter { it.matches(query) } else books
     }
     val editionCounts = remember(books) { books.groupingBy { it.editionId }.eachCount() }
     val editingBook = remember(books, editingCopyId) {
@@ -129,9 +142,19 @@ fun LibraryScreen(
         editingCopyId = copyId
     }
 
-    LaunchedEffect(initialEditionId, books) {
-        if (initialEditionId != null && books.any { it.editionId == initialEditionId }) {
-            selectedEditionId = initialEditionId
+    LaunchedEffect(searchCriteria?.selectedEditionId) {
+        searchCriteria?.let { criteria -> selectedEditionId = criteria.selectedEditionId }
+    }
+
+    LaunchedEffect(initialEditionId, books, searchIsCurrent) {
+        if (initialEditionId != null) onSelectedEditionChange(initialEditionId)
+        if (initialEditionId != null && searchIsCurrent) {
+            if (books.any { it.editionId == initialEditionId }) {
+                selectedEditionId = initialEditionId
+            } else {
+                selectedEditionId = null
+                onSelectedEditionChange(null)
+            }
             onInitialEditionHandled()
         }
     }
@@ -145,19 +168,35 @@ fun LibraryScreen(
         if (editingCopyId == deleted.book.copyId) editingCopyId = null
         if (books.none { it.editionId == deleted.book.editionId && it.copyId != deleted.book.copyId }) {
             selectedEditionId = null
+            onSelectedEditionChange(null)
         }
     }
     LaunchedEffect(manualReconciliationState) {
         if (manualReconciliationState === ManualReconciliationUiState.Applied) {
             editingCopyId = null
+            selectedEditionId = null
+            onSelectedEditionChange(null)
             onClearManualReconciliation()
         }
     }
 
-    if (selectedCopies.isNotEmpty()) {
+    val isDetailLoading = !searchIsCurrent && searchCriteria?.selectedEditionId != null
+    if (isDetailLoading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().testTag(LIBRARY_SEARCH_PROGRESS_TAG),
+            )
+        }
+    } else if (searchIsCurrent && selectedCopies.isNotEmpty()) {
         BookDetailScreen(
             copies = selectedCopies,
-            onBack = { selectedEditionId = null },
+            onBack = {
+                selectedEditionId = null
+                onSelectedEditionChange(null)
+            },
             onEditCopy = ::openEditor,
             onEditBibliography = { openEditor(selectedCopies.first().copyId) },
             onReconcile = { openEditor(selectedCopies.first().copyId) },
@@ -178,14 +217,17 @@ fun LibraryScreen(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "${books.size}冊の本を、ちゃんと見つけられる場所。",
+                    text = "${libraryStats?.totalCount ?: books.size}冊の本を、ちゃんと見つけられる場所。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = { value ->
+                        localQuery = value
+                        onQueryChange(value)
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("タイトル・著者・ISBN・NDC・棚で検索") },
                     leadingIcon = {
@@ -193,7 +235,10 @@ fun LibraryScreen(
                     },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
+                            IconButton(onClick = {
+                                localQuery = ""
+                                onQueryChange("")
+                            }) {
                                 Icon(Icons.Rounded.Clear, contentDescription = "検索をクリア")
                             }
                         }
@@ -202,7 +247,13 @@ fun LibraryScreen(
                     shape = RoundedCornerShape(18.dp),
                 )
                 Spacer(Modifier.height(12.dp))
-                LibrarySummary(books)
+                LibrarySummary(libraryStats ?: books.toStats())
+                LibrarySearchControls(
+                    status = searchCriteria?.readingStatus,
+                    sort = searchCriteria?.sort ?: LibrarySort.ADDED_NEWEST,
+                    onStatusChange = onReadingStatusChange,
+                    onSortChange = onSortChange,
+                )
                 TextButton(
                     onClick = { showLocationManager = true },
                     modifier = Modifier.align(Alignment.End),
@@ -214,7 +265,16 @@ fun LibraryScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
-            if (visibleBooks.isEmpty()) {
+            if (!searchIsCurrent) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().testTag(LIBRARY_SEARCH_PROGRESS_TAG),
+                    )
+                }
+            } else if (visibleBooks.isEmpty()) {
                 EmptyLibrary(
                     isSearching = query.isNotBlank(),
                     modifier = Modifier
@@ -239,7 +299,10 @@ fun LibraryScreen(
                         BookCard(
                             book = book,
                             editionCopyCount = editionCounts[book.editionId] ?: 1,
-                            onClick = { selectedEditionId = book.editionId },
+                            onClick = {
+                                selectedEditionId = book.editionId
+                                onSelectedEditionChange(book.editionId)
+                            },
                         )
                     }
                 }
@@ -295,11 +358,10 @@ fun LibraryScreen(
 
 }
 
-@Composable
-private fun LibrarySummary(books: List<LibraryBook>) {
-    val classified = books.count { it.ndcCode != null }
-    val reading = books.count { it.readingStatus == ReadingStatus.READING }
+internal const val LIBRARY_SEARCH_PROGRESS_TAG = "library-search-progress"
 
+@Composable
+private fun LibrarySummary(stats: LibraryStats) {
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -310,12 +372,79 @@ private fun LibrarySummary(books: List<LibraryBook>) {
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            SummaryValue(value = books.size.toString(), label = "蔵書")
-            SummaryValue(value = classified.toString(), label = "NDC分類済み")
-            SummaryValue(value = reading.toString(), label = "読書中")
+            SummaryValue(value = stats.totalCount.toString(), label = "蔵書")
+            SummaryValue(value = stats.classifiedCount.toString(), label = "NDC分類済み")
+            SummaryValue(value = stats.readingCount.toString(), label = "読書中")
         }
     }
 }
+
+private fun List<LibraryBook>.toStats() = LibraryStats(
+    totalCount = size,
+    classifiedCount = count { it.ndcCode != null },
+    readingCount = count { it.readingStatus == ReadingStatus.READING },
+)
+
+@Composable
+private fun LibrarySearchControls(
+    status: ReadingStatus?,
+    sort: LibrarySort,
+    onStatusChange: (ReadingStatus?) -> Unit,
+    onSortChange: (LibrarySort) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            stringResource(R.string.library_filter_status),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = status == null,
+                onClick = { onStatusChange(null) },
+                label = { Text(stringResource(R.string.library_filter_all)) },
+            )
+            ReadingStatus.entries.forEach { candidate ->
+                FilterChip(
+                    selected = status == candidate,
+                    onClick = { onStatusChange(candidate) },
+                    label = { Text(candidate.label) },
+                )
+            }
+        }
+        Text(
+            stringResource(R.string.library_sort_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LibrarySort.entries.forEach { candidate ->
+                FilterChip(
+                    selected = sort == candidate,
+                    onClick = { onSortChange(candidate) },
+                    label = { Text(candidate.label()) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibrarySort.label(): String = stringResource(
+    when (this) {
+        LibrarySort.ADDED_NEWEST -> R.string.library_sort_added
+        LibrarySort.TITLE -> R.string.library_sort_title
+        LibrarySort.AUTHOR -> R.string.library_sort_author
+        LibrarySort.NDC -> R.string.library_sort_ndc
+        LibrarySort.SHELF -> R.string.library_sort_shelf
+    },
+)
 
 @Composable
 private fun SummaryValue(value: String, label: String) {

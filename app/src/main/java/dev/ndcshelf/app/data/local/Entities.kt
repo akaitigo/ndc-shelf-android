@@ -242,3 +242,9 @@ data class LocationTierCountRow(
     val tierId: String,
     val copyCount: Int,
 )
+
+data class LibraryStatsRow(
+    val totalCount: Int,
+    val classifiedCount: Int,
+    val readingCount: Int,
+)

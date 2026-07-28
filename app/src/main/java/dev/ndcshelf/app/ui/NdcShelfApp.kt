@@ -68,7 +68,6 @@ fun NdcShelfApp(
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val books by viewModel.books.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val scanSessions by viewModel.scanSessions.collectAsStateWithLifecycle()
     val scanSessionState by viewModel.scanSessionState.collectAsStateWithLifecycle()
@@ -84,10 +83,14 @@ fun NdcShelfApp(
     val locations by viewModel.locations.collectAsStateWithLifecycle()
     val locationMutationState by viewModel.locationMutationState.collectAsStateWithLifecycle()
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
+    val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     LaunchedEffect(requestedEditionId) {
-        if (requestedEditionId != null) selected = AppDestination.LIBRARY
+        if (requestedEditionId != null) {
+            selected = AppDestination.LIBRARY
+            viewModel.selectLibraryEdition(requestedEditionId)
+        }
     }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
@@ -374,32 +377,43 @@ fun NdcShelfApp(
         },
     ) { contentPadding ->
         when (selected) {
-            AppDestination.LIBRARY -> LibraryScreen(
-                books = books,
-                initialEditionId = requestedEditionId,
-                onInitialEditionHandled = onBookDetailRequestHandled,
-                onSaveBook = viewModel::saveBookEdit,
-                onDeleteBook = viewModel::deleteBook,
-                bookEditState = bookEditState,
-                onClearBookEditState = viewModel::clearBookEditState,
-                bookDeleteState = bookDeleteState,
-                onClearBookDeleteState = viewModel::clearBookDeleteState,
-                locations = locations,
-                locationMutationState = locationMutationState,
-                onAddLocation = viewModel::addLocation,
-                onRenameLocation = viewModel::renameLocation,
-                onMoveLocation = viewModel::moveLocation,
-                onDeleteLocation = viewModel::deleteLocation,
-                onClearLocationState = viewModel::clearLocationMutationState,
-                shelfMoveState = shelfMoveState,
-                onMoveBookWithinTier = viewModel::moveBookWithinTier,
-                onClearShelfMoveState = viewModel::clearShelfMoveState,
-                manualReconciliationState = manualReconciliationState,
-                onPreviewManualReconciliation = viewModel::previewManualReconciliation,
-                onConfirmManualReconciliation = viewModel::confirmManualReconciliation,
-                onClearManualReconciliation = viewModel::clearManualReconciliationState,
-                contentPadding = contentPadding,
-            )
+            AppDestination.LIBRARY -> {
+                val criteria by viewModel.librarySearchCriteria.collectAsStateWithLifecycle()
+                val result by viewModel.librarySearchResult.collectAsStateWithLifecycle()
+                LibraryScreen(
+                    books = result.books,
+                    searchCriteria = criteria,
+                    searchIsCurrent = result.criteria == criteria,
+                    libraryStats = libraryStats,
+                    onQueryChange = viewModel::updateLibraryQuery,
+                    onReadingStatusChange = viewModel::updateLibraryReadingStatus,
+                    onSortChange = viewModel::updateLibrarySort,
+                    onSelectedEditionChange = viewModel::selectLibraryEdition,
+                    initialEditionId = requestedEditionId,
+                    onInitialEditionHandled = onBookDetailRequestHandled,
+                    onSaveBook = viewModel::saveBookEdit,
+                    onDeleteBook = viewModel::deleteBook,
+                    bookEditState = bookEditState,
+                    onClearBookEditState = viewModel::clearBookEditState,
+                    bookDeleteState = bookDeleteState,
+                    onClearBookDeleteState = viewModel::clearBookDeleteState,
+                    locations = locations,
+                    locationMutationState = locationMutationState,
+                    onAddLocation = viewModel::addLocation,
+                    onRenameLocation = viewModel::renameLocation,
+                    onMoveLocation = viewModel::moveLocation,
+                    onDeleteLocation = viewModel::deleteLocation,
+                    onClearLocationState = viewModel::clearLocationMutationState,
+                    shelfMoveState = shelfMoveState,
+                    onMoveBookWithinTier = viewModel::moveBookWithinTier,
+                    onClearShelfMoveState = viewModel::clearShelfMoveState,
+                    manualReconciliationState = manualReconciliationState,
+                    onPreviewManualReconciliation = viewModel::previewManualReconciliation,
+                    onConfirmManualReconciliation = viewModel::confirmManualReconciliation,
+                    onClearManualReconciliation = viewModel::clearManualReconciliationState,
+                    contentPadding = contentPadding,
+                )
+            }
 
             AppDestination.SCAN -> ScanScreen(
                 scanState = scanState,
@@ -428,13 +442,13 @@ fun NdcShelfApp(
                 contentPadding = contentPadding,
             )
 
-            AppDestination.INSIGHTS -> InsightsScreen(
-                books = books,
-                contentPadding = contentPadding,
-            )
+            AppDestination.INSIGHTS -> {
+                val books by viewModel.books.collectAsStateWithLifecycle()
+                InsightsScreen(books = books, contentPadding = contentPadding)
+            }
 
             AppDestination.DATA -> DataManagementScreen(
-                bookCount = books.size,
+                bookCount = libraryStats.totalCount,
                 exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
                 importState = importState,
                 databaseBackupState = databaseBackupState,
