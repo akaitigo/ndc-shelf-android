@@ -53,7 +53,7 @@ class RoomSeriesWatchRepositoryIntegrationTest {
         results += found("record-1", "年代記 1")
         assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.isEmpty())
 
-        now = 200
+        now += CHECK_INTERVAL
         results += SeriesReleaseSourceResult.Found(
             listOf(candidate("record-1", "年代記 1"), candidate("record-2", "年代記 2")),
         )
@@ -61,7 +61,7 @@ class RoomSeriesWatchRepositoryIntegrationTest {
         assertEquals(listOf("年代記 2"), next.notifications.single().candidateTitles)
         repository.markNotified(next.notifications.single().candidateIds)
 
-        now = 300
+        now += CHECK_INTERVAL
         results += found("record-2", "年代記 2")
         assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.isEmpty())
         assertEquals(2, repository.observeWatches().first().single().candidates.size)
@@ -74,14 +74,20 @@ class RoomSeriesWatchRepositoryIntegrationTest {
         results += found("record-1", "年代記 1")
         repository.checkEnabledWatches()
 
-        now = 50
+        now += CHECK_INTERVAL
         results += SeriesReleaseSourceResult.Failure(SeriesReleaseSourceFailure.OFFLINE)
         val failure = repository.checkEnabledWatches() as SeriesWatchCheckResult.PartialFailure
 
         assertTrue(failure.retryable)
-        val overview = repository.observeWatches().first().single()
+        var overview = repository.observeWatches().first().single()
         assertEquals(1, overview.candidates.size)
-        assertEquals(100L, overview.watch.lastCheckedAt)
+        assertEquals(CHECK_INTERVAL + 100, overview.watch.lastCheckedAt)
+        assertEquals(100L, overview.watch.lastSuccessfulAt)
+
+        now = 50
+        assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.isEmpty())
+        overview = repository.observeWatches().first().single()
+        assertEquals(CHECK_INTERVAL + 100, overview.watch.lastCheckedAt)
         assertEquals(100L, overview.watch.lastSuccessfulAt)
     }
 
@@ -100,19 +106,19 @@ class RoomSeriesWatchRepositoryIntegrationTest {
         repository.setEnabled("series", true)
         results += found("record-1", "年代記 1")
         repository.checkEnabledWatches()
-        now = 200
+        now += CHECK_INTERVAL
         val release = candidate("record-2", "年代記 2").copy(isbn13 = ISBN)
         results += SeriesReleaseSourceResult.Found(listOf(release))
         assertEquals(1, (repository.checkEnabledWatches() as SeriesWatchCheckResult.Success).notifications.size)
 
-        now = 300
+        now += CHECK_INTERVAL
         results += SeriesReleaseSourceResult.Found(listOf(release))
         val retried = repository.checkEnabledWatches() as SeriesWatchCheckResult.Success
         assertEquals(1, retried.notifications.size)
         now = 50
         repository.markNotified(retried.notifications.single().candidateIds)
         assertEquals(
-            200L,
+            CHECK_INTERVAL + 100,
             database.seriesWatchDao().findCandidate(retried.notifications.single().candidateIds.single())
                 ?.notifiedAt,
         )
@@ -137,6 +143,30 @@ class RoomSeriesWatchRepositoryIntegrationTest {
         )
     }
 
+    @Test
+    fun retrySkipsSeriesSuccessfullyCheckedWithinSevenDays() = runBlocking {
+        database.seriesDao().upsertSeries(SeriesEntity("series-2", "年代記 続編", 1, 1))
+        val queries = mutableListOf<String>()
+        val repository = RoomSeriesWatchRepository(
+            database = database,
+            source = SeriesReleaseSource { title, _ ->
+                queries += title
+                if (title == "年代記") found("record-1", "年代記 1")
+                else SeriesReleaseSourceResult.Failure(SeriesReleaseSourceFailure.OFFLINE)
+            },
+            nowMillis = { now },
+            currentYear = { 2026 },
+        )
+        repository.setEnabled("series", true)
+        repository.setEnabled("series-2", true)
+
+        assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.PartialFailure).retryable)
+        now += 60 * 60 * 1_000
+        assertTrue((repository.checkEnabledWatches() as SeriesWatchCheckResult.PartialFailure).retryable)
+
+        assertEquals(listOf("年代記", "年代記 続編", "年代記 続編"), queries)
+    }
+
     private fun repository() = RoomSeriesWatchRepository(
         database = database,
         source = SeriesReleaseSource { _, _ -> results.removeFirst() },
@@ -156,5 +186,6 @@ class RoomSeriesWatchRepositoryIntegrationTest {
 
     private companion object {
         const val ISBN = "9784820418078"
+        const val CHECK_INTERVAL = 7L * 24 * 60 * 60 * 1_000
     }
 }

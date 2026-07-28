@@ -15,7 +15,7 @@ class NdlSeriesReleaseParser {
         val factory = SAXParserFactory.newInstance().apply {
             isNamespaceAware = true
             SECURITY_FEATURES.forEach { (feature, enabled) ->
-                runCatching { setFeature(feature, enabled) }
+                setFeature(feature, enabled)
             }
         }
         factory.newSAXParser().parse(input, handler)

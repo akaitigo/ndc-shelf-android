@@ -75,7 +75,9 @@ class RoomSeriesWatchRepository(
         val notifications = mutableListOf<SeriesReleaseNotification>()
         var failed = false
         var retryable = false
+        val now = nowMillis()
         for (watch in dao.getEnabledWatches()) {
+            if (!isDue(watch.lastSuccessfulAt, now)) continue
             when (val result = source.search(watch.queryTitle, currentYear() - LOOKBACK_YEARS)) {
                 is SeriesReleaseSourceResult.Failure -> {
                     updateCheckedAt(watch)
@@ -156,6 +158,9 @@ class RoomSeriesWatchRepository(
 
     private fun Long?.letOr(value: Long): Long = this?.let { maxOf(it, value) } ?: value
     private fun monotonic(previous: Long?, next: Long): Long = previous.letOr(next)
+    private fun isDue(lastSuccessfulAt: Long?, now: Long): Boolean =
+        lastSuccessfulAt == null ||
+            now >= lastSuccessfulAt && now - lastSuccessfulAt >= MIN_SUCCESS_INTERVAL_MILLIS
 
     private companion object {
         const val LOOKBACK_YEARS = 1
@@ -166,6 +171,7 @@ class RoomSeriesWatchRepository(
         const val MAX_TITLE_CHARACTERS = 500
         const val MAX_AUTHOR_CHARACTERS = 500
         const val MAX_PUBLISHER_CHARACTERS = 300
+        const val MIN_SUCCESS_INTERVAL_MILLIS = 7L * 24 * 60 * 60 * 1_000
     }
 }
 

@@ -631,8 +631,8 @@ internal class DatabaseBackupCodec(
             snapshot.series.size > limits.maxRecords ||
             snapshot.seriesMemberships.size > limits.maxRecords ||
             snapshot.workGroups.size > limits.maxRecords ||
-            snapshot.workGroupMemberships.size > limits.maxRecords
-            || snapshot.seriesWatches.size > limits.maxRecords ||
+            snapshot.workGroupMemberships.size > limits.maxRecords ||
+            snapshot.seriesWatches.size > limits.maxRecords ||
             snapshot.seriesReleaseCandidates.size > limits.maxRecords
         ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)

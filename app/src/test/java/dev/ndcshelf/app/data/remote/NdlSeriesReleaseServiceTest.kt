@@ -58,6 +58,20 @@ class NdlSeriesReleaseServiceTest {
     }
 
     @Test
+    fun documentTypeIsRejectedWithoutResolvingExternalEntities() = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(
+                """<!DOCTYPE response [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><response>&xxe;</response>""",
+            ),
+        )
+
+        val result = service().search("年代記", 2025) as SeriesReleaseSourceResult.Failure
+
+        assertEquals(SeriesReleaseSourceFailure.PARSE, result.reason)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun productionEndpointIsFixedHttpsAndInvalidQueriesNeverReachNetwork() = runBlocking {
         val endpoint = buildNdlSeriesReleaseUrl("年代記", 2025)
         assertEquals("https", endpoint.scheme)

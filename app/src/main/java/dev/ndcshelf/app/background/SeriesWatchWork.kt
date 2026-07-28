@@ -105,6 +105,12 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
         }
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return emptySet()
         createChannel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            context.getSystemService(NotificationManager::class.java)
+                .getNotificationChannel(SERIES_RELEASE_CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE
+        ) {
+            return emptySet()
+        }
         val manager = NotificationManagerCompat.from(context)
         val delivered = linkedSetOf<String>()
         notifications.forEach { item ->
@@ -117,7 +123,7 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
             )
             val style = NotificationCompat.InboxStyle()
             item.candidateTitles.take(MAX_NOTIFICATION_TITLES).forEach(style::addLine)
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            val notification = NotificationCompat.Builder(context, SERIES_RELEASE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentTitle("${item.seriesTitle}の新しい候補")
                 .setContentText("${item.candidateIds.size}件を国立国会図書館サーチで確認しました")
@@ -127,7 +133,7 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
                 .setOnlyAlertOnce(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setPublicVersion(
-                    NotificationCompat.Builder(context, CHANNEL_ID)
+                    NotificationCompat.Builder(context, SERIES_RELEASE_CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_launcher)
                         .setContentTitle("シリーズの新刊候補")
                         .setContentText("アプリを開いて確認してください")
@@ -143,7 +149,7 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
     fun createChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
-            CHANNEL_ID,
+            SERIES_RELEASE_CHANNEL_ID,
             "シリーズの新刊候補",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
@@ -156,5 +162,5 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
 
 internal const val UNIQUE_WORK_NAME = "series-release-watch"
 internal const val SERIES_WATCH_WORK_TAG = "series-release-watch-periodic"
-private const val CHANNEL_ID = "series_release_candidates"
+internal const val SERIES_RELEASE_CHANNEL_ID = "series_release_candidates"
 private const val MAX_NOTIFICATION_TITLES = 5

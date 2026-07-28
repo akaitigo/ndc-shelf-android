@@ -10,13 +10,13 @@
 | --- | --- | --- | --- |
 | 書誌・NDC取得 | 未登録ISBNをスキャンまたは手入力したとき | `GET https://ndlsearch.ndl.go.jp/api/sru` | 正規化したISBN、固定のSRU引数（`recordSchema=dcndl`、`recordPacking=xml`、最大1件）、User-Agent |
 | 表紙取得 | 本棚に保存済みのNDL表紙を表示し、メモリ／ディスクcacheにないとき | `GET https://ndlsearch.ndl.go.jp/thumbnail/<ISBN>.jpg` | URL path内のISBN、通常のHTTPS request header |
-| シリーズ候補 | シリーズ単位で明示的に有効化し、WorkManagerの制約を満たしたとき（最大週1回） | `GET https://ndlsearch.ndl.go.jp/api/sru` | 対象シリーズ名、検索開始年、`dpid=open`、最大20件、User-Agent |
+| シリーズ候補 | シリーズ単位で明示的に有効化し、WorkManagerの制約を満たしたとき（シリーズごとに週1回。失敗時は指数バックオフで再試行） | `GET https://ndlsearch.ndl.go.jp/api/sru` | 対象シリーズ名、検索開始年、`dpid=open`、最大20件、User-Agent |
 
 シリーズ候補では明示したシリーズ名以外のタイトル、著者、NDC、読書状態、置き場所、購入状態、他の蔵書は送らない。全経路ともHTTPSのみで、redirectを追従しない。importした表紙URLも、NDL host、既定HTTPS port、`/thumbnail/<同じISBN>.jpg`、query・fragmentなしの全条件を満たす場合だけ通信する。
 
 ## シリーズ候補の障害処理
 
-周期処理はネットワーク接続とbattery-not-lowを必須とし、一時的なDNS・timeout・HTTP 429・5xx・I/O失敗ではWorkManagerへretryを返す。指数バックオフは1時間から開始する。4xx（429以外）、不正XML、2MiB超のbody、タイトル不一致は再試行しない。外部障害時も保存済み候補と蔵書機能は利用できる。候補IDと通知済み時刻をRoomへ保存し、通知成功後だけ通知済みにする。
+周期処理はネットワーク接続とbattery-not-lowを必須とし、一時的なDNS・timeout・HTTP 429・5xx・I/O失敗ではWorkManagerへretryを返す。指数バックオフは1時間から開始し、同じ7日間に成功済みのシリーズはretry時に再照会しない。4xx（429以外）、不正XML、2MiB超のbody、タイトル不一致は再試行しない。外部障害時も保存済み候補と蔵書機能は利用できる。候補IDと通知済み時刻をRoomへ保存し、通知成功後だけ通知済みにする。
 
 仕様の根拠は[NDL Search API仕様](https://ndlsearch.ndl.go.jp/help/api/specifications)と[API利用案内](https://ndlsearch.ndl.go.jp/help/api/)である。NDLは大量の同時・継続アクセスを制限し得るため、連続自動取得や無制限retryは行わない。
 
@@ -48,7 +48,7 @@ Coil 3はnetwork responseをdisk cacheへ保存するため、このアプリで
 
 ## 利用条件と運用
 
-現在は広告・課金のない非営利用途を前提とする。NDLの案内では、営利利用やThumbnail APIの利用主体によって事前申請が必要になる場合がある。収益化、法人配布、継続的な大規模利用へ変更する前に、最新の利用条件を確認してNDLへ申請・連絡する。
+現在は広告・課金のない非営利用途を前提とする。NDLの案内では、営利利用やThumbnail APIの利用主体によって事前申請が必要になる場合がある。また継続アクセスでは、申請要否にかかわらず利用内容と連絡先の事前連絡が推奨される。シリーズ監視を含む版の一般公開前に最新条件を再確認してNDLへ利用内容を連絡し、収益化、法人配布、通信頻度・対象データの変更時は再評価する。
 
 ## テスト
 

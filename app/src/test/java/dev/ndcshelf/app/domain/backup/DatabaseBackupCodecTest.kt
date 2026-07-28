@@ -139,13 +139,13 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":11", "\"schemaVersion\":7")
+            .replace("\"schemaVersion\":12", "\"schemaVersion\":7")
             .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":11", "\"formatVersion\":7")
+            .replace("\"formatVersion\":12", "\"formatVersion\":7")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
 
@@ -158,19 +158,24 @@ class DatabaseBackupCodecTest {
 
     @Test
     fun `format eight backup keeps scan history and bibliographic source without series`() {
-        val snapshot = sampleSnapshot().copy(series = emptyList(), seriesMemberships = emptyList())
+        val snapshot = sampleSnapshot().copy(
+            series = emptyList(),
+            seriesMemberships = emptyList(),
+            seriesWatches = emptyList(),
+            seriesReleaseCandidates = emptyList(),
+        )
         val (archive, _) = codec.encode(snapshot, "0.3.0", 1)
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":11", "\"schemaVersion\":8")
+            .replace("\"schemaVersion\":12", "\"schemaVersion\":8")
             .replace(",\"series\":[]", "")
             .replace(",\"seriesMemberships\":[]", "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":11", "\"formatVersion\":8")
+            .replace("\"formatVersion\":12", "\"formatVersion\":8")
             .replace(",\"seriesCount\":0,\"seriesMembershipCount\":0", "")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
