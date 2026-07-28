@@ -14,9 +14,11 @@ import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
 import dev.ndcshelf.app.data.repository.DefaultLibraryRepository
 import dev.ndcshelf.app.data.repository.RoomLocationRepository
+import dev.ndcshelf.app.data.repository.RoomSeriesRepository
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
+import dev.ndcshelf.app.domain.repository.SeriesRepository
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
 import java.io.IOException
@@ -89,6 +91,8 @@ class AppContainer(application: Application) {
     )
 
     val locationRepository: LocationRepository = RoomLocationRepository(database)
+
+    val seriesRepository: SeriesRepository = RoomSeriesRepository(database)
 
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
 

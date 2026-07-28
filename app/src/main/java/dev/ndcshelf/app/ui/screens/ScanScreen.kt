@@ -124,6 +124,7 @@ fun ScanScreen(
     onUndoScanAttempt: (String) -> Unit,
     onUndoScanSession: (String) -> Unit,
     contentPadding: PaddingValues,
+    bookstoreRequestKey: Int = 0,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -165,6 +166,10 @@ fun ScanScreen(
     var manualInitialIsbn by rememberSaveable { mutableStateOf("") }
     val visibleWishlist = remember(wishlist, wishlistQuery) {
         wishlist.filter { it.matches(wishlistQuery) }
+    }
+
+    LaunchedEffect(bookstoreRequestKey) {
+        if (bookstoreRequestKey > 0) mode = ScanMode.BOOKSTORE
     }
 
     LaunchedEffect(Unit) {

@@ -60,6 +60,43 @@ interface SeriesDao {
     )
     suspend fun findMembershipsForWork(workId: String): List<SeriesMembershipRow>
 
+    @Query(
+        """
+        SELECT
+            memberships.id AS membershipId,
+            memberships.seriesId AS seriesId,
+            memberships.workId AS workId,
+            works.title AS workTitle,
+            works.primaryAuthor AS primaryAuthor,
+            memberships.sortOrderKey AS sortOrderKey,
+            memberships.volumeLabel AS volumeLabel,
+            memberships.type AS type,
+            memberships.createdAt AS createdAt,
+            memberships.updatedAt AS updatedAt,
+            MIN(CASE WHEN copies.id IS NOT NULL THEN editions.id END) AS ownedEditionId,
+            MIN(editions.isbn13) AS bookstoreIsbn,
+            COUNT(DISTINCT copies.id) AS ownedCopyCount,
+            COUNT(DISTINCT CASE WHEN copies.readingStatus = 'READ' THEN copies.id END)
+                AS readCopyCount,
+            COUNT(DISTINCT CASE WHEN copies.readingStatus = 'READING' THEN copies.id END)
+                AS readingCopyCount,
+            COALESCE(MAX(CASE wishlist.status
+                WHEN 'RESERVED' THEN 2
+                WHEN 'WANTED' THEN 1
+                ELSE 0
+            END), 0) AS purchaseStatusRank,
+            MAX(copies.addedAt) AS latestOwnedAddedAt
+        FROM series_memberships AS memberships
+        INNER JOIN book_works AS works ON works.id = memberships.workId
+        LEFT JOIN book_editions AS editions ON editions.workId = memberships.workId
+        LEFT JOIN owned_copies AS copies ON copies.editionId = editions.id
+        LEFT JOIN wishlist_items AS wishlist ON wishlist.editionId = editions.id
+        GROUP BY memberships.id
+        ORDER BY memberships.seriesId, memberships.sortOrderKey, memberships.id
+        """,
+    )
+    fun observeAllVolumes(): Flow<List<SeriesVolumeRow>>
+
     @Upsert
     suspend fun upsertSeries(series: SeriesEntity)
 
