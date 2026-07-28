@@ -851,23 +851,8 @@ class DefaultLibraryRepository(
                     copyLabel = edit.copyLabel,
                     readingStatus = edit.readingStatus.name,
                 )
-                UpdateBookResult.Updated(
-                    previous = previous,
-                    current = previous.copy(
-                        title = edit.title,
-                        primaryAuthor = edit.primaryAuthor,
-                        publisher = edit.publisher,
-                        publishedYear = edit.publishedYear,
-                        ndcCode = edit.ndcCode,
-                        ndcEdition = edit.ndcEdition,
-                        classificationSource = source,
-                        location = edit.location,
-                        locationTierId = edit.locationTierId,
-                        shelfOrderKey = shelfOrderKey,
-                        copyLabel = edit.copyLabel,
-                        readingStatus = edit.readingStatus,
-                    ),
-                )
+                val current = checkNotNull(dao.findOwnedByCopyId(copyId)).toDomain()
+                UpdateBookResult.Updated(previous = previous, current = current)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation

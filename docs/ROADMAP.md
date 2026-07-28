@@ -27,6 +27,7 @@
 
 ## v0.3 — Physical Library
 
+- [x] 匿名E2E、自動release gate、release notes、rollback手順
 - [x] 部屋・本棚・段の階層管理
 - [x] 棚の並び順と「戻す場所」表示
 - [x] 同じ版の複数冊所蔵とコピー単位の管理

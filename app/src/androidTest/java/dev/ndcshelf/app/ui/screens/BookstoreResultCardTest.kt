@@ -1,6 +1,8 @@
 package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -35,7 +37,7 @@ class BookstoreResultCardTest {
 
         composeRule.onNodeWithText("2冊").assertIsDisplayed()
         composeRule.onNodeWithText("所有").assertIsDisplayed()
-        composeRule.onNodeWithText("予約済み").assertIsDisplayed()
+        composeRule.onNode(hasText("予約済み") and hasClickAction()).assertIsDisplayed()
         composeRule.onNodeWithText("購入済みとして本棚へ追加").performClick()
         assertEquals(PurchaseTransition.PURCHASED, transition)
     }
