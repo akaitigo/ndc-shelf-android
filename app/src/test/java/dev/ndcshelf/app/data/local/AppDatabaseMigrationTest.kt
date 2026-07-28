@@ -335,7 +335,8 @@ class AppDatabaseMigrationTest {
         migrated.execSQL("PRAGMA foreign_keys=ON")
         migrated.execSQL("INSERT INTO series VALUES ('series-1', '作品集', 1, 1)")
         migrated.execSQL(
-            "INSERT INTO series_memberships VALUES " +
+            "INSERT INTO series_memberships " +
+                "(id, seriesId, workId, sortOrderKey, volumeLabel, type, createdAt, updatedAt) VALUES " +
                 "('membership-1', 'series-1', 'work-1', '80', '上巻', 'MAIN_STORY', 1, 1)",
         )
         migrated.execSQL("DELETE FROM series WHERE id = 'series-1'")
@@ -343,6 +344,42 @@ class AppDatabaseMigrationTest {
             assertTrue(cursor.moveToFirst())
             assertEquals(0, cursor.getInt(0))
         }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
+    @Test
+    fun version8Migration_preservesMembershipAndAddsConfirmationProvenance() {
+        migrationHelper.createDatabase(V8_DATABASE, 8).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '作品 第1巻', '著者')")
+            execSQL("INSERT INTO series VALUES ('series-1', '作品', 1, 2)")
+            execSQL(
+                "INSERT INTO series_memberships VALUES " +
+                    "('membership-1', 'series-1', 'work-1', '80', '第1巻', " +
+                    "'MAIN_STORY', 1, 2)",
+            )
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V8_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query(
+            "SELECT origin, confirmedBy, sourceTitle FROM series_memberships " +
+                "WHERE id = 'membership-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("MANUAL", cursor.getString(0))
+            assertEquals("USER", cursor.getString(1))
+            assertEquals("", cursor.getString(2))
+        }
+        migrated.execSQL(
+            "UPDATE series_memberships SET origin = 'TITLE_SUGGESTION', " +
+                "sourceTitle = '作品 第1巻' WHERE id = 'membership-1'",
+        )
         migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
         migrated.close()
     }
@@ -427,6 +464,7 @@ class AppDatabaseMigrationTest {
         const val V5_DATABASE = "migration-v5"
         const val V6_DATABASE = "migration-v6"
         const val V7_DATABASE = "migration-v7"
+        const val V8_DATABASE = "migration-v8"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

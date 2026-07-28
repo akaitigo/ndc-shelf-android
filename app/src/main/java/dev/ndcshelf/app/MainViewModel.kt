@@ -41,6 +41,7 @@ import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.SeriesOverview
+import dev.ndcshelf.app.domain.model.SeriesSuggestion
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
@@ -57,6 +58,9 @@ import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.SeriesRepository
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
+import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -132,6 +136,11 @@ class MainViewModel(
     val seriesCatalog: StateFlow<List<SeriesOverview>> =
         (seriesRepository?.observeCatalog() ?: flowOf(emptyList()))
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val seriesSuggestions: StateFlow<List<SeriesSuggestion>> =
+        (seriesRepository?.observeSuggestions() ?: flowOf(emptyList()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val _seriesEditorState = MutableStateFlow<SeriesEditorUiState>(SeriesEditorUiState.Idle)
+    val seriesEditorState: StateFlow<SeriesEditorUiState> = _seriesEditorState.asStateFlow()
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
@@ -174,6 +183,57 @@ class MainViewModel(
     private var databaseBackupPreview: DatabaseBackupPreview? = null
     private var databaseBackupJob: Job? = null
     private var exportJob: Job? = null
+    private var seriesJob: Job? = null
+
+    fun prepareSeriesEditor(workId: String) {
+        val source = seriesRepository ?: return
+        seriesJob?.cancel()
+        seriesJob = viewModelScope.launch {
+            _seriesEditorState.value = SeriesEditorUiState.Loading
+            _seriesEditorState.value = source.suggestionFor(workId)
+                ?.let(SeriesEditorUiState::Ready)
+                ?: SeriesEditorUiState.Error
+        }
+    }
+
+    fun confirmSeries(
+        target: SeriesConfirmationTarget,
+        drafts: List<SeriesConfirmationDraft>,
+    ) {
+        val source = seriesRepository ?: return
+        if (_seriesEditorState.value === SeriesEditorUiState.Saving) return
+        seriesJob?.cancel()
+        seriesJob = viewModelScope.launch {
+            _seriesEditorState.value = SeriesEditorUiState.Saving
+            _seriesEditorState.value = when (val result = source.confirm(target, drafts)) {
+                is SeriesConfirmationResult.Confirmed ->
+                    SeriesEditorUiState.Saved(result.seriesId, result.membershipIds.size)
+                SeriesConfirmationResult.Conflict -> SeriesEditorUiState.Conflict
+                SeriesConfirmationResult.Invalid -> SeriesEditorUiState.Invalid
+                SeriesConfirmationResult.Failure -> SeriesEditorUiState.Error
+            }
+        }
+    }
+
+    fun removeSeriesMembership(membershipId: String) {
+        val source = seriesRepository ?: return
+        if (_seriesEditorState.value === SeriesEditorUiState.Saving) return
+        seriesJob?.cancel()
+        seriesJob = viewModelScope.launch {
+            _seriesEditorState.value = SeriesEditorUiState.Saving
+            _seriesEditorState.value = if (source.removeMembership(membershipId)) {
+                SeriesEditorUiState.Removed
+            } else {
+                SeriesEditorUiState.Error
+            }
+        }
+    }
+
+    fun clearSeriesEditorState() {
+        if (_seriesEditorState.value !== SeriesEditorUiState.Saving) {
+            _seriesEditorState.value = SeriesEditorUiState.Idle
+        }
+    }
 
     fun exportLibrary(format: LibraryExportFormat, output: OutputStream) {
         if (_libraryExportState.value === LibraryExportUiState.Exporting) {
@@ -948,6 +1008,18 @@ data class LibrarySearchResult(
     val criteria: LibrarySearchCriteria,
     val books: List<LibraryBook>,
 )
+
+sealed interface SeriesEditorUiState {
+    data object Idle : SeriesEditorUiState
+    data object Loading : SeriesEditorUiState
+    data class Ready(val suggestion: SeriesSuggestion) : SeriesEditorUiState
+    data object Saving : SeriesEditorUiState
+    data class Saved(val seriesId: String, val membershipCount: Int) : SeriesEditorUiState
+    data object Removed : SeriesEditorUiState
+    data object Conflict : SeriesEditorUiState
+    data object Invalid : SeriesEditorUiState
+    data object Error : SeriesEditorUiState
+}
 
 sealed interface LocationMutationUiState {
     data object Idle : LocationMutationUiState

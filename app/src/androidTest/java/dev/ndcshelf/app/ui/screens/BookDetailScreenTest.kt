@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.StateRestorationTester
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -39,6 +38,7 @@ class BookDetailScreenTest {
             primaryAuthor = "非常に長い著者名と編者名の共同執筆者一覧",
         )
         var editedCopyId: String? = null
+        var managedWorkId: String? = null
         composeRule.setContent {
             NdcShelfTheme {
                 BookDetailScreen(
@@ -55,6 +55,7 @@ class BookDetailScreenTest {
                     onEditCopy = { editedCopyId = it },
                     onEditBibliography = {},
                     onReconcile = {},
+                    onManageSeries = { managedWorkId = it },
                     contentPadding = PaddingValues(),
                 )
             }
@@ -71,10 +72,11 @@ class BookDetailScreenTest {
         composeRule.onNodeWithText("紙・電子").assertIsDisplayed()
         scrollDetailTo(hasText("NDLから再取得・照合"))
         composeRule.onNodeWithText("NDLから再取得・照合").assertIsDisplayed()
-        scrollDetailTo(hasText("シリーズを整理（準備中）"))
-        composeRule.onNodeWithText("シリーズを整理（準備中）")
+        scrollDetailTo(hasText("シリーズを整理"))
+        composeRule.onNodeWithText("シリーズを整理")
             .assertIsDisplayed()
-            .assertIsNotEnabled()
+            .performClick()
+        assertEquals(first.workId, managedWorkId)
         scrollDetailTo(hasContentDescription("保存用、場所 書庫、未読、電子。タップして編集"))
         composeRule.onNodeWithContentDescription(
             "保存用、場所 書庫、未読、電子。タップして編集",

@@ -117,6 +117,7 @@ fun LibraryScreen(
     onPreviewManualReconciliation: (String, String) -> Unit = { _, _ -> },
     onConfirmManualReconciliation: () -> Unit = {},
     onClearManualReconciliation: () -> Unit = {},
+    onManageSeries: (String) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var localQuery by rememberSaveable { mutableStateOf("") }
@@ -200,6 +201,7 @@ fun LibraryScreen(
             onEditCopy = ::openEditor,
             onEditBibliography = { openEditor(selectedCopies.first().copyId) },
             onReconcile = { openEditor(selectedCopies.first().copyId) },
+            onManageSeries = onManageSeries,
             contentPadding = contentPadding,
         )
     } else {

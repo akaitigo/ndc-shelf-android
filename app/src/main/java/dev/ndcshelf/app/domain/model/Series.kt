@@ -7,6 +7,15 @@ data class BookSeries(
     val updatedAt: Long,
 )
 
+enum class SeriesMembershipOrigin {
+    TITLE_SUGGESTION,
+    MANUAL,
+}
+
+enum class SeriesMembershipConfirmer {
+    USER,
+}
+
 data class SeriesMembership(
     val id: String,
     val seriesId: String,
@@ -18,6 +27,9 @@ data class SeriesMembership(
     val type: SeriesMembershipType,
     val createdAt: Long,
     val updatedAt: Long,
+    val origin: SeriesMembershipOrigin = SeriesMembershipOrigin.MANUAL,
+    val confirmedBy: SeriesMembershipConfirmer = SeriesMembershipConfirmer.USER,
+    val sourceTitle: String = "",
 )
 
 enum class SeriesMembershipType {
