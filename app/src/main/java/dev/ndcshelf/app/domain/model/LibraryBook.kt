@@ -6,7 +6,7 @@ data class LibraryBook(
     val editionId: String,
     val title: String,
     val primaryAuthor: String,
-    val isbn13: String,
+    val isbn13: String?,
     val publisher: String?,
     val publishedYear: Int?,
     val coverUrl: String?,
@@ -20,6 +20,7 @@ data class LibraryBook(
     val locationTierId: String? = null,
     val shelfOrderKey: String? = null,
     val copyLabel: String = "所蔵本",
+    val bibliographicSource: BibliographicSource = BibliographicSource.NDL,
 ) {
     val ndcCategory: NdcCategory?
         get() = NdcCategory.fromCode(ndcCode)
@@ -57,6 +58,11 @@ enum class ClassificationSource {
     NDL,
     MANUAL,
     UNKNOWN,
+}
+
+enum class BibliographicSource {
+    NDL,
+    MANUAL,
 }
 
 data class NdcCategory(

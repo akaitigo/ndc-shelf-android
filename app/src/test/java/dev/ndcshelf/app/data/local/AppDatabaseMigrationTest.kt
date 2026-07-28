@@ -256,6 +256,49 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version6Migration_preservesRelationsAndAllowsMultipleManualEditionsWithoutIsbn() {
+        migrationHelper.createDatabase(V6_DATABASE, 6).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '本A', '著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition-1', 'work-1', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-1', 'edition-1', 'PHYSICAL', '棚', 'UNREAD', 42, NULL, NULL, '保存用')",
+            )
+            execSQL("INSERT INTO wishlist_items VALUES ('edition-1', 'WANTED', 10, 10)")
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V6_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query(
+            "SELECT isbn13, bibliographicSource FROM book_editions WHERE id = 'edition-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("9784101010014", cursor.getString(0))
+            assertEquals("NDL", cursor.getString(1))
+        }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.execSQL("INSERT INTO book_works VALUES ('work-2', '手動A', '著者不明')")
+        migrated.execSQL("INSERT INTO book_works VALUES ('work-3', '手動B', '著者不明')")
+        migrated.execSQL(
+            "INSERT INTO book_editions VALUES " +
+                "('edition-2', 'work-2', NULL, NULL, NULL, NULL, NULL, NULL, 'UNKNOWN', 'MANUAL')",
+        )
+        migrated.execSQL(
+            "INSERT INTO book_editions VALUES " +
+                "('edition-3', 'work-3', NULL, NULL, NULL, NULL, NULL, NULL, 'UNKNOWN', 'MANUAL')",
+        )
+        migrated.close()
+    }
+
+    @Test
     fun malformedExistingSchema_isRejectedInsteadOfBeingDestructivelyRecreated() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(CORRUPT_DATABASE)
@@ -333,6 +376,7 @@ class AppDatabaseMigrationTest {
         const val V3_DATABASE = "migration-v3"
         const val V4_DATABASE = "migration-v4"
         const val V5_DATABASE = "migration-v5"
+        const val V6_DATABASE = "migration-v6"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

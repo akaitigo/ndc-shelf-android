@@ -166,13 +166,14 @@ internal class DatabaseBackupCodec(
                 add(buildJsonObject {
                     put("id", JsonPrimitive(edition.id))
                     put("workId", JsonPrimitive(edition.workId))
-                    put("isbn13", JsonPrimitive(edition.isbn13))
+                    putNullable("isbn13", edition.isbn13)
                     putNullable("publisher", edition.publisher)
                     putNullable("publishedYear", edition.publishedYear)
                     putNullable("coverUrl", edition.coverUrl)
                     putNullable("ndcCode", edition.ndcCode)
                     putNullable("ndcEdition", edition.ndcEdition)
                     put("classificationSource", JsonPrimitive(edition.classificationSource))
+                    put("bibliographicSource", JsonPrimitive(edition.bibliographicSource))
                 })
             }
         })
@@ -272,7 +273,11 @@ internal class DatabaseBackupCodec(
             BookEditionEntity(
                 id = value.requiredString("id"),
                 workId = value.requiredString("workId"),
-                isbn13 = value.requiredString("isbn13"),
+                isbn13 = if (schemaVersion < 8) {
+                    value.requiredString("isbn13")
+                } else {
+                    value.optionalString("isbn13")
+                },
                 publisher = value.optionalString("publisher"),
                 publishedYear = value.optionalInt("publishedYear"),
                 coverUrl = value.optionalString("coverUrl"),
@@ -280,6 +285,11 @@ internal class DatabaseBackupCodec(
                 ndcEdition = value.optionalString("ndcEdition"),
                 classificationSource = value.optionalString("classificationSource")
                     ?: if (formatVersion == 1) "UNKNOWN" else invalid("Missing classificationSource"),
+                bibliographicSource = if (schemaVersion < 8) {
+                    "NDL"
+                } else {
+                    value.requiredString("bibliographicSource")
+                },
             )
         }
         val copies = payload.requiredArray("copies").map { element ->
@@ -384,7 +394,7 @@ internal class DatabaseBackupCodec(
         ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::id)
-        snapshot.editions.ensureUnique(BookEditionEntity::isbn13)
+        snapshot.editions.mapNotNull(BookEditionEntity::isbn13).ensureUnique { it }
         snapshot.copies.ensureUnique(OwnedCopyEntity::id)
         snapshot.rooms.ensureUnique(LocationRoomEntity::id)
         snapshot.rooms.ensureUnique(LocationRoomEntity::name)
@@ -455,12 +465,21 @@ internal class DatabaseBackupCodec(
         ) {
             invalid("Invalid scan attempt")
         }
+        val editionById = snapshot.editions.associateBy(BookEditionEntity::id)
+        if (snapshot.editions.any {
+                it.bibliographicSource !in BIBLIOGRAPHIC_SOURCES ||
+                    it.isbn13 == null && it.bibliographicSource != "MANUAL"
+            } || snapshot.wishlistItems.any { editionById[it.editionId]?.isbn13 == null }
+        ) {
+            invalid("Invalid bibliographic source or ISBN")
+        }
         val strings = buildList {
             snapshot.works.forEach { add(it.id); add(it.title); add(it.primaryAuthor) }
             snapshot.editions.forEach {
-                add(it.id); add(it.workId); add(it.isbn13); add(it.publisher.orEmpty())
+                add(it.id); add(it.workId); add(it.isbn13.orEmpty()); add(it.publisher.orEmpty())
                 add(it.coverUrl.orEmpty()); add(it.ndcCode.orEmpty()); add(it.ndcEdition.orEmpty())
                 add(it.classificationSource)
+                add(it.bibliographicSource)
             }
             snapshot.copies.forEach {
                 add(it.id)
@@ -584,8 +603,8 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 7
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 7
+        const val CURRENT_FORMAT_VERSION = 8
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 8
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val MAX_RECORDED_ISBN_LENGTH = 32
         private const val FORMAT_ID = "ndc-shelf-room-backup"
@@ -596,6 +615,7 @@ internal class DatabaseBackupCodec(
         private val WISHLIST_STATUSES = setOf("WANTED", "RESERVED")
         private val SCAN_ATTEMPT_OUTCOMES = setOf("ADDED", "DUPLICATE", "INVALID", "NOT_FOUND", "FAILURE")
         private val SHA256_REGEX = Regex("[0-9a-f]{64}")
+        private val BIBLIOGRAPHIC_SOURCES = setOf("NDL", "MANUAL")
     }
 }
 

@@ -132,7 +132,11 @@ class LibraryJsonImporter(
         }
         val before = errors.size
         reportUnknownFields(book, BOOK_FIELDS, recordNumber, errors)
-        val requiredFields = if (schemaVersion >= 2) BOOK_FIELDS else BOOK_FIELDS - "copyLabel"
+        val requiredFields = when {
+            schemaVersion >= 3 -> BOOK_FIELDS
+            schemaVersion >= 2 -> BOOK_FIELDS - "bibliographicSource"
+            else -> BOOK_FIELDS - setOf("copyLabel", "bibliographicSource")
+        }
         requiredFields.forEach { field ->
             if (field !in book) {
                 errors.addCapped(recordError(recordNumber, field, "項目がありません"))
@@ -144,7 +148,7 @@ class LibraryJsonImporter(
         val editionId = book.string("editionId", recordNumber, nullable = false, errors)
         val title = book.string("title", recordNumber, nullable = false, errors)
         val primaryAuthor = book.string("primaryAuthor", recordNumber, nullable = false, errors)
-        val isbn13 = book.string("isbn13", recordNumber, nullable = false, errors)
+        val isbn13 = book.string("isbn13", recordNumber, nullable = schemaVersion >= 3, errors)
         val publisher = book.string("publisher", recordNumber, nullable = true, errors)
         val publishedYear = book.long("publishedYear", recordNumber, nullable = true, errors)
         val coverUrl = book.string("coverUrl", recordNumber, nullable = true, errors)
@@ -156,6 +160,11 @@ class LibraryJsonImporter(
             nullable = false,
             errors,
         )
+        val bibliographicSource = if (schemaVersion >= 3) {
+            book.string("bibliographicSource", recordNumber, nullable = false, errors)
+        } else {
+            "NDL"
+        }
         val mediaType = book.string("mediaType", recordNumber, nullable = false, errors)
         val location = book.string("location", recordNumber, nullable = false, errors)
         val readingStatus = book.string("readingStatus", recordNumber, nullable = false, errors)
@@ -176,6 +185,7 @@ class LibraryJsonImporter(
             ndcCode = ndcCode,
             ndcEdition = ndcEdition,
             classificationSource = classificationSource,
+            bibliographicSource = bibliographicSource,
             mediaType = mediaType,
             location = location,
             readingStatus = readingStatus,
@@ -338,6 +348,7 @@ class LibraryJsonImporter(
             "ndcCode",
             "ndcEdition",
             "classificationSource",
+            "bibliographicSource",
             "mediaType",
             "location",
             "readingStatus",

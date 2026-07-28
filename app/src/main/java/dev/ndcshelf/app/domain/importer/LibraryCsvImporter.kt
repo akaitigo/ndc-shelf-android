@@ -87,8 +87,10 @@ class LibraryCsvImporter(
                 val isbn = record.value("isbn13")
                 records += UnvalidatedLibraryBook(
                     copyId = record.optionalId("copyId") ?: newCopyId(),
-                    workId = record.optionalId("workId") ?: isbn.generatedId("work"),
-                    editionId = record.optionalId("editionId") ?: isbn.generatedId("edition"),
+                    workId = record.optionalId("workId") ?: isbn.generatedId("work")
+                        ?: "work:${newCopyId()}",
+                    editionId = record.optionalId("editionId") ?: isbn.generatedId("edition")
+                        ?: "edition:${newCopyId()}",
                     title = record.value("title"),
                     primaryAuthor = record.value("primaryAuthor"),
                     isbn13 = isbn,
@@ -98,6 +100,7 @@ class LibraryCsvImporter(
                     ndcCode = record.value("ndcCode"),
                     ndcEdition = record.value("ndcEdition"),
                     classificationSource = record.value("classificationSource"),
+                    bibliographicSource = record.value("bibliographicSource") ?: "NDL",
                     mediaType = record.value("mediaType"),
                     location = record.value("location"),
                     readingStatus = record.value("readingStatus"),

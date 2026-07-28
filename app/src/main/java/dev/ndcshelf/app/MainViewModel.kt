@@ -28,6 +28,9 @@ import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationMutationResult
 import dev.ndcshelf.app.domain.model.LocationTree
+import dev.ndcshelf.app.domain.model.ManualBookDraft
+import dev.ndcshelf.app.domain.model.ManualBookValidationError
+import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
 import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.MoveDirection
@@ -38,6 +41,9 @@ import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
+import dev.ndcshelf.app.domain.repository.ManualBookResult
+import dev.ndcshelf.app.domain.repository.ManualReconciliationApplyResult
+import dev.ndcshelf.app.domain.repository.ManualReconciliationLookupResult
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
@@ -90,6 +96,14 @@ class MainViewModel(
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
     private val _scanSessionState = MutableStateFlow<ScanSessionUiState>(ScanSessionUiState.Idle)
     val scanSessionState: StateFlow<ScanSessionUiState> = _scanSessionState.asStateFlow()
+    private val _manualRegistrationState =
+        MutableStateFlow<ManualRegistrationUiState>(ManualRegistrationUiState.Idle)
+    val manualRegistrationState: StateFlow<ManualRegistrationUiState> =
+        _manualRegistrationState.asStateFlow()
+    private val _manualReconciliationState =
+        MutableStateFlow<ManualReconciliationUiState>(ManualReconciliationUiState.Idle)
+    val manualReconciliationState: StateFlow<ManualReconciliationUiState> =
+        _manualReconciliationState.asStateFlow()
     private val _bookstoreState = MutableStateFlow<BookstoreUiState>(BookstoreUiState.Idle)
     val bookstoreState: StateFlow<BookstoreUiState> = _bookstoreState.asStateFlow()
     private val _importState = MutableStateFlow<LibraryImportUiState>(LibraryImportUiState.Idle)
@@ -245,12 +259,12 @@ class MainViewModel(
             recordCurrentScanAttempt(rawIsbn, result)
             _scanState.value = when (result) {
                 is AddBookResult.Added -> ScanUiState.Added(
-                    isbn13 = result.book.isbn13,
+                    isbn13 = result.book.isbn13.orEmpty(),
                     title = result.book.title,
                 )
 
                 is AddBookResult.Duplicate -> ScanUiState.Duplicate(
-                    isbn13 = result.book.isbn13,
+                    isbn13 = result.book.isbn13.orEmpty(),
                     title = result.book.title,
                     copyCount = result.copyCount,
                 )
@@ -268,6 +282,73 @@ class MainViewModel(
                     retryIsbn = result.isbn13.takeIf { result.reason.retryable },
                 )
             }
+        }
+    }
+
+    fun addManualBook(draft: ManualBookDraft) {
+        if (_manualRegistrationState.value === ManualRegistrationUiState.Saving) return
+        _manualRegistrationState.value = ManualRegistrationUiState.Saving
+        viewModelScope.launch {
+            _manualRegistrationState.value = when (val result = repository.addManualBook(draft)) {
+                is ManualBookResult.Added -> ManualRegistrationUiState.Added(result.book.title)
+                is ManualBookResult.Duplicate -> ManualRegistrationUiState.Duplicate(
+                    isbn13 = result.isbn13,
+                    title = result.title,
+                    copyCount = result.copyCount,
+                )
+                is ManualBookResult.Invalid -> ManualRegistrationUiState.Invalid(result.errors)
+                ManualBookResult.Failure -> ManualRegistrationUiState.Error
+            }
+        }
+    }
+
+    fun clearManualRegistrationState() {
+        if (_manualRegistrationState.value !== ManualRegistrationUiState.Saving) {
+            _manualRegistrationState.value = ManualRegistrationUiState.Idle
+        }
+    }
+
+    fun previewManualReconciliation(copyId: String, isbn: String) {
+        if (_manualReconciliationState.value.isBusy) return
+        _manualReconciliationState.value = ManualReconciliationUiState.Loading
+        viewModelScope.launch {
+            _manualReconciliationState.value = when (
+                val result = repository.previewManualReconciliation(copyId, isbn)
+            ) {
+                is ManualReconciliationLookupResult.Ready ->
+                    ManualReconciliationUiState.Preview(result.preview)
+                is ManualReconciliationLookupResult.InvalidIsbn ->
+                    ManualReconciliationUiState.Error(ReconciliationFailure.INVALID_ISBN)
+                is ManualReconciliationLookupResult.NotFound ->
+                    ManualReconciliationUiState.Error(ReconciliationFailure.NOT_FOUND)
+                is ManualReconciliationLookupResult.Failure ->
+                    ManualReconciliationUiState.Error(ReconciliationFailure.LOOKUP)
+                ManualReconciliationLookupResult.NotManual ->
+                    ManualReconciliationUiState.Error(ReconciliationFailure.CONFLICT)
+            }
+        }
+    }
+
+    fun confirmManualReconciliation() {
+        val preview = (_manualReconciliationState.value as? ManualReconciliationUiState.Preview)
+            ?.preview ?: return
+        _manualReconciliationState.value = ManualReconciliationUiState.Applying(preview)
+        viewModelScope.launch {
+            _manualReconciliationState.value = when (
+                repository.confirmManualReconciliation(preview)
+            ) {
+                ManualReconciliationApplyResult.Applied -> ManualReconciliationUiState.Applied
+                ManualReconciliationApplyResult.Conflict ->
+                    ManualReconciliationUiState.Error(ReconciliationFailure.CONFLICT)
+                ManualReconciliationApplyResult.Failure ->
+                    ManualReconciliationUiState.Error(ReconciliationFailure.SAVE)
+            }
+        }
+    }
+
+    fun clearManualReconciliationState() {
+        if (!_manualReconciliationState.value.isBusy) {
+            _manualReconciliationState.value = ManualReconciliationUiState.Idle
         }
     }
 
@@ -415,11 +496,11 @@ class MainViewModel(
             recordCurrentScanAttempt(duplicate.isbn13, result)
             _scanState.value = when (result) {
                 is AddBookResult.Added -> ScanUiState.Added(
-                    isbn13 = result.book.isbn13,
+                    isbn13 = result.book.isbn13.orEmpty(),
                     title = result.book.title,
                 )
                 is AddBookResult.Duplicate -> ScanUiState.Duplicate(
-                    result.book.isbn13,
+                    result.book.isbn13.orEmpty(),
                     result.book.title,
                     result.copyCount,
                 )
@@ -874,6 +955,34 @@ sealed interface ScanSessionUiState {
     data object NotFound : ScanSessionUiState
     data object Error : ScanSessionUiState
 }
+
+sealed interface ManualRegistrationUiState {
+    data object Idle : ManualRegistrationUiState
+    data object Saving : ManualRegistrationUiState
+    data class Added(val title: String) : ManualRegistrationUiState
+    data class Duplicate(
+        val isbn13: String,
+        val title: String,
+        val copyCount: Int,
+    ) : ManualRegistrationUiState
+    data class Invalid(val errors: List<ManualBookValidationError>) : ManualRegistrationUiState
+    data object Error : ManualRegistrationUiState
+}
+
+sealed interface ManualReconciliationUiState {
+    data object Idle : ManualReconciliationUiState
+    data object Loading : ManualReconciliationUiState
+    data class Preview(val preview: ManualReconciliationPreview) : ManualReconciliationUiState
+    data class Applying(val preview: ManualReconciliationPreview) : ManualReconciliationUiState
+    data object Applied : ManualReconciliationUiState
+    data class Error(val failure: ReconciliationFailure) : ManualReconciliationUiState
+}
+
+enum class ReconciliationFailure { INVALID_ISBN, NOT_FOUND, LOOKUP, CONFLICT, SAVE }
+
+private val ManualReconciliationUiState.isBusy: Boolean
+    get() = this === ManualReconciliationUiState.Loading ||
+        this is ManualReconciliationUiState.Applying
 
 sealed interface BookstoreUiState {
     data object Idle : BookstoreUiState

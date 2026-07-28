@@ -179,7 +179,7 @@ class LibraryImportPlannerTest {
         val second = book(copyId = "copy-2", isbn13 = "9784101010014")
 
         val result = planner.preview(
-            batch(record(copyId = first.copyId, isbn13 = second.isbn13)),
+            batch(record(copyId = first.copyId, isbn13 = requireNotNull(second.isbn13))),
             listOf(first, second),
             ImportConflictPolicy.UPDATE_EXISTING,
         ) as ImportPreviewResult.Invalid

@@ -3,6 +3,7 @@ package dev.ndcshelf.app.domain.importer
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.domain.model.ClassificationSource
+import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
@@ -43,6 +44,30 @@ class LibraryJsonImporterTest {
     }
 
     @Test
+    fun `schema three round trip preserves a manual book without ISBN`() = runBlocking {
+        val manual = sampleBook().copy(
+            isbn13 = null,
+            coverUrl = null,
+            bibliographicSource = BibliographicSource.MANUAL,
+        )
+        val exported = LibraryExporter.export(
+            listOf(manual),
+            LibraryExportFormat.JSON,
+            EXPORTED_AT,
+        )
+
+        val parsed = LibraryJsonImporter().parse(exported.inputStream())
+            as LibraryJsonParseResult.Valid
+        val planned = LibraryImportPlanner(nowMillis = { NOW }).preview(
+            parsed.batch,
+            emptyList(),
+            ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+
+        assertEquals(listOf(manual), planned.preview.additions)
+    }
+
+    @Test
     fun `UTF-8 BOM is accepted`() = runBlocking {
         val exported = LibraryExporter.export(
             books = emptyList(),
@@ -59,8 +84,9 @@ class LibraryJsonImporterTest {
     @Test
     fun `schema one import defaults the copy label without data loss`() = runBlocking {
         val source = validJson()
-            .replace("\"schemaVersion\": 2", "\"schemaVersion\": 1")
+            .replace("\"schemaVersion\": 3", "\"schemaVersion\": 1")
             .replace("      \"copyLabel\": \"保存用\",\n", "")
+            .replace("      \"bibliographicSource\": \"NDL\",\n", "")
 
         val parsed = parse(source) as LibraryJsonParseResult.Valid
         val planned = LibraryImportPlanner(nowMillis = { NOW }).preview(
@@ -74,7 +100,7 @@ class LibraryJsonImporterTest {
 
     @Test
     fun `future schema version is rejected without exposing input`() = runBlocking {
-        val source = validJson().replace("\"schemaVersion\": 2", "\"schemaVersion\": 999")
+        val source = validJson().replace("\"schemaVersion\": 3", "\"schemaVersion\": 999")
 
         val result = parse(source) as LibraryJsonParseResult.Invalid
 

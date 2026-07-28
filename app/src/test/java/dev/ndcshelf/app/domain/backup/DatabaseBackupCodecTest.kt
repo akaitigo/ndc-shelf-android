@@ -35,6 +35,39 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
+    fun `current backup preserves multiple manual editions without ISBN`() {
+        val base = sampleSnapshot()
+        val snapshot = base.copy(
+            works = base.works + listOf(
+                BookWorkEntity("manual-work-1", "手動本A", "著者不明"),
+                BookWorkEntity("manual-work-2", "手動本B", "著者不明"),
+            ),
+            editions = base.editions + listOf(
+                BookEditionEntity(
+                    "manual-edition-1", "manual-work-1", null, null, null, null,
+                    null, null, "UNKNOWN", "MANUAL",
+                ),
+                BookEditionEntity(
+                    "manual-edition-2", "manual-work-2", null, null, null, null,
+                    null, null, "UNKNOWN", "MANUAL",
+                ),
+            ),
+            copies = base.copies + listOf(
+                OwnedCopyEntity(
+                    "manual-copy-1", "manual-edition-1", "PHYSICAL", "未設定", "UNREAD", 2,
+                ),
+                OwnedCopyEntity(
+                    "manual-copy-2", "manual-edition-2", "DIGITAL", "未設定", "UNREAD", 3,
+                ),
+            ),
+        )
+
+        val preview = codec.decode(codec.encode(snapshot, "0.3.0", 4).first.inputStream())
+
+        assertEquals(snapshot, preview.snapshot)
+    }
+
+    @Test
     fun `changed payload is rejected by checksum`() {
         val (archive, _) = codec.encode(sampleSnapshot(), "0.1.2", 1)
         val entries = unzip(archive).toMutableMap()
@@ -77,7 +110,10 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val changedPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":7", "\"schemaVersion\":6")
+            .replace(
+                "\"schemaVersion\":${DatabaseBackupCodec.CURRENT_FORMAT_VERSION}",
+                "\"schemaVersion\":${DatabaseBackupCodec.CURRENT_FORMAT_VERSION - 1}",
+            )
             .encodeToByteArray()
         entries["database.json"] = changedPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
@@ -90,6 +126,29 @@ class DatabaseBackupCodecTest {
         }
 
         assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+    }
+
+    @Test
+    fun `format seven backup keeps scan history and migrates bibliographic source`() {
+        val (archive, _) = codec.encode(sampleSnapshot(), "0.2.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        val originalPayload = requireNotNull(entries["database.json"])
+        val oldPayload = originalPayload.decodeToString()
+            .replace("\"schemaVersion\":8", "\"schemaVersion\":7")
+            .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
+            .encodeToByteArray()
+        entries["database.json"] = oldPayload
+        entries["manifest.json"] = requireNotNull(entries["manifest.json"])
+            .decodeToString()
+            .replace("\"formatVersion\":8", "\"formatVersion\":7")
+            .replace(originalPayload.sha256(), oldPayload.sha256())
+            .encodeToByteArray()
+
+        val preview = codec.decode(ByteArrayInputStream(zip(entries)))
+
+        assertEquals("NDL", preview.snapshot.editions.single().bibliographicSource)
+        assertEquals(sampleSnapshot().scanSessions, preview.snapshot.scanSessions)
+        assertEquals(sampleSnapshot().scanAttempts, preview.snapshot.scanAttempts)
     }
 
     @Test
