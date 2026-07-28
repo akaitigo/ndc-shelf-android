@@ -11,6 +11,8 @@ import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
+import dev.ndcshelf.app.data.local.WorkGroupEntity
+import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -18,6 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -55,6 +58,8 @@ internal class DatabaseBackupCodec(
             scanAttemptCount = snapshot.scanAttempts.size,
             seriesCount = snapshot.series.size,
             seriesMembershipCount = snapshot.seriesMemberships.size,
+            workGroupCount = snapshot.workGroups.size,
+            workGroupMembershipCount = snapshot.workGroupMemberships.size,
         )
         val manifest = encodeManifest(metadata, payload.sha256()).toString().encodeToByteArray()
         val archive = ByteArrayOutputStream().use { bytes ->
@@ -109,6 +114,12 @@ internal class DatabaseBackupCodec(
             } else {
                 manifest.requiredInt("seriesMembershipCount")
             },
+            workGroupCount = if (formatVersion < 11) 0 else manifest.requiredInt("workGroupCount"),
+            workGroupMembershipCount = if (formatVersion < 11) {
+                0
+            } else {
+                manifest.requiredInt("workGroupMembershipCount")
+            },
         )
         val snapshot = decodePayload(parseObject(payloadBytes), formatVersion)
         if (metadata.workCount != snapshot.works.size ||
@@ -118,7 +129,9 @@ internal class DatabaseBackupCodec(
             metadata.scanSessionCount != snapshot.scanSessions.size ||
             metadata.scanAttemptCount != snapshot.scanAttempts.size ||
             metadata.seriesCount != snapshot.series.size ||
-            metadata.seriesMembershipCount != snapshot.seriesMemberships.size
+            metadata.seriesMembershipCount != snapshot.seriesMemberships.size ||
+            metadata.workGroupCount != snapshot.workGroups.size ||
+            metadata.workGroupMembershipCount != snapshot.workGroupMemberships.size
         ) {
             invalid("Manifest counts do not match payload")
         }
@@ -162,6 +175,8 @@ internal class DatabaseBackupCodec(
         put("scanAttemptCount", JsonPrimitive(metadata.scanAttemptCount))
         put("seriesCount", JsonPrimitive(metadata.seriesCount))
         put("seriesMembershipCount", JsonPrimitive(metadata.seriesMembershipCount))
+        put("workGroupCount", JsonPrimitive(metadata.workGroupCount))
+        put("workGroupMembershipCount", JsonPrimitive(metadata.workGroupMembershipCount))
     }
 
     private fun encodePayload(snapshot: DatabaseSnapshot) = buildJsonObject {
@@ -292,6 +307,51 @@ internal class DatabaseBackupCodec(
                     put("origin", JsonPrimitive(membership.origin))
                     put("confirmedBy", JsonPrimitive(membership.confirmedBy))
                     put("sourceTitle", JsonPrimitive(membership.sourceTitle))
+                })
+            }
+        })
+        put("workGroups", buildJsonArray {
+            snapshot.workGroups.forEach { group ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(group.id))
+                    put("title", JsonPrimitive(group.title))
+                    put("primaryAuthor", JsonPrimitive(group.primaryAuthor))
+                    put("seriesSubstitutionEnabled", JsonPrimitive(group.seriesSubstitutionEnabled))
+                    put("createdAt", JsonPrimitive(group.createdAt))
+                    put("updatedAt", JsonPrimitive(group.updatedAt))
+                })
+            }
+        })
+        put("workGroupMemberships", buildJsonArray {
+            snapshot.workGroupMemberships.forEach { membership ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(membership.id))
+                    put("groupId", JsonPrimitive(membership.groupId))
+                    put("workId", JsonPrimitive(membership.workId))
+                    put("createdAt", JsonPrimitive(membership.createdAt))
+                })
+            }
+        })
+        put("scanSessions", buildJsonArray {
+            snapshot.scanSessions.forEach { session ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(session.id))
+                    put("startedAt", JsonPrimitive(session.startedAt))
+                    putNullable("endedAt", session.endedAt)
+                })
+            }
+        })
+        put("scanAttempts", buildJsonArray {
+            snapshot.scanAttempts.forEach { attempt ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(attempt.id))
+                    put("sessionId", JsonPrimitive(attempt.sessionId))
+                    put("isbn", JsonPrimitive(attempt.isbn))
+                    put("outcome", JsonPrimitive(attempt.outcome))
+                    putNullable("copyId", attempt.copyId)
+                    putNullable("copySnapshot", attempt.copySnapshot)
+                    put("attemptedAt", JsonPrimitive(attempt.attemptedAt))
+                    putNullable("undoneAt", attempt.undoneAt)
                 })
             }
         })
@@ -438,18 +498,44 @@ internal class DatabaseBackupCodec(
                 sourceTitle = if (schemaVersion < 10) "" else value.requiredString("sourceTitle"),
             )
         }
+        val workGroups = payload.versionedArray("workGroups", schemaVersion, 11).map { element ->
+            val value = element.jsonObject
+            WorkGroupEntity(
+                id = value.requiredString("id"),
+                title = value.requiredString("title"),
+                primaryAuthor = value.requiredString("primaryAuthor"),
+                seriesSubstitutionEnabled = value.requiredBoolean("seriesSubstitutionEnabled"),
+                createdAt = value.requiredLong("createdAt"),
+                updatedAt = value.requiredLong("updatedAt"),
+            )
+        }
+        val workGroupMemberships = payload.versionedArray(
+            "workGroupMemberships",
+            schemaVersion,
+            11,
+        ).map { element ->
+            val value = element.jsonObject
+            WorkGroupMembershipEntity(
+                id = value.requiredString("id"),
+                groupId = value.requiredString("groupId"),
+                workId = value.requiredString("workId"),
+                createdAt = value.requiredLong("createdAt"),
+            )
+        }
         return DatabaseSnapshot(
-            works,
-            editions,
-            copies,
-            rooms,
-            shelves,
-            tiers,
-            wishlistItems,
-            scanSessions,
-            scanAttempts,
-            series,
-            seriesMemberships,
+            works = works,
+            editions = editions,
+            copies = copies,
+            rooms = rooms,
+            shelves = shelves,
+            tiers = tiers,
+            wishlistItems = wishlistItems,
+            series = series,
+            seriesMemberships = seriesMemberships,
+            scanSessions = scanSessions,
+            scanAttempts = scanAttempts,
+            workGroups = workGroups,
+            workGroupMemberships = workGroupMemberships,
         )
     }
 
@@ -464,7 +550,9 @@ internal class DatabaseBackupCodec(
             snapshot.scanSessions.size > limits.maxRecords ||
             snapshot.scanAttempts.size > limits.maxRecords ||
             snapshot.series.size > limits.maxRecords ||
-            snapshot.seriesMemberships.size > limits.maxRecords
+            snapshot.seriesMemberships.size > limits.maxRecords ||
+            snapshot.workGroups.size > limits.maxRecords ||
+            snapshot.workGroupMemberships.size > limits.maxRecords
         ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::id)
@@ -482,6 +570,10 @@ internal class DatabaseBackupCodec(
         snapshot.seriesMemberships.ensureUnique(SeriesMembershipEntity::id)
         snapshot.seriesMemberships.ensureUnique { it.seriesId to it.workId }
         snapshot.seriesMemberships.ensureUnique { it.seriesId to it.sortOrderKey }
+        snapshot.workGroups.ensureUnique(WorkGroupEntity::id)
+        snapshot.workGroupMemberships.ensureUnique(WorkGroupMembershipEntity::id)
+        snapshot.workGroupMemberships.ensureUnique(WorkGroupMembershipEntity::workId)
+        snapshot.workGroupMemberships.ensureUnique { it.groupId to it.workId }
         snapshot.tiers.ensureUnique { it.shelfId to it.name }
         val workIds = snapshot.works.mapTo(hashSetOf(), BookWorkEntity::id)
         val editionIds = snapshot.editions.mapTo(hashSetOf(), BookEditionEntity::id)
@@ -490,6 +582,7 @@ internal class DatabaseBackupCodec(
         val tierIds = snapshot.tiers.mapTo(hashSetOf(), LocationTierEntity::id)
         val scanSessionIds = snapshot.scanSessions.mapTo(hashSetOf(), ScanSessionEntity::id)
         val seriesIds = snapshot.series.mapTo(hashSetOf(), SeriesEntity::id)
+        val workGroupIds = snapshot.workGroups.mapTo(hashSetOf(), WorkGroupEntity::id)
         if (snapshot.editions.any { it.workId !in workIds } ||
             snapshot.copies.any {
                 it.editionId !in editionIds || it.tierId != null && it.tierId !in tierIds
@@ -500,6 +593,9 @@ internal class DatabaseBackupCodec(
             snapshot.scanAttempts.any { it.sessionId !in scanSessionIds } ||
             snapshot.seriesMemberships.any {
                 it.seriesId !in seriesIds || it.workId !in workIds
+            } ||
+            snapshot.workGroupMemberships.any {
+                it.groupId !in workGroupIds || it.workId !in workIds
             }
         ) invalid("Foreign key reference is missing")
         if (snapshot.copies.any { copy ->
@@ -561,6 +657,19 @@ internal class DatabaseBackupCodec(
         ) {
             invalid("Invalid series data")
         }
+        val workGroupMembershipCounts = snapshot.workGroupMemberships
+            .groupingBy(WorkGroupMembershipEntity::groupId)
+            .eachCount()
+        if (snapshot.workGroups.any { group ->
+                group.id.isBlank() || group.title.isBlank() || group.createdAt < 0 ||
+                    group.updatedAt < group.createdAt ||
+                    (workGroupMembershipCounts[group.id] ?: 0) < MIN_WORK_GROUP_SIZE
+            } || snapshot.workGroupMemberships.any { membership ->
+                membership.id.isBlank() || membership.createdAt < 0
+            }
+        ) {
+            invalid("Invalid work group data")
+        }
         val editionById = snapshot.editions.associateBy(BookEditionEntity::id)
         if (snapshot.editions.any {
                 it.bibliographicSource !in BIBLIOGRAPHIC_SOURCES ||
@@ -602,6 +711,12 @@ internal class DatabaseBackupCodec(
                 add(it.volumeLabel); add(it.type)
                 add(it.origin); add(it.confirmedBy); add(it.sourceTitle)
             }
+            snapshot.workGroups.forEach {
+                add(it.id); add(it.title); add(it.primaryAuthor)
+            }
+            snapshot.workGroupMemberships.forEach {
+                add(it.id); add(it.groupId); add(it.workId)
+            }
         }
         if (strings.any { it.length > limits.maxStringLength }) invalid("String is too long")
         if (strings.sumOf { it.length.toLong() } > limits.maxTotalCharacters) {
@@ -627,6 +742,12 @@ internal class DatabaseBackupCodec(
 
     private fun JsonObject.requiredLong(name: String): Long =
         this[name]?.jsonPrimitive?.longOrNull ?: invalid("Invalid $name")
+
+    private fun JsonObject.requiredBoolean(name: String): Boolean {
+        val primitive = this[name]?.jsonPrimitive ?: invalid("Invalid $name")
+        if (primitive.isString) invalid("Invalid $name")
+        return primitive.booleanOrNull ?: invalid("Invalid $name")
+    }
 
     private fun JsonObject.optionalString(name: String): String? = when (val value = this[name]) {
         null, JsonNull -> null
@@ -705,10 +826,11 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 10
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 10
+        const val CURRENT_FORMAT_VERSION = 11
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 11
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val MAX_RECORDED_ISBN_LENGTH = 32
+        private const val MIN_WORK_GROUP_SIZE = 2
         private const val FORMAT_ID = "ndc-shelf-room-backup"
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val PAYLOAD_ENTRY = "database.json"

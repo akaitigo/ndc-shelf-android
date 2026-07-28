@@ -5,11 +5,13 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 9
+const val APP_DATABASE_VERSION = 10
 
 @Database(
     entities = [
         BookWorkEntity::class,
+        WorkGroupEntity::class,
+        WorkGroupMembershipEntity::class,
         SeriesEntity::class,
         SeriesMembershipEntity::class,
         BookEditionEntity::class,
@@ -38,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
+            MIGRATION_9_10,
         )
     }
 
@@ -46,6 +49,54 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun locationDao(): LocationDao
 
     abstract fun seriesDao(): SeriesDao
+
+    abstract fun workGroupDao(): WorkGroupDao
+}
+
+private val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS work_groups (
+                id TEXT NOT NULL PRIMARY KEY,
+                title TEXT NOT NULL,
+                primaryAuthor TEXT NOT NULL,
+                seriesSubstitutionEnabled INTEGER NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_work_groups_title_id ON work_groups(title, id)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS work_group_memberships (
+                id TEXT NOT NULL PRIMARY KEY,
+                groupId TEXT NOT NULL,
+                workId TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                FOREIGN KEY(groupId) REFERENCES work_groups(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(workId) REFERENCES book_works(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_work_group_memberships_groupId " +
+                "ON work_group_memberships(groupId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_work_group_memberships_workId " +
+                "ON work_group_memberships(workId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_work_group_memberships_groupId_workId " +
+                "ON work_group_memberships(groupId, workId)",
+        )
+    }
 }
 
 private val MIGRATION_8_9 = object : Migration(8, 9) {

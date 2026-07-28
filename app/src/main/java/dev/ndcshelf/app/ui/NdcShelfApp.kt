@@ -57,6 +57,7 @@ import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.SeriesScreen
 import dev.ndcshelf.app.ui.screens.SeriesSuggestionScreen
+import dev.ndcshelf.app.ui.screens.WorkVariantScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -90,10 +91,16 @@ fun NdcShelfApp(
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
     val seriesEditorState by viewModel.seriesEditorState.collectAsStateWithLifecycle()
+    val workVariantState by viewModel.workVariantState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
     var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
     var showSeriesEditor by rememberSaveable { mutableStateOf(false) }
+    var workVariantWorkId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(workVariantWorkId) {
+        workVariantWorkId?.let(viewModel::prepareWorkVariantEditor)
+    }
 
     LaunchedEffect(seriesEditorState) {
         if (seriesEditorState === SeriesEditorUiState.Removed) {
@@ -399,7 +406,19 @@ fun NdcShelfApp(
             AppDestination.LIBRARY -> {
                 val criteria by viewModel.librarySearchCriteria.collectAsStateWithLifecycle()
                 val result by viewModel.librarySearchResult.collectAsStateWithLifecycle()
-                LibraryScreen(
+                if (workVariantWorkId != null) {
+                    WorkVariantScreen(
+                        state = workVariantState,
+                        onBack = {
+                            workVariantWorkId = null
+                            viewModel.clearWorkVariantState()
+                        },
+                        onLink = viewModel::linkWorkVariant,
+                        onUnlink = viewModel::unlinkWorkVariant,
+                        onSetSeriesSubstitution = viewModel::setWorkVariantSeriesSubstitution,
+                        contentPadding = contentPadding,
+                    )
+                } else LibraryScreen(
                     books = result.books,
                     searchCriteria = criteria,
                     searchIsCurrent = result.criteria == criteria,
@@ -434,6 +453,9 @@ fun NdcShelfApp(
                         viewModel.prepareSeriesEditor(workId)
                         showSeriesEditor = true
                         selected = AppDestination.SERIES
+                    },
+                    onManageVariants = { workId ->
+                        workVariantWorkId = workId
                     },
                     contentPadding = contentPadding,
                 )

@@ -61,6 +61,7 @@ internal fun BookDetailScreen(
     onEditBibliography: () -> Unit,
     onReconcile: () -> Unit,
     onManageSeries: (String) -> Unit = {},
+    onManageVariants: (String) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     require(copies.isNotEmpty())
@@ -215,6 +216,14 @@ internal fun BookDetailScreen(
                 )
                 TextButton(onClick = { onManageSeries(edition.workId) }) {
                     Text(stringResource(R.string.book_detail_series_action))
+                }
+                Text(
+                    stringResource(R.string.book_detail_variant_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = { onManageVariants(edition.workId) }) {
+                    Text(stringResource(R.string.book_detail_variant_action))
                 }
             }
         }

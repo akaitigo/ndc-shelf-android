@@ -10,6 +10,8 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
+import dev.ndcshelf.app.data.local.WorkGroupEntity
+import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import dev.ndcshelf.app.domain.model.SeriesVolumeState
 import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
 import dev.ndcshelf.app.domain.model.SeriesMembershipType
@@ -203,6 +205,44 @@ class RoomSeriesRepositoryIntegrationTest {
         )
         assertTrue(database.seriesDao().getAllMemberships().isEmpty())
         assertEquals(listOf("existing"), database.seriesDao().getAllSeries().map { it.id })
+    }
+
+    @Test
+    fun alternateEditionCountsOnlyWhenGroupSubstitutionIsEnabled() = runBlocking {
+        val libraryDao = database.libraryDao()
+        libraryDao.upsertWorks(
+            listOf(
+                BookWorkEntity("series-work", "作品 単行本", "著者"),
+                BookWorkEntity("alternate-work", "作品 文庫版", "著者"),
+            ),
+        )
+        database.seriesDao().upsertSeries(SeriesEntity("series", "作品", 1, 1))
+        database.seriesDao().upsertMemberships(
+            listOf(membership("membership", "series-work", "10", "1巻", "MAIN_STORY")),
+        )
+        libraryDao.upsertEditions(
+            listOf(edition("alternate-edition", "alternate-work", "9784000000015")),
+        )
+        libraryDao.upsertCopies(listOf(copy("alternate-copy", "alternate-edition", "READ", 10)))
+        database.workGroupDao().upsertGroups(
+            listOf(WorkGroupEntity("group", "作品", "著者", false, 1, 1)),
+        )
+        database.workGroupDao().upsertMemberships(
+            listOf(
+                WorkGroupMembershipEntity("group-member-a", "group", "series-work", 1),
+                WorkGroupMembershipEntity("group-member-b", "group", "alternate-work", 1),
+            ),
+        )
+        val repository = RoomSeriesRepository(database)
+
+        assertEquals(0, repository.observeCatalog().first().single().ownedVolumeCount)
+
+        database.workGroupDao().updateSeriesSubstitution("group", true, 2)
+
+        val substituted = repository.observeCatalog().first().single().volumes.single()
+        assertEquals(1, substituted.ownedCopyCount)
+        assertEquals(1, substituted.readCopyCount)
+        assertEquals("alternate-edition", substituted.ownedEditionId)
     }
 
     private fun membership(
