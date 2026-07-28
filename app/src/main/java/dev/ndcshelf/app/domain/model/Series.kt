@@ -57,6 +57,8 @@ data class SeriesOverview(
     val series: BookSeries,
     val volumes: List<SeriesVolume>,
 ) {
+    val lastConfirmedAt: Long
+        get() = maxOf(series.updatedAt, volumes.maxOfOrNull { it.membership.updatedAt } ?: Long.MIN_VALUE)
     val knownVolumeCount: Int get() = volumes.size
     val ownedVolumeCount: Int get() = volumes.count { it.ownedCopyCount > 0 }
     val readVolumeCount: Int get() = volumes.count(SeriesVolume::isRead)

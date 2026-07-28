@@ -230,7 +230,7 @@ private fun SeriesDetail(
                     Text(
                         text = stringResource(
                             R.string.series_updated_at,
-                            dateFormatter.format(Date(overview.series.updatedAt)),
+                            dateFormatter.format(Date(overview.lastConfirmedAt)),
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

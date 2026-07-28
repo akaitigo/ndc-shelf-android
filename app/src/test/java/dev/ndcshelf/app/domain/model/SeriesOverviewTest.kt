@@ -57,6 +57,19 @@ class SeriesOverviewTest {
         assertEquals(owned, overview.latestOwnedVolume)
     }
 
+    @Test
+    fun lastConfirmedAtUsesLatestSeriesOrMembershipUpdate() {
+        val membershipUpdatedLater = overview(
+            volume("1巻", SeriesMembershipType.MAIN_STORY, updatedAt = 5),
+        )
+        val seriesUpdatedLater = membershipUpdatedLater.copy(
+            series = membershipUpdatedLater.series.copy(updatedAt = 8),
+        )
+
+        assertEquals(5L, membershipUpdatedLater.lastConfirmedAt)
+        assertEquals(8L, seriesUpdatedLater.lastConfirmedAt)
+    }
+
     private fun overview(vararg volumes: SeriesVolume) = SeriesOverview(
         series = BookSeries("series", "長編", 1, 2),
         volumes = volumes.toList(),
@@ -69,6 +82,7 @@ class SeriesOverviewTest {
         ownedCopies: Int = if (owned) 1 else 0,
         readCopies: Int = 0,
         purchaseStatus: PurchaseStatus? = null,
+        updatedAt: Long = 2,
     ) = SeriesVolume(
         membership = SeriesMembership(
             id = "membership-$label",
@@ -80,7 +94,7 @@ class SeriesOverviewTest {
             volumeLabel = label,
             type = type,
             createdAt = 1,
-            updatedAt = 2,
+            updatedAt = updatedAt,
         ),
         ownedEditionId = "edition-$label".takeIf { owned },
         bookstoreIsbn = "9784000000000",

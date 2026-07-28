@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.ndcshelf.app.domain.model.BookSeries
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.SeriesMembership
@@ -56,8 +57,10 @@ class SeriesScreenTest {
         )
 
         composeRule.onNodeWithTag(SERIES_DETAIL_TEST_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("確認済みの本編をすべて所有しています").assertIsDisplayed()
-        composeRule.onNodeWithText("本の詳細").performClick()
+        composeRule.onNodeWithText("確認済みの本編をすべて所有しています")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("本の詳細").performScrollTo().performClick()
         assertEquals("edition-upper", openedEdition)
     }
 
@@ -73,9 +76,9 @@ class SeriesScreenTest {
             onOpenBookstore = { openedIsbn = it },
         )
 
-        composeRule.onNodeWithText("予約済み").assertIsDisplayed()
-        composeRule.onNodeWithText("確認済みの未所有本編").assertIsDisplayed()
-        composeRule.onNodeWithText("書店モード").performClick()
+        composeRule.onNodeWithText("予約済み").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("確認済みの未所有本編").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("書店モード").performScrollTo().performClick()
         assertEquals("9784000000039", openedIsbn)
     }
 
@@ -86,8 +89,8 @@ class SeriesScreenTest {
         )
         setContent(listOf(overview), selectedSeriesId = "series")
 
-        composeRule.onNodeWithText("銀河叙事詩 外伝").assertIsDisplayed()
-        composeRule.onNodeWithText("未所有").assertIsDisplayed()
+        composeRule.onNodeWithText("銀河叙事詩 外伝").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("未所有").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("確認済みの未所有本編").assertDoesNotExist()
     }
 
@@ -99,7 +102,7 @@ class SeriesScreenTest {
         )
         setContent(listOf(overview), selectedSeriesId = "series")
 
-        composeRule.onNodeWithText("合本").assertIsDisplayed()
+        composeRule.onNodeWithText("合本").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("欠巻候補").assertTextContains("欠巻候補")
         composeRule.onNodeWithText("確認済みの未所有本編").assertDoesNotExist()
     }
