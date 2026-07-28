@@ -471,6 +471,61 @@ class AppDatabaseMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun v03Version7ToV04PreservesBibliographyCopiesLocationsAndCreatesNoInferredSeries() {
+        migrationHelper.createDatabase(V7_DATABASE, 7).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', '匿名年代記 1巻', '匿名著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition', 'work', '9784820418078', '匿名出版社', 2025, NULL, " +
+                    "'913.6', 'NDC10', 'NDL', 'NDL')",
+            )
+            execSQL("INSERT INTO location_rooms VALUES ('room', 'テスト室', 0)")
+            execSQL("INSERT INTO location_shelves VALUES ('shelf', 'room', 'テスト棚', 0)")
+            execSQL("INSERT INTO location_tiers VALUES ('tier', 'shelf', '上段', 0)")
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy', 'edition', 'PHYSICAL', '旧位置', 'READING', 1700000000000, " +
+                    "'tier', '80', '閲覧用')",
+            )
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V7_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+
+        migrated.query(
+            "SELECT works.title, editions.isbn13, editions.publisher, copies.location, " +
+                "copies.readingStatus, copies.addedAt, copies.tierId, copies.shelfOrderKey, " +
+                "copies.copyLabel FROM book_works works " +
+                "JOIN book_editions editions ON editions.workId = works.id " +
+                "JOIN owned_copies copies ON copies.editionId = editions.id",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("匿名年代記 1巻", cursor.getString(0))
+            assertEquals("9784820418078", cursor.getString(1))
+            assertEquals("匿名出版社", cursor.getString(2))
+            assertEquals("旧位置", cursor.getString(3))
+            assertEquals("READING", cursor.getString(4))
+            assertEquals(1_700_000_000_000L, cursor.getLong(5))
+            assertEquals("tier", cursor.getString(6))
+            assertEquals("80", cursor.getString(7))
+            assertEquals("閲覧用", cursor.getString(8))
+        }
+        listOf("series", "work_groups", "series_watches", "series_release_candidates").forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+        }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
     private fun androidx.sqlite.db.SupportSQLiteDatabase.queryNames(
         sql: String,
         column: String,

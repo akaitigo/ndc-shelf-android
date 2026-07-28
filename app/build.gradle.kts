@@ -14,8 +14,8 @@ android {
         applicationId = "dev.ndcshelf.app"
         minSdk = 23
         targetSdk = 37
-        versionCode = 5
-        versionName = "0.3.0"
+        versionCode = 6
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -252,9 +252,9 @@ val verifyBackupPolicy by tasks.registering {
     }
 }
 
-val verifyV03ReleaseConfiguration by tasks.registering {
+val verifyV04ReleaseConfiguration by tasks.registering {
     group = "verification"
-    description = "Verifies the installable v0.3 release candidate identity."
+    description = "Verifies the installable v0.4 release candidate identity."
 
     val configuredVersionCode = android.defaultConfig.versionCode
     val configuredVersionName = android.defaultConfig.versionName
@@ -262,17 +262,17 @@ val verifyV03ReleaseConfiguration by tasks.registering {
     inputs.property("versionName", configuredVersionName.orEmpty())
 
     doLast {
-        check(configuredVersionCode == 5) {
-            "v0.3 release candidate must use versionCode 5, found $configuredVersionCode."
+        check(configuredVersionCode == 6) {
+            "v0.4 release candidate must use versionCode 6, found $configuredVersionCode."
         }
-        check(configuredVersionName == "0.3.0") {
-            "v0.3 release candidate must use versionName 0.3.0, found $configuredVersionName."
+        check(configuredVersionName == "0.4.0") {
+            "v0.4 release candidate must use versionName 0.4.0, found $configuredVersionName."
         }
     }
 }
 
 tasks.named("check") {
-    dependsOn(verifyV03ReleaseConfiguration)
+    dependsOn(verifyV04ReleaseConfiguration)
 }
 
 tasks.named("check") {

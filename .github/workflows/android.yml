@@ -36,13 +36,14 @@ jobs:
       - name: Verify
         run: >-
           ./gradlew
-          verifyV03ReleaseConfiguration
+          verifyV04ReleaseConfiguration
           verifyBackupPolicy
           verifyLicenseReport
           :app:cyclonedxDirectBom
           testDebugUnitTest
           lintDebug
           assembleDebug
+          assembleDebugAndroidTest
           --stacktrace
 
       - name: Verify exported Room schemas are committed
