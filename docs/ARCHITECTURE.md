@@ -11,7 +11,7 @@ NDC Shelfは、最初のリリースでは単一のAndroidアプリモジュー�
 | `domain/model` | UIや保存方法に依存しない蔵書モデル |
 | `domain/export` | バージョン付きJSONと安全なCSVの逐次出力 |
 | `domain/importer` | 形式非依存の入力検証、競合解決、プレビュー、原子反映 |
-| `domain/backup` | 全Roomテーブルの版付きバックアップ形式と入力検証 |
+| `domain/backup` | 永続的な蔵書データの版付きバックアップ形式と入力検証 |
 | `domain/repository` | ユースケースから見たデータ操作の契約 |
 | `data/local` | RoomのEntity、DAO、Database |
 | `data/backup` | Roomトランザクションによる完全退避と原子的復元 |
@@ -83,6 +83,7 @@ erDiagram
     LOCATION_ROOM ||--o{ LOCATION_SHELF : contains
     LOCATION_SHELF ||--o{ LOCATION_TIER : contains
     LOCATION_TIER ||--o{ OWNED_COPY : stores
+    SCAN_SESSION ||--o{ SCAN_ATTEMPT : records
     BOOK_WORK {
         string id PK
         string title
@@ -111,6 +112,21 @@ erDiagram
         long createdAt
         long updatedAt
     }
+    SCAN_SESSION {
+        string id PK
+        long startedAt
+        long endedAt
+    }
+    SCAN_ATTEMPT {
+        string id PK
+        string sessionId FK
+        string isbn
+        string outcome
+        string copyId
+        string copySnapshot
+        long attemptedAt
+        long undoneAt
+    }
     LOCATION_ROOM {
         string id PK
         string name UK
@@ -137,6 +153,8 @@ erDiagram
 未所有の購入候補は`OwnedCopy`を作らず、Editionに対して最大1件の`WishlistItem`として保存します。永続化する`PurchaseStatus`は`WANTED`と`RESERVED`だけで、読書状態とは別の列挙です。`PURCHASED`は保存状態ではなく遷移命令とし、単一トランザクションで既存Editionを再利用した`OwnedCopy`を追加して`WishlistItem`を削除します。すでに所有しているEditionにも追加購入の予定を持てます。
 
 書店モードのISBN照会は、RoomにあるEdition、所有冊数、購入候補をネットワークより先に検索します。保存済みISBNはオフラインでも状態を表示し、端末内にないISBNだけNDL Searchへ送信します。最後のOwnedCopyを削除しても同じEditionの`WishlistItem`が残る場合は、EditionとWorkを削除してはいけません。蔵書インポートで同じISBNが追加された場合は既存Editionを再利用し、購入済みへの遷移として候補を削除します。
+
+連続スキャンは`ScanSession`と`ScanAttempt`へセッション時刻、ISBN、結果、追加copyIdだけを保存し、書誌情報を複製しません。追加時の作品・版・コピーの全項目は長さ付き正規化後にSHA-256化して保持し、個別・一括取り消し時に現在値と一致したコピーだけを削除します。一括操作は1件でも不一致なら全体をロールバックします。履歴は直近20セッションに制限し、完全バックアップには復旧可能性を保つため含めます。JSON／CSVには含めません。
 
 ### 置き場所
 

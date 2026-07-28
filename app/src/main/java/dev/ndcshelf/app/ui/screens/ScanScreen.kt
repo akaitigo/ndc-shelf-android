@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,17 +68,24 @@ import androidx.core.content.ContextCompat
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.BookstoreUiState
 import dev.ndcshelf.app.ScanFailure
+import dev.ndcshelf.app.ScanSessionUiState
 import dev.ndcshelf.app.ScanUiState
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.PurchaseTransition
+import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
+import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.ui.components.CameraPreview
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun ScanScreen(
     scanState: ScanUiState,
     bookstoreState: BookstoreUiState,
     wishlist: List<BookstoreBook>,
+    scanSessions: List<ScanSession>,
+    scanSessionState: ScanSessionUiState,
     onSubmitIsbn: (String) -> Unit,
     onLookupBookstore: (String) -> Unit,
     onCameraError: (String) -> Unit,
@@ -89,6 +97,10 @@ fun ScanScreen(
     onAddDuplicateCopy: (String) -> Unit = {},
     onChangePurchaseState: (PurchaseTransition) -> Unit,
     onSelectWishlistItem: (BookstoreBook) -> Unit,
+    onStartScanSession: () -> Unit,
+    onFinishScanSession: (String) -> Unit,
+    onUndoScanAttempt: (String) -> Unit,
+    onUndoScanSession: (String) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
@@ -157,6 +169,19 @@ fun ScanScreen(
                     selected = mode == ScanMode.BOOKSTORE,
                     onClick = { mode = ScanMode.BOOKSTORE },
                     label = { Text(stringResource(R.string.scan_mode_bookstore)) },
+                )
+            }
+        }
+
+        if (mode == ScanMode.LIBRARY) {
+            item {
+                ScanSessionPanel(
+                    sessions = scanSessions,
+                    state = scanSessionState,
+                    onStart = onStartScanSession,
+                    onFinish = onFinishScanSession,
+                    onUndoAttempt = onUndoScanAttempt,
+                    onUndoSession = onUndoScanSession,
                 )
             }
         }
@@ -308,6 +333,206 @@ fun ScanScreen(
 }
 
 private enum class ScanMode { LIBRARY, BOOKSTORE }
+
+@Composable
+internal fun ScanSessionPanel(
+    sessions: List<ScanSession>,
+    state: ScanSessionUiState,
+    onStart: () -> Unit,
+    onFinish: (String) -> Unit,
+    onUndoAttempt: (String) -> Unit,
+    onUndoSession: (String) -> Unit,
+) {
+    val active = sessions.firstOrNull(ScanSession::isActive)
+    var pendingAttemptId by remember { mutableStateOf<String?>(null) }
+    var pendingSessionId by remember { mutableStateOf<String?>(null) }
+    val busy = state is ScanSessionUiState.Working
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                stringResource(R.string.scan_session_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            if (active == null) {
+                Text(
+                    stringResource(R.string.scan_session_inactive),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = onStart, enabled = !busy) {
+                    Text(stringResource(R.string.scan_session_start))
+                }
+            } else {
+                Text(
+                    stringResource(
+                        R.string.scan_session_active_count,
+                        active.attempts.size,
+                        active.activeAddedCount,
+                    ),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(
+                        onClick = { onFinish(active.id) },
+                        enabled = !busy,
+                    ) { Text(stringResource(R.string.scan_session_finish)) }
+                    TextButton(
+                        onClick = { pendingSessionId = active.id },
+                        enabled = !busy && active.activeAddedCount > 0,
+                    ) { Text(stringResource(R.string.scan_session_undo_all)) }
+                }
+            }
+            when (state) {
+                is ScanSessionUiState.Undone -> Text(
+                    stringResource(R.string.scan_session_undone, state.count),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                ScanSessionUiState.Conflict -> Text(
+                    stringResource(R.string.scan_session_conflict),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                ScanSessionUiState.NotFound -> Text(
+                    stringResource(R.string.scan_session_not_found),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                ScanSessionUiState.Error -> Text(
+                    stringResource(R.string.scan_session_error),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                ScanSessionUiState.Idle, ScanSessionUiState.Working -> Unit
+            }
+            if (sessions.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.scan_session_history),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                sessions.take(3).forEach { session ->
+                    val started = remember(session.startedAt) {
+                        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                            .format(Date(session.startedAt))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.scan_session_started_at, started),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.scan_session_history_summary,
+                                    session.attempts.size,
+                                    session.activeAddedCount,
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                        if (session.activeAddedCount > 0) {
+                            TextButton(
+                                onClick = { pendingSessionId = session.id },
+                                enabled = !busy,
+                            ) { Text(stringResource(R.string.scan_session_undo_all_short)) }
+                        }
+                    }
+                    session.attempts.take(5).forEach { attempt ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(attempt.isbn, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    attempt.outcome.label(attempt.undoneAt != null),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (attempt.outcome == ScanAttemptOutcome.ADDED &&
+                                attempt.undoneAt == null
+                            ) {
+                                TextButton(
+                                    onClick = { pendingAttemptId = attempt.id },
+                                    enabled = !busy,
+                                ) { Text(stringResource(R.string.scan_session_undo_one)) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingAttemptId?.let { attemptId ->
+        ScanUndoConfirmation(
+            message = stringResource(R.string.scan_session_undo_one_confirm),
+            onConfirm = {
+                pendingAttemptId = null
+                onUndoAttempt(attemptId)
+            },
+            onDismiss = { pendingAttemptId = null },
+        )
+    }
+    pendingSessionId?.let { sessionId ->
+        ScanUndoConfirmation(
+            message = stringResource(R.string.scan_session_undo_all_confirm),
+            onConfirm = {
+                pendingSessionId = null
+                onUndoSession(sessionId)
+            },
+            onDismiss = { pendingSessionId = null },
+        )
+    }
+}
+
+@Composable
+private fun ScanUndoConfirmation(
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.scan_session_undo_title)) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(onClick = onConfirm) { Text(stringResource(R.string.scan_session_undo_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.import_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun ScanAttemptOutcome.label(undone: Boolean): String = if (undone) {
+    stringResource(R.string.scan_session_result_undone)
+} else {
+    stringResource(
+        when (this) {
+            ScanAttemptOutcome.ADDED -> R.string.scan_session_result_added
+            ScanAttemptOutcome.DUPLICATE -> R.string.scan_session_result_duplicate
+            ScanAttemptOutcome.INVALID -> R.string.scan_session_result_invalid
+            ScanAttemptOutcome.NOT_FOUND -> R.string.scan_session_result_not_found
+            ScanAttemptOutcome.FAILURE -> R.string.scan_session_result_failure
+        },
+    )
+}
 
 @Composable
 private fun CameraPermissionCard(onRequestPermission: () -> Unit) {

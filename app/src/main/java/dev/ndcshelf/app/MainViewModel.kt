@@ -29,6 +29,7 @@ import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationMutationResult
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.PurchaseTransition
+import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
@@ -40,6 +41,7 @@ import dev.ndcshelf.app.domain.repository.LocationRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
+import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -75,11 +77,19 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+    val scanSessions: StateFlow<List<ScanSession>> = repository.observeScanSessions()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
     val locations: StateFlow<LocationTree> = (locationRepository?.observeTree() ?: flowOf(LocationTree()))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LocationTree())
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
+    private val _scanSessionState = MutableStateFlow<ScanSessionUiState>(ScanSessionUiState.Idle)
+    val scanSessionState: StateFlow<ScanSessionUiState> = _scanSessionState.asStateFlow()
     private val _bookstoreState = MutableStateFlow<BookstoreUiState>(BookstoreUiState.Idle)
     val bookstoreState: StateFlow<BookstoreUiState> = _bookstoreState.asStateFlow()
     private val _importState = MutableStateFlow<LibraryImportUiState>(LibraryImportUiState.Idle)
@@ -99,6 +109,7 @@ class MainViewModel(
 
     private var lastSubmission: Pair<String, Long>? = null
     private var lastBookstoreSubmission: Pair<String, Long>? = null
+    private var activeScanSessionId: String? = null
     private val jsonImporter = LibraryJsonImporter()
     private val csvImporter = LibraryCsvImporter()
     private var importBatch: LibraryImportBatch? = null
@@ -230,7 +241,9 @@ class MainViewModel(
 
         viewModelScope.launch {
             _scanState.value = ScanUiState.Loading(rawIsbn)
-            _scanState.value = when (val result = repository.addFromIsbn(rawIsbn)) {
+            val result = repository.addFromIsbn(rawIsbn)
+            recordCurrentScanAttempt(rawIsbn, result)
+            _scanState.value = when (result) {
                 is AddBookResult.Added -> ScanUiState.Added(
                     isbn13 = result.book.isbn13,
                     title = result.book.title,
@@ -262,6 +275,63 @@ class MainViewModel(
         val isbn = (_scanState.value as? ScanUiState.Error)?.retryIsbn ?: return
         lastSubmission = null
         submitIsbn(isbn)
+    }
+
+    fun startScanSession() {
+        if (_scanSessionState.value is ScanSessionUiState.Working) return
+        viewModelScope.launch {
+            _scanSessionState.value = ScanSessionUiState.Working
+            activeScanSessionId = repository.startScanSession()
+            _scanSessionState.value =
+                if (activeScanSessionId != null) ScanSessionUiState.Idle else ScanSessionUiState.Error
+        }
+    }
+
+    fun finishScanSession(sessionId: String) {
+        if (_scanSessionState.value is ScanSessionUiState.Working) return
+        viewModelScope.launch {
+            _scanSessionState.value = ScanSessionUiState.Working
+            _scanSessionState.value = if (repository.finishScanSession(sessionId)) {
+                activeScanSessionId = null
+                ScanSessionUiState.Idle
+            } else {
+                ScanSessionUiState.Error
+            }
+        }
+    }
+
+    fun undoScanAttempt(attemptId: String) = undoScan { repository.undoScanAttempt(attemptId) }
+
+    fun undoScanSession(sessionId: String) = undoScan { repository.undoScanSession(sessionId) }
+
+    fun clearScanSessionState() {
+        if (_scanSessionState.value !is ScanSessionUiState.Working) {
+            _scanSessionState.value = ScanSessionUiState.Idle
+        }
+    }
+
+    private fun undoScan(operation: suspend () -> ScanUndoResult) {
+        if (_scanSessionState.value is ScanSessionUiState.Working) return
+        viewModelScope.launch {
+            _scanSessionState.value = ScanSessionUiState.Working
+            _scanSessionState.value = when (val result = operation()) {
+                is ScanUndoResult.Undone -> ScanSessionUiState.Undone(result.count)
+                ScanUndoResult.Conflict -> ScanSessionUiState.Conflict
+                ScanUndoResult.NotFound -> ScanSessionUiState.NotFound
+                ScanUndoResult.Failure -> ScanSessionUiState.Error
+            }
+        }
+    }
+
+    private suspend fun recordCurrentScanAttempt(rawIsbn: String, result: AddBookResult) {
+        val sessionId = activeScanSessionId
+            ?: scanSessions.value.firstOrNull(ScanSession::isActive)?.id
+            ?: repository.activeScanSessionId()
+            ?: return
+        activeScanSessionId = sessionId
+        if (!repository.recordScanAttempt(sessionId, rawIsbn, result)) {
+            _scanSessionState.value = ScanSessionUiState.Error
+        }
     }
 
     fun lookupBookstore(rawIsbn: String) {
@@ -341,9 +411,9 @@ class MainViewModel(
         val duplicate = _scanState.value as? ScanUiState.Duplicate ?: return
         _scanState.value = ScanUiState.Loading(duplicate.isbn13)
         viewModelScope.launch {
-            _scanState.value = when (
-                val result = repository.addAnotherCopy(duplicate.isbn13, copyLabel)
-            ) {
+            val result = repository.addAnotherCopy(duplicate.isbn13, copyLabel)
+            recordCurrentScanAttempt(duplicate.isbn13, result)
+            _scanState.value = when (result) {
                 is AddBookResult.Added -> ScanUiState.Added(
                     isbn13 = result.book.isbn13,
                     title = result.book.title,
@@ -793,6 +863,15 @@ sealed interface ScanUiState {
         val retryIsbn: String? = null,
         val message: String? = null,
     ) : ScanUiState
+}
+
+sealed interface ScanSessionUiState {
+    data object Idle : ScanSessionUiState
+    data object Working : ScanSessionUiState
+    data class Undone(val count: Int) : ScanSessionUiState
+    data object Conflict : ScanSessionUiState
+    data object NotFound : ScanSessionUiState
+    data object Error : ScanSessionUiState
 }
 
 sealed interface BookstoreUiState {

@@ -8,6 +8,8 @@ import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.ScanAttemptEntity
+import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
@@ -64,6 +66,8 @@ class RoomDatabaseBackupManagerTest {
         val result = manager.restoreBackup(inspected.preview) as DatabaseRestoreResult.Success
 
         assertEquals(sampleSnapshot("original"), readSnapshot())
+        assertEquals("original-session", database.libraryDao().getAllScanSessions().single().id)
+        assertEquals("original-attempt", database.libraryDao().getAllScanAttempts().single().id)
         assertEquals(1, result.restoredCopyCount)
         assertTrue(File(backupDirectory, result.automaticBackupName).isFile)
     }
@@ -72,6 +76,13 @@ class RoomDatabaseBackupManagerTest {
     fun failedRestore_rollsBackCurrentDatabase() = runTest {
         val current = sampleSnapshot("current")
         insert(current)
+        backupDirectory.mkdirs()
+        repeat(5) { index ->
+            File(backupDirectory, "before-restore-old-$index.ndcshelfbackup").apply {
+                writeText("old")
+                setLastModified(index.toLong())
+            }
+        }
         val invalid = DatabaseSnapshot(
             works = emptyList(),
             editions = sampleSnapshot("invalid").editions,
@@ -86,6 +97,10 @@ class RoomDatabaseBackupManagerTest {
 
         assertTrue(result is DatabaseRestoreResult.Failure)
         assertEquals(current, readSnapshot())
+        assertEquals(
+            3,
+            backupDirectory.listFiles()?.count { it.name.endsWith(".ndcshelfbackup") },
+        )
     }
 
     private suspend fun insert(snapshot: DatabaseSnapshot) {
@@ -93,9 +108,13 @@ class RoomDatabaseBackupManagerTest {
         database.libraryDao().upsertEditions(snapshot.editions)
         database.libraryDao().upsertWishlistItems(snapshot.wishlistItems)
         database.libraryDao().upsertCopies(snapshot.copies)
+        database.libraryDao().upsertScanSessions(snapshot.scanSessions)
+        database.libraryDao().upsertScanAttempts(snapshot.scanAttempts)
     }
 
     private suspend fun clear() {
+        database.libraryDao().deleteAllScanAttempts()
+        database.libraryDao().deleteAllScanSessions()
         database.libraryDao().deleteAllCopies()
         database.libraryDao().deleteAllWishlistItems()
         database.libraryDao().deleteAllEditions()
@@ -107,6 +126,8 @@ class RoomDatabaseBackupManagerTest {
         editions = database.libraryDao().getAllEditions(),
         copies = database.libraryDao().getAllCopies(),
         wishlistItems = database.libraryDao().getAllWishlistItems(),
+        scanSessions = database.libraryDao().getAllScanSessions(),
+        scanAttempts = database.libraryDao().getAllScanAttempts(),
     )
 
     private fun sampleSnapshot(prefix: String) = DatabaseSnapshot(
@@ -140,6 +161,19 @@ class RoomDatabaseBackupManagerTest {
                 status = "WANTED",
                 createdAt = 1,
                 updatedAt = 1,
+            ),
+        ),
+        scanSessions = listOf(ScanSessionEntity("$prefix-session", 1, 3)),
+        scanAttempts = listOf(
+            ScanAttemptEntity(
+                id = "$prefix-attempt",
+                sessionId = "$prefix-session",
+                isbn = if (prefix == "original") "9784101010014" else "9784003101018",
+                outcome = "ADDED",
+                copyId = "$prefix-copy",
+                copySnapshot = "a".repeat(64),
+                attemptedAt = 2,
+                undoneAt = null,
             ),
         ),
     )

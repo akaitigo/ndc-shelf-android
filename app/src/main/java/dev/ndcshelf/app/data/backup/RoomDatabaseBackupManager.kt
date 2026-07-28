@@ -65,55 +65,62 @@ class RoomDatabaseBackupManager(
 
     override suspend fun restoreBackup(
         preview: DatabaseBackupPreview,
-    ): DatabaseRestoreResult = try {
-        automaticBackupDirectory.mkdirs()
-        if (!automaticBackupDirectory.isDirectory) {
-            return DatabaseRestoreResult.Failure(DatabaseBackupFailure.WRITE_FAILED)
-        }
-
+    ): DatabaseRestoreResult {
         var automaticBackupName = ""
-        database.withTransaction {
-            val current = readSnapshot()
-            val (archive, _) = codec.encode(current, appVersion, nowMillis())
-            if (!reserveAutomaticBackupSpace(archive.size * REQUIRED_SPACE_MULTIPLIER)) {
-                throw BackupCodecException(
-                    DatabaseBackupFailure.INSUFFICIENT_SPACE,
-                    "Insufficient space for rollback backup",
-                )
+        return try {
+            automaticBackupDirectory.mkdirs()
+            if (!automaticBackupDirectory.isDirectory) {
+                return DatabaseRestoreResult.Failure(DatabaseBackupFailure.WRITE_FAILED)
             }
-            val automaticBackup = writeAutomaticBackup(archive)
-            val verifiedBackup = automaticBackup.inputStream().use(codec::decode)
-            check(verifiedBackup.snapshot == current) { "Rollback backup verification failed" }
-            automaticBackupName = automaticBackup.name
 
-            dao.deleteAllCopies()
-            dao.deleteAllWishlistItems()
-            locationDao.deleteAllTiers()
-            locationDao.deleteAllShelves()
-            locationDao.deleteAllRooms()
-            dao.deleteAllEditions()
-            dao.deleteAllWorks()
-            dao.upsertWorks(preview.snapshot.works)
-            dao.upsertEditions(preview.snapshot.editions)
-            dao.upsertWishlistItems(preview.snapshot.wishlistItems)
-            locationDao.upsertRooms(preview.snapshot.rooms)
-            locationDao.upsertShelves(preview.snapshot.shelves)
-            locationDao.upsertTiers(preview.snapshot.tiers)
-            dao.upsertCopies(preview.snapshot.copies)
+            database.withTransaction {
+                val current = readSnapshot()
+                val (archive, _) = codec.encode(current, appVersion, nowMillis())
+                if (!reserveAutomaticBackupSpace(archive.size * REQUIRED_SPACE_MULTIPLIER)) {
+                    throw BackupCodecException(
+                        DatabaseBackupFailure.INSUFFICIENT_SPACE,
+                        "Insufficient space for rollback backup",
+                    )
+                }
+                val automaticBackup = writeAutomaticBackup(archive)
+                automaticBackupName = automaticBackup.name
+                val verifiedBackup = automaticBackup.inputStream().use(codec::decode)
+                check(verifiedBackup.snapshot == current) { "Rollback backup verification failed" }
 
-            check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
+                dao.deleteAllScanAttempts()
+                dao.deleteAllScanSessions()
+                dao.deleteAllCopies()
+                dao.deleteAllWishlistItems()
+                locationDao.deleteAllTiers()
+                locationDao.deleteAllShelves()
+                locationDao.deleteAllRooms()
+                dao.deleteAllEditions()
+                dao.deleteAllWorks()
+                dao.upsertWorks(preview.snapshot.works)
+                dao.upsertEditions(preview.snapshot.editions)
+                dao.upsertWishlistItems(preview.snapshot.wishlistItems)
+                locationDao.upsertRooms(preview.snapshot.rooms)
+                locationDao.upsertShelves(preview.snapshot.shelves)
+                locationDao.upsertTiers(preview.snapshot.tiers)
+                dao.upsertCopies(preview.snapshot.copies)
+                dao.upsertScanSessions(preview.snapshot.scanSessions)
+                dao.upsertScanAttempts(preview.snapshot.scanAttempts)
+
+                check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
+            }
+            DatabaseRestoreResult.Success(
+                restoredCopyCount = preview.metadata.copyCount,
+                automaticBackupName = automaticBackupName,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: BackupCodecException) {
+            DatabaseRestoreResult.Failure(error.failure)
+        } catch (_: Exception) {
+            DatabaseRestoreResult.Failure(DatabaseBackupFailure.RESTORE_FAILED)
+        } finally {
+            pruneAutomaticBackups(keepName = automaticBackupName)
         }
-        pruneAutomaticBackups(keepName = automaticBackupName)
-        DatabaseRestoreResult.Success(
-            restoredCopyCount = preview.metadata.copyCount,
-            automaticBackupName = automaticBackupName,
-        )
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: BackupCodecException) {
-        DatabaseRestoreResult.Failure(error.failure)
-    } catch (_: Exception) {
-        DatabaseRestoreResult.Failure(DatabaseBackupFailure.RESTORE_FAILED)
     }
 
     private suspend fun readSnapshot() = DatabaseSnapshot(
@@ -124,6 +131,8 @@ class RoomDatabaseBackupManager(
         shelves = locationDao.getAllShelves(),
         tiers = locationDao.getAllTiers(),
         wishlistItems = dao.getAllWishlistItems(),
+        scanSessions = dao.getAllScanSessions(),
+        scanAttempts = dao.getAllScanAttempts(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {

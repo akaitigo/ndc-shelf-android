@@ -6,6 +6,9 @@ import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.LibraryBookRow
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.ScanAttemptEntity
+import dev.ndcshelf.app.data.local.ScanSessionAttemptRow
+import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.WishlistBookRow
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.remote.BookMetadataFailure
@@ -28,6 +31,9 @@ import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.ScanAttempt
+import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
+import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.repository.AddBookResult
@@ -37,6 +43,7 @@ import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
+import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
@@ -44,6 +51,7 @@ import dev.ndcshelf.app.scanner.Isbn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.security.MessageDigest
 import java.util.UUID
 
 class DefaultLibraryRepository(
@@ -66,6 +74,150 @@ class DefaultLibraryRepository(
 
     override fun observeWishlist(): Flow<List<BookstoreBook>> =
         dao.observeWishlist().map { rows -> rows.map(WishlistBookRow::toDomain) }
+
+    override fun observeScanSessions(): Flow<List<ScanSession>> =
+        dao.observeRecentScanSessions(RECENT_SCAN_SESSION_LIMIT).map(::toScanSessions)
+
+    override suspend fun startScanSession(): String? = try {
+        database.withTransaction {
+            dao.findActiveScanSession()?.id ?: idFactory().also { sessionId ->
+                dao.insertScanSession(
+                    ScanSessionEntity(
+                        id = sessionId,
+                        startedAt = nowMillis(),
+                        endedAt = null,
+                    ),
+                )
+                dao.pruneScanSessions(RECENT_SCAN_SESSION_LIMIT)
+            }
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        null
+    }
+
+    override suspend fun activeScanSessionId(): String? = try {
+        dao.findActiveScanSession()?.id
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        null
+    }
+
+    override suspend fun finishScanSession(sessionId: String): Boolean = try {
+        database.withTransaction {
+            dao.finishScanSession(sessionId, nowMillis()) == 1
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        false
+    }
+
+    override suspend fun recordScanAttempt(
+        sessionId: String,
+        rawIsbn: String,
+        result: AddBookResult,
+    ): Boolean = try {
+        database.withTransaction {
+            val active = dao.findActiveScanSession()
+            if (active?.id != sessionId) return@withTransaction false
+            val addedResult = result as? AddBookResult.Added
+            val addedBook = if (addedResult != null) {
+                dao.findOwnedByCopyId(addedResult.book.copyId)?.toDomain()
+                    ?: return@withTransaction false
+            } else {
+                null
+            }
+            if (addedBook != null && addedBook.snapshotHash() != addedResult?.book?.snapshotHash()) {
+                return@withTransaction false
+            }
+            val outcome = when (result) {
+                is AddBookResult.Added -> ScanAttemptOutcome.ADDED
+                is AddBookResult.Duplicate -> ScanAttemptOutcome.DUPLICATE
+                is AddBookResult.InvalidIsbn -> ScanAttemptOutcome.INVALID
+                is AddBookResult.NotFound -> ScanAttemptOutcome.NOT_FOUND
+                is AddBookResult.Failure -> ScanAttemptOutcome.FAILURE
+            }
+            val isbn = when (result) {
+                is AddBookResult.Added -> result.book.isbn13
+                is AddBookResult.Duplicate -> result.book.isbn13
+                is AddBookResult.InvalidIsbn -> result.rawValue.trim().take(MAX_RECORDED_ISBN_LENGTH)
+                is AddBookResult.NotFound -> result.isbn13
+                is AddBookResult.Failure -> result.isbn13
+                    ?: rawIsbn.trim().take(MAX_RECORDED_ISBN_LENGTH)
+            }
+            dao.insertScanAttempt(
+                ScanAttemptEntity(
+                    id = idFactory(),
+                    sessionId = sessionId,
+                    isbn = isbn,
+                    outcome = outcome.name,
+                    copyId = addedBook?.copyId,
+                    copySnapshot = addedBook?.snapshotHash(),
+                    attemptedAt = nowMillis(),
+                    undoneAt = null,
+                ),
+            )
+            true
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        false
+    }
+
+    override suspend fun undoScanAttempt(attemptId: String): ScanUndoResult = try {
+        database.withTransaction {
+            val attempt = dao.findScanAttempt(attemptId)
+                ?: return@withTransaction ScanUndoResult.NotFound
+            undoAttempts(listOf(attempt))
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        ScanUndoResult.Failure
+    }
+
+    override suspend fun undoScanSession(sessionId: String): ScanUndoResult = try {
+        database.withTransaction {
+            val attempts = dao.findScanAttemptsBySession(sessionId)
+                .filter { it.outcome == ScanAttemptOutcome.ADDED.name && it.undoneAt == null }
+            if (attempts.isEmpty()) return@withTransaction ScanUndoResult.NotFound
+            undoAttempts(attempts)
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        ScanUndoResult.Failure
+    }
+
+    private suspend fun undoAttempts(attempts: List<ScanAttemptEntity>): ScanUndoResult {
+        val books = attempts.map { attempt ->
+            if (attempt.outcome != ScanAttemptOutcome.ADDED.name ||
+                attempt.undoneAt != null || attempt.copyId == null || attempt.copySnapshot == null
+            ) return ScanUndoResult.Conflict
+            val book = dao.findOwnedByCopyId(attempt.copyId)?.toDomain()
+                ?: return ScanUndoResult.Conflict
+            if (book.snapshotHash() != attempt.copySnapshot) return ScanUndoResult.Conflict
+            attempt to book
+        }
+        val now = nowMillis()
+        books.forEach { (attempt, book) ->
+            check(dao.deleteCopyById(book.copyId) == 1)
+            check(dao.markScanAttemptUndone(attempt.id, now) == 1)
+            if (dao.countCopiesForEdition(book.editionId) == 0 &&
+                dao.findWishlistByEditionId(book.editionId) == null
+            ) {
+                check(dao.deleteEditionById(book.editionId) == 1)
+                if (dao.countEditionsForWork(book.workId) == 0) {
+                    dao.deleteWorkById(book.workId)
+                }
+            }
+        }
+        return ScanUndoResult.Undone(books.size)
+    }
 
     override suspend fun addFromIsbn(rawIsbn: String): AddBookResult {
         val isbn13 = Isbn.normalizeToIsbn13(rawIsbn)
@@ -770,5 +922,60 @@ internal fun WishlistBookRow.toDomain(): BookstoreBook = BookstoreBook(
 
 private inline fun <reified T : Enum<T>> String.toEnumOrDefault(default: T): T =
     enumValues<T>().firstOrNull { it.name == this } ?: default
+
+private fun toScanSessions(rows: List<ScanSessionAttemptRow>): List<ScanSession> =
+    rows.groupBy(ScanSessionAttemptRow::sessionId).map { (sessionId, sessionRows) ->
+        val session = sessionRows.first()
+        ScanSession(
+            id = sessionId,
+            startedAt = session.startedAt,
+            endedAt = session.endedAt,
+            attempts = sessionRows.mapNotNull { row ->
+                val attemptId = row.attemptId ?: return@mapNotNull null
+                ScanAttempt(
+                    id = attemptId,
+                    sessionId = sessionId,
+                    isbn = row.isbn.orEmpty(),
+                    outcome = row.outcome?.toEnumOrDefault(ScanAttemptOutcome.FAILURE)
+                        ?: ScanAttemptOutcome.FAILURE,
+                    copyId = row.copyId,
+                    attemptedAt = row.attemptedAt ?: session.startedAt,
+                    undoneAt = row.undoneAt,
+                )
+            },
+        )
+    }
+
+private fun LibraryBook.snapshotHash(): String {
+    val canonical = listOf(
+        copyId,
+        workId,
+        editionId,
+        title,
+        primaryAuthor,
+        isbn13,
+        publisher,
+        publishedYear?.toString(),
+        coverUrl,
+        ndcCode,
+        ndcEdition,
+        classificationSource.name,
+        mediaType.name,
+        location,
+        readingStatus.name,
+        addedAt.toString(),
+        locationTierId,
+        shelfOrderKey,
+        copyLabel,
+    ).joinToString(separator = "") { value ->
+        value?.let { "${it.length}:$it" } ?: "-1:"
+    }
+    return MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte) }
+}
+
+private const val RECENT_SCAN_SESSION_LIMIT = 20
+private const val MAX_RECORDED_ISBN_LENGTH = 32
 
 private const val MAX_COPY_LABEL_LENGTH = 100

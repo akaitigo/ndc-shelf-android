@@ -25,12 +25,14 @@ import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
 import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
+import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -355,6 +357,103 @@ class DefaultLibraryRepositoryIntegrationTest {
         val libraryBook = database.libraryDao().findOwnedByCopyId(copy.id)
         assertEquals("題名", libraryBook?.title)
         assertEquals("著者A・著者B", libraryBook?.primaryAuthor)
+    }
+
+    @Test
+    fun scanSessionRecordsAddedAndDuplicateThenRollsBackAddedCopy() = runBlocking {
+        val repository = repository(
+            ids = listOf("session-1", "work-1", "edition-1", "copy-1", "attempt-1", "attempt-2"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val sessionId = repository.startScanSession()
+        assertEquals("session-1", sessionId)
+        val added = repository.addFromIsbn(ISBN)
+        assertTrue(repository.recordScanAttempt(sessionId!!, ISBN, added))
+        val duplicate = repository.addFromIsbn(ISBN)
+        assertTrue(repository.recordScanAttempt(sessionId, ISBN, duplicate))
+
+        val session = repository.observeScanSessions().first().single()
+        assertTrue(session.isActive)
+        assertEquals(2, session.attempts.size)
+        assertEquals(1, session.activeAddedCount)
+
+        assertEquals(ScanUndoResult.Undone(1), repository.undoScanSession(sessionId))
+        assertTrue(database.libraryDao().getAllCopies().isEmpty())
+        assertEquals(0, repository.observeScanSessions().first().single().activeAddedCount)
+    }
+
+    @Test
+    fun scanUndoRejectsSharedBookMetadataEditedOutsideSessionWithoutDeletingAnything() = runBlocking {
+        val repository = repository(
+            ids = listOf("session-1", "work-1", "edition-1", "copy-1", "attempt-1"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val sessionId = repository.startScanSession()!!
+        val added = repository.addFromIsbn(ISBN) as AddBookResult.Added
+        repository.recordScanAttempt(sessionId, ISBN, added)
+        database.libraryDao().updateWork(added.book.workId, "編集後の題名", added.book.primaryAuthor)
+
+        assertEquals(ScanUndoResult.Conflict, repository.undoScanSession(sessionId))
+        assertEquals("編集後の題名", database.libraryDao().findOwnedByCopyId(added.book.copyId)?.title)
+    }
+
+    @Test
+    fun scanSessionRollbackIsAtomicWhenOneOfMultipleCopiesWasEdited() = runBlocking {
+        val repository = repository(
+            ids = listOf(
+                "session-1",
+                "work-1", "edition-1", "copy-1", "attempt-1",
+                "copy-2", "attempt-2",
+            ),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        val sessionId = repository.startScanSession()!!
+        val first = repository.addFromIsbn(ISBN) as AddBookResult.Added
+        repository.recordScanAttempt(sessionId, ISBN, first)
+        val second = repository.addAnotherCopy(ISBN, "保存用") as AddBookResult.Added
+        repository.recordScanAttempt(sessionId, ISBN, second)
+        database.libraryDao().updateCopy(
+            copyId = second.book.copyId,
+            location = "書斎",
+            readingStatus = second.book.readingStatus.name,
+            copyLabel = second.book.copyLabel,
+        )
+
+        assertEquals(ScanUndoResult.Conflict, repository.undoScanSession(sessionId))
+        assertEquals(setOf("copy-1", "copy-2"), database.libraryDao().getAllCopies().map { it.id }.toSet())
+        assertTrue(database.libraryDao().getAllScanAttempts().all { it.undoneAt == null })
+    }
+
+    @Test
+    fun unfinishedScanSessionIsRecoveredAndCanBeSafelyFinished() = runBlocking {
+        val firstRepository = repository(
+            ids = listOf("session-1"),
+            service = BookMetadataService { BookMetadataLookupResult.NotFound },
+        )
+        assertEquals("session-1", firstRepository.startScanSession())
+        val recreatedRepository = repository(
+            ids = listOf("session-2"),
+            service = BookMetadataService { BookMetadataLookupResult.NotFound },
+        )
+
+        assertEquals("session-1", recreatedRepository.startScanSession())
+        assertTrue(recreatedRepository.finishScanSession("session-1"))
+        assertNull(database.libraryDao().findActiveScanSession())
+    }
+
+    @Test
+    fun finishedScanSessionRejectsLaterAttemptRecording() = runBlocking {
+        val repository = repository(
+            ids = listOf("session-1"),
+            service = BookMetadataService { BookMetadataLookupResult.NotFound },
+        )
+        val sessionId = repository.startScanSession()!!
+        assertTrue(repository.finishScanSession(sessionId))
+
+        assertTrue(
+            !repository.recordScanAttempt(sessionId, ISBN, AddBookResult.NotFound(ISBN)),
+        )
+        assertTrue(database.libraryDao().getAllScanAttempts().isEmpty())
     }
 
     @Test

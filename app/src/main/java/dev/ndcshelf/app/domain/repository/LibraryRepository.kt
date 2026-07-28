@@ -10,6 +10,7 @@ import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.PurchaseTransition
+import dev.ndcshelf.app.domain.model.ScanSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -18,7 +19,25 @@ interface LibraryRepository {
 
     fun observeWishlist(): Flow<List<BookstoreBook>> = emptyFlow()
 
+    fun observeScanSessions(): Flow<List<ScanSession>> = emptyFlow()
+
     suspend fun addFromIsbn(rawIsbn: String): AddBookResult
+
+    suspend fun startScanSession(): String? = null
+
+    suspend fun activeScanSessionId(): String? = null
+
+    suspend fun finishScanSession(sessionId: String): Boolean = false
+
+    suspend fun recordScanAttempt(
+        sessionId: String,
+        rawIsbn: String,
+        result: AddBookResult,
+    ): Boolean = false
+
+    suspend fun undoScanAttempt(attemptId: String): ScanUndoResult = ScanUndoResult.Failure
+
+    suspend fun undoScanSession(sessionId: String): ScanUndoResult = ScanUndoResult.Failure
 
     suspend fun addAnotherCopy(rawIsbn: String, copyLabel: String): AddBookResult =
         AddBookResult.Failure(AddBookFailure.SAVE)
@@ -50,6 +69,13 @@ interface LibraryRepository {
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+sealed interface ScanUndoResult {
+    data class Undone(val count: Int) : ScanUndoResult
+    data object Conflict : ScanUndoResult
+    data object NotFound : ScanUndoResult
+    data object Failure : ScanUndoResult
 }
 
 sealed interface BookstoreLookupResult {
