@@ -40,6 +40,60 @@ data class BookEditionEntity(
 )
 
 @Entity(
+    tableName = "location_rooms",
+    indices = [Index(value = ["name"], unique = true)],
+)
+data class LocationRoomEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val sortOrder: Int,
+)
+
+@Entity(
+    tableName = "location_shelves",
+    foreignKeys = [
+        ForeignKey(
+            entity = LocationRoomEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["roomId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["roomId"]),
+        Index(value = ["roomId", "name"], unique = true),
+    ],
+)
+data class LocationShelfEntity(
+    @PrimaryKey val id: String,
+    val roomId: String,
+    val name: String,
+    val sortOrder: Int,
+)
+
+@Entity(
+    tableName = "location_tiers",
+    foreignKeys = [
+        ForeignKey(
+            entity = LocationShelfEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["shelfId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["shelfId"]),
+        Index(value = ["shelfId", "name"], unique = true),
+    ],
+)
+data class LocationTierEntity(
+    @PrimaryKey val id: String,
+    val shelfId: String,
+    val name: String,
+    val sortOrder: Int,
+)
+
+@Entity(
     tableName = "owned_copies",
     foreignKeys = [
         ForeignKey(
@@ -48,8 +102,14 @@ data class BookEditionEntity(
             childColumns = ["editionId"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = LocationTierEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["tierId"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
     ],
-    indices = [Index(value = ["editionId"])],
+    indices = [Index(value = ["editionId"]), Index(value = ["tierId"])],
 )
 data class OwnedCopyEntity(
     @PrimaryKey val id: String,
@@ -58,6 +118,7 @@ data class OwnedCopyEntity(
     val location: String,
     val readingStatus: String,
     val addedAt: Long,
+    val tierId: String? = null,
 )
 
 data class LibraryBookRow(
@@ -75,6 +136,12 @@ data class LibraryBookRow(
     val classificationSource: String,
     val mediaType: String,
     val location: String,
+    val locationTierId: String?,
     val readingStatus: String,
     val addedAt: Long,
+)
+
+data class LocationTierCountRow(
+    val tierId: String,
+    val copyCount: Int,
 )

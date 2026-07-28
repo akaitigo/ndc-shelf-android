@@ -71,6 +71,8 @@ fun NdcShelfApp(viewModel: MainViewModel) {
     val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
     val databaseBackupState by viewModel.databaseBackupState.collectAsStateWithLifecycle()
     val libraryExportState by viewModel.libraryExportState.collectAsStateWithLifecycle()
+    val locations by viewModel.locations.collectAsStateWithLifecycle()
+    val locationMutationState by viewModel.locationMutationState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
 
     fun saveExport(uri: Uri?, format: LibraryExportFormat) {
@@ -365,6 +367,13 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 onClearBookEditState = viewModel::clearBookEditState,
                 bookDeleteState = bookDeleteState,
                 onClearBookDeleteState = viewModel::clearBookDeleteState,
+                locations = locations,
+                locationMutationState = locationMutationState,
+                onAddLocation = viewModel::addLocation,
+                onRenameLocation = viewModel::renameLocation,
+                onMoveLocation = viewModel::moveLocation,
+                onDeleteLocation = viewModel::deleteLocation,
+                onClearLocationState = viewModel::clearLocationMutationState,
                 contentPadding = contentPadding,
             )
 

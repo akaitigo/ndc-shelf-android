@@ -3,6 +3,9 @@ package dev.ndcshelf.app.domain.backup
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.LocationRoomEntity
+import dev.ndcshelf.app.data.local.LocationShelfEntity
+import dev.ndcshelf.app.data.local.LocationTierEntity
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -167,6 +170,36 @@ internal class DatabaseBackupCodec(
                     put("location", JsonPrimitive(copy.location))
                     put("readingStatus", JsonPrimitive(copy.readingStatus))
                     put("addedAt", JsonPrimitive(copy.addedAt))
+                    putNullable("tierId", copy.tierId)
+                })
+            }
+        })
+        put("rooms", buildJsonArray {
+            snapshot.rooms.forEach { room ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(room.id))
+                    put("name", JsonPrimitive(room.name))
+                    put("sortOrder", JsonPrimitive(room.sortOrder))
+                })
+            }
+        })
+        put("shelves", buildJsonArray {
+            snapshot.shelves.forEach { shelf ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(shelf.id))
+                    put("roomId", JsonPrimitive(shelf.roomId))
+                    put("name", JsonPrimitive(shelf.name))
+                    put("sortOrder", JsonPrimitive(shelf.sortOrder))
+                })
+            }
+        })
+        put("tiers", buildJsonArray {
+            snapshot.tiers.forEach { tier ->
+                add(buildJsonObject {
+                    put("id", JsonPrimitive(tier.id))
+                    put("shelfId", JsonPrimitive(tier.shelfId))
+                    put("name", JsonPrimitive(tier.name))
+                    put("sortOrder", JsonPrimitive(tier.sortOrder))
                 })
             }
         })
@@ -209,24 +242,67 @@ internal class DatabaseBackupCodec(
                 readingStatus = value.optionalString("readingStatus")
                     ?: if (formatVersion == 1) "UNREAD" else invalid("Missing readingStatus"),
                 addedAt = value.requiredLong("addedAt"),
+                tierId = value.optionalString("tierId"),
             )
         }
-        return DatabaseSnapshot(works, editions, copies)
+        val rooms = payload.versionedArray("rooms", schemaVersion, 3).map { element ->
+            val value = element.jsonObject
+            LocationRoomEntity(
+                id = value.requiredString("id"),
+                name = value.requiredString("name"),
+                sortOrder = value.requiredInt("sortOrder"),
+            )
+        }
+        val shelves = payload.versionedArray("shelves", schemaVersion, 3).map { element ->
+            val value = element.jsonObject
+            LocationShelfEntity(
+                id = value.requiredString("id"),
+                roomId = value.requiredString("roomId"),
+                name = value.requiredString("name"),
+                sortOrder = value.requiredInt("sortOrder"),
+            )
+        }
+        val tiers = payload.versionedArray("tiers", schemaVersion, 3).map { element ->
+            val value = element.jsonObject
+            LocationTierEntity(
+                id = value.requiredString("id"),
+                shelfId = value.requiredString("shelfId"),
+                name = value.requiredString("name"),
+                sortOrder = value.requiredInt("sortOrder"),
+            )
+        }
+        return DatabaseSnapshot(works, editions, copies, rooms, shelves, tiers)
     }
 
     private fun validateSnapshot(snapshot: DatabaseSnapshot) {
         if (snapshot.works.size > limits.maxRecords ||
             snapshot.editions.size > limits.maxRecords ||
-            snapshot.copies.size > limits.maxRecords
+            snapshot.copies.size > limits.maxRecords ||
+            snapshot.rooms.size > limits.maxRecords ||
+            snapshot.shelves.size > limits.maxRecords ||
+            snapshot.tiers.size > limits.maxRecords
         ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::isbn13)
         snapshot.copies.ensureUnique(OwnedCopyEntity::id)
+        snapshot.rooms.ensureUnique(LocationRoomEntity::id)
+        snapshot.rooms.ensureUnique(LocationRoomEntity::name)
+        snapshot.shelves.ensureUnique(LocationShelfEntity::id)
+        snapshot.shelves.ensureUnique { it.roomId to it.name }
+        snapshot.tiers.ensureUnique(LocationTierEntity::id)
+        snapshot.tiers.ensureUnique { it.shelfId to it.name }
         val workIds = snapshot.works.mapTo(hashSetOf(), BookWorkEntity::id)
         val editionIds = snapshot.editions.mapTo(hashSetOf(), BookEditionEntity::id)
+        val roomIds = snapshot.rooms.mapTo(hashSetOf(), LocationRoomEntity::id)
+        val shelfIds = snapshot.shelves.mapTo(hashSetOf(), LocationShelfEntity::id)
+        val tierIds = snapshot.tiers.mapTo(hashSetOf(), LocationTierEntity::id)
         if (snapshot.editions.any { it.workId !in workIds } ||
-            snapshot.copies.any { it.editionId !in editionIds }
+            snapshot.copies.any {
+                it.editionId !in editionIds || it.tierId != null && it.tierId !in tierIds
+            } ||
+            snapshot.shelves.any { it.roomId !in roomIds } ||
+            snapshot.tiers.any { it.shelfId !in shelfIds }
         ) invalid("Foreign key reference is missing")
         val strings = buildList {
             snapshot.works.forEach { add(it.id); add(it.title); add(it.primaryAuthor) }
@@ -236,8 +312,16 @@ internal class DatabaseBackupCodec(
                 add(it.classificationSource)
             }
             snapshot.copies.forEach {
-                add(it.id); add(it.editionId); add(it.mediaType); add(it.location); add(it.readingStatus)
+                add(it.id)
+                add(it.editionId)
+                add(it.mediaType)
+                add(it.location)
+                add(it.readingStatus)
+                add(it.tierId.orEmpty())
             }
+            snapshot.rooms.forEach { add(it.id); add(it.name) }
+            snapshot.shelves.forEach { add(it.id); add(it.roomId); add(it.name) }
+            snapshot.tiers.forEach { add(it.id); add(it.shelfId); add(it.name) }
         }
         if (strings.any { it.length > limits.maxStringLength }) invalid("String is too long")
         if (strings.sumOf { it.length.toLong() } > limits.maxTotalCharacters) {
@@ -251,6 +335,9 @@ internal class DatabaseBackupCodec(
 
     private fun JsonObject.requiredArray(name: String): JsonArray =
         this[name]?.let { runCatching { it.jsonArray }.getOrNull() } ?: invalid("Missing $name")
+
+    private fun JsonObject.versionedArray(name: String, schemaVersion: Int, addedIn: Int): JsonArray =
+        if (schemaVersion < addedIn) JsonArray(emptyList()) else requiredArray(name)
 
     private fun JsonObject.requiredString(name: String): String =
         this[name]?.jsonPrimitive?.contentOrNull ?: invalid("Missing $name")
@@ -333,8 +420,8 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 2
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 2
+        const val CURRENT_FORMAT_VERSION = 3
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 3
         private const val FORMAT_ID = "ndc-shelf-room-backup"
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val PAYLOAD_ENTRY = "database.json"

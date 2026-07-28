@@ -33,6 +33,7 @@ class RoomDatabaseBackupManager(
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : DatabaseBackupManager {
     private val dao = database.libraryDao()
+    private val locationDao = database.locationDao()
     private val codec = DatabaseBackupCodec(APP_DATABASE_VERSION)
 
     override suspend fun createBackup(output: OutputStream): DatabaseBackupCreateResult = try {
@@ -86,10 +87,16 @@ class RoomDatabaseBackupManager(
             automaticBackupName = automaticBackup.name
 
             dao.deleteAllCopies()
+            locationDao.deleteAllTiers()
+            locationDao.deleteAllShelves()
+            locationDao.deleteAllRooms()
             dao.deleteAllEditions()
             dao.deleteAllWorks()
             dao.upsertWorks(preview.snapshot.works)
             dao.upsertEditions(preview.snapshot.editions)
+            locationDao.upsertRooms(preview.snapshot.rooms)
+            locationDao.upsertShelves(preview.snapshot.shelves)
+            locationDao.upsertTiers(preview.snapshot.tiers)
             dao.upsertCopies(preview.snapshot.copies)
 
             check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
@@ -111,6 +118,9 @@ class RoomDatabaseBackupManager(
         works = dao.getAllWorks(),
         editions = dao.getAllEditions(),
         copies = dao.getAllCopies(),
+        rooms = locationDao.getRooms(),
+        shelves = locationDao.getAllShelves(),
+        tiers = locationDao.getAllTiers(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {

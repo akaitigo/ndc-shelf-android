@@ -3,11 +3,17 @@ package dev.ndcshelf.app.domain.backup
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.LocationRoomEntity
+import dev.ndcshelf.app.data.local.LocationShelfEntity
+import dev.ndcshelf.app.data.local.LocationTierEntity
 
 data class DatabaseSnapshot(
     val works: List<BookWorkEntity>,
     val editions: List<BookEditionEntity>,
     val copies: List<OwnedCopyEntity>,
+    val rooms: List<LocationRoomEntity> = emptyList(),
+    val shelves: List<LocationShelfEntity> = emptyList(),
+    val tiers: List<LocationTierEntity> = emptyList(),
 )
 
 data class DatabaseBackupMetadata(

@@ -24,7 +24,7 @@ Robolectric層はGitHub Actionsの `testDebugUnitTest` で毎回実行する。�
 
 ## Schemaの正本
 
-`app/schemas/dev.ndcshelf.app.data.local.AppDatabase/<version>.json` を履歴の正本としてGit管理する。現在はv1で、必須列、主キー、CASCADE外部キー、ISBN unique index、値保持を `AppDatabaseMigrationTest` が検証する。
+`app/schemas/dev.ndcshelf.app.data.local.AppDatabase/<version>.json` を履歴の正本としてGit管理する。現在はv2で、必須列、主キー、外部キー、unique index、旧置き場所文字列の値保持を `AppDatabaseMigrationTest` が検証する。
 
 CIはKSP実行後に `git diff --exit-code -- app/schemas` を実行する。DB版を上げず既存JSONが書き換わった場合や、新しいfixtureをコミットし忘れた場合は失敗する。
 
@@ -47,6 +47,7 @@ CIはKSP実行後に `git diff --exit-code -- app/schemas` を実行する。DB�
 - 途中INSERT失敗と不正importの全transactionロールバック
 - metadata取得キャンセルの再送出と書き込み0件
 - 未知の `classificationSource`、`mediaType`、`readingStatus` の安全な既定値
+- 空の部屋・本棚を含む階層、同一親内の名称制約、並べ替え、使用中の場所の再割り当て
 
 ## 実行方法
 
@@ -60,4 +61,3 @@ CIはKSP実行後に `git diff --exit-code -- app/schemas` を実行する。DB�
 ```bash
 ./gradlew connectedDebugAndroidTest
 ```
-

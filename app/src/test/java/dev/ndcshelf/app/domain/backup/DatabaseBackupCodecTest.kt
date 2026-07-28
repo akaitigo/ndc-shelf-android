@@ -3,6 +3,9 @@ package dev.ndcshelf.app.domain.backup
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.LocationRoomEntity
+import dev.ndcshelf.app.data.local.LocationShelfEntity
+import dev.ndcshelf.app.data.local.LocationTierEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -137,8 +140,12 @@ class DatabaseBackupCodecTest {
                 location = "書斎",
                 readingStatus = "READING",
                 addedAt = 1_700_000_000_000,
+                tierId = "tier-1",
             ),
         ),
+        rooms = listOf(LocationRoomEntity("room-1", "書斎", 0)),
+        shelves = listOf(LocationShelfEntity("shelf-1", "room-1", "本棚", 0)),
+        tiers = listOf(LocationTierEntity("tier-1", "shelf-1", "上段", 0)),
     )
 
     private fun unzip(archive: ByteArray): Map<String, ByteArray> {

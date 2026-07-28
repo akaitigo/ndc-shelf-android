@@ -24,10 +24,15 @@ import dev.ndcshelf.app.domain.importer.LibraryJsonParseResult
 import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditValidationError
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LocationLevel
+import dev.ndcshelf.app.domain.model.LocationMutationResult
+import dev.ndcshelf.app.domain.model.LocationTree
+import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
+import dev.ndcshelf.app.domain.repository.LocationRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
@@ -39,6 +44,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -49,6 +55,7 @@ class MainViewModel(
     private val importIoDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val importComputationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val databaseBackupManager: DatabaseBackupManager? = null,
+    private val locationRepository: LocationRepository? = null,
 ) : ViewModel() {
     val books: StateFlow<List<LibraryBook>> = repository.observeLibrary()
         .stateIn(
@@ -56,6 +63,8 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+    val locations: StateFlow<LocationTree> = (locationRepository?.observeTree() ?: flowOf(LocationTree()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LocationTree())
 
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
@@ -69,6 +78,8 @@ class MainViewModel(
     val databaseBackupState: StateFlow<DatabaseBackupUiState> = _databaseBackupState.asStateFlow()
     private val _libraryExportState = MutableStateFlow<LibraryExportUiState>(LibraryExportUiState.Idle)
     val libraryExportState: StateFlow<LibraryExportUiState> = _libraryExportState.asStateFlow()
+    private val _locationMutationState = MutableStateFlow<LocationMutationUiState>(LocationMutationUiState.Idle)
+    val locationMutationState: StateFlow<LocationMutationUiState> = _locationMutationState.asStateFlow()
 
     private var lastSubmission: Pair<String, Long>? = null
     private val jsonImporter = LibraryJsonImporter()
@@ -286,6 +297,62 @@ class MainViewModel(
         }
     }
 
+    fun addLocation(level: LocationLevel, parentId: String?, name: String) {
+        mutateLocation {
+            when (level) {
+                LocationLevel.ROOM -> addRoom(name)
+                LocationLevel.SHELF -> parentId?.let { addShelf(it, name) }
+                    ?: LocationMutationResult.NotFound
+                LocationLevel.TIER -> parentId?.let { addTier(it, name) }
+                    ?: LocationMutationResult.NotFound
+            }
+        }
+    }
+
+    fun renameLocation(level: LocationLevel, id: String, name: String) {
+        mutateLocation { rename(level, id, name) }
+    }
+
+    fun moveLocation(level: LocationLevel, id: String, direction: MoveDirection) {
+        mutateLocation { move(level, id, direction) }
+    }
+
+    fun deleteLocation(
+        level: LocationLevel,
+        id: String,
+        replacementTierId: String? = null,
+        confirmUnset: Boolean = false,
+    ) {
+        mutateLocation(level, id) { delete(level, id, replacementTierId, confirmUnset) }
+    }
+
+    fun clearLocationMutationState() {
+        _locationMutationState.value = LocationMutationUiState.Idle
+    }
+
+    private fun mutateLocation(
+        level: LocationLevel? = null,
+        id: String? = null,
+        operation: suspend LocationRepository.() -> LocationMutationResult,
+    ) {
+        if (_locationMutationState.value === LocationMutationUiState.Working) return
+        val locations = locationRepository ?: return
+        viewModelScope.launch {
+            _locationMutationState.value = LocationMutationUiState.Working
+            _locationMutationState.value = when (val result = locations.operation()) {
+                LocationMutationResult.Success -> LocationMutationUiState.Success
+                is LocationMutationResult.InUse -> LocationMutationUiState.InUse(
+                    requireNotNull(level), requireNotNull(id), result.copyCount,
+                )
+                is LocationMutationResult.InvalidName -> LocationMutationUiState.Error(result.reason)
+                LocationMutationResult.DuplicateName -> LocationMutationUiState.Error("同じ階層に同名の場所があります")
+                LocationMutationResult.NotFound -> LocationMutationUiState.Error("場所が見つかりません")
+                LocationMutationResult.InvalidDestination -> LocationMutationUiState.Error("移動先の段を選び直してください")
+                LocationMutationResult.Failure -> LocationMutationUiState.Error("場所を更新できませんでした")
+            }
+        }
+    }
+
     fun deleteBook(copyId: String) {
         if (_bookDeleteState.value is BookDeleteUiState.Deleting ||
             _bookDeleteState.value is BookDeleteUiState.Restoring
@@ -495,6 +562,7 @@ class MainViewModel(
         fun factory(
             repository: LibraryRepository,
             databaseBackupManager: DatabaseBackupManager,
+            locationRepository: LocationRepository,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -503,10 +571,19 @@ class MainViewModel(
                     return MainViewModel(
                         repository = repository,
                         databaseBackupManager = databaseBackupManager,
+                        locationRepository = locationRepository,
                     ) as T
                 }
             }
     }
+}
+
+sealed interface LocationMutationUiState {
+    data object Idle : LocationMutationUiState
+    data object Working : LocationMutationUiState
+    data object Success : LocationMutationUiState
+    data class InUse(val level: LocationLevel, val id: String, val copyCount: Int) : LocationMutationUiState
+    data class Error(val message: String) : LocationMutationUiState
 }
 
 sealed interface DatabaseBackupUiState {
