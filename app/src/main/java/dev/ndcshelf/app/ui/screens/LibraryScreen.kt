@@ -180,7 +180,8 @@ fun LibraryScreen(
         }
     }
 
-    if (!searchIsCurrent) {
+    val isDetailLoading = !searchIsCurrent && searchCriteria?.selectedEditionId != null
+    if (isDetailLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
@@ -189,7 +190,7 @@ fun LibraryScreen(
                 modifier = Modifier.fillMaxWidth().testTag(LIBRARY_SEARCH_PROGRESS_TAG),
             )
         }
-    } else if (selectedCopies.isNotEmpty()) {
+    } else if (searchIsCurrent && selectedCopies.isNotEmpty()) {
         BookDetailScreen(
             copies = selectedCopies,
             onBack = {
@@ -264,7 +265,16 @@ fun LibraryScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
-            if (visibleBooks.isEmpty()) {
+            if (!searchIsCurrent) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().testTag(LIBRARY_SEARCH_PROGRESS_TAG),
+                    )
+                }
+            } else if (visibleBooks.isEmpty()) {
                 EmptyLibrary(
                     isSearching = query.isNotBlank(),
                     modifier = Modifier

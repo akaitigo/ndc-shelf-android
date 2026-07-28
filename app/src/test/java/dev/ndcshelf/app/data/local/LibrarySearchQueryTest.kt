@@ -106,6 +106,39 @@ class LibrarySearchQueryTest {
     }
 
     @Test
+    fun selectedEditionModeIncludesOnlyNeighborsFromItsTiers() = runBlocking {
+        insertBooks(listOf(sample(0), sample(1), sample(2)))
+        val locations = database.locationDao()
+        locations.upsertRooms(listOf(LocationRoomEntity("room", "部屋", 0)))
+        locations.upsertShelves(listOf(LocationShelfEntity("shelf", "room", "棚", 0)))
+        locations.upsertTiers(
+            listOf(
+                LocationTierEntity("tier-selected", "shelf", "上段", 0),
+                LocationTierEntity("tier-unrelated", "shelf", "下段", 1),
+            ),
+        )
+        dao.updateCopy(
+            "copy-0", "部屋 / 棚 / 上段", ReadingStatus.UNREAD.name,
+            "tier-selected", "100", "所蔵本",
+        )
+        dao.updateCopy(
+            "copy-1", "部屋 / 棚 / 下段", ReadingStatus.UNREAD.name,
+            "tier-unrelated", "100", "所蔵本",
+        )
+        dao.updateCopy(
+            "copy-2", "部屋 / 棚 / 上段", ReadingStatus.UNREAD.name,
+            "tier-selected", "200", "所蔵本",
+        )
+
+        assertEquals(
+            setOf("copy-0", "copy-2"),
+            search(criteria = LibrarySearchCriteria(selectedEditionId = "edition-0"))
+                .map(LibraryBookRow::copyId)
+                .toSet(),
+        )
+    }
+
+    @Test
     fun representativeDatasetsRemainQueryable() = runBlocking {
         var inserted = 0
         listOf(1_000, 5_000, 20_000).forEach { size ->

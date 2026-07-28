@@ -53,6 +53,7 @@ class LibrarySearchScreenTest {
         )
 
         composeRule.onNodeWithTag(LIBRARY_SEARCH_PROGRESS_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText("new").assertIsDisplayed()
         composeRule.onAllNodesWithText("古い結果").assertCountEquals(0)
     }
 

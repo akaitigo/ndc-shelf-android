@@ -32,10 +32,13 @@ internal fun LibrarySearchCriteria.toSQLiteQuery(): SupportSQLiteQuery {
             arguments += status.name
         }
     } else {
-        // Detail editing needs every copy of the edition and shelved neighbors for placement.
+        // Detail editing needs every edition copy and only its shelves' neighbors for placement.
         conditions += """
-            EXISTS (SELECT 1 FROM book_editions AS selected WHERE selected.id = ?) AND
-            (editions.id = ? OR copies.tierId IS NOT NULL)
+            editions.id = ? OR copies.tierId IN (
+                SELECT selectedCopies.tierId
+                FROM owned_copies AS selectedCopies
+                WHERE selectedCopies.editionId = ? AND selectedCopies.tierId IS NOT NULL
+            )
         """.trimIndent()
         arguments += selectedEditionId
         arguments += selectedEditionId
