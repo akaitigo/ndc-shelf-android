@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasContentDescription
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
@@ -94,6 +96,40 @@ class LibraryLocationScreenTest {
     }
 
     @Test
+    fun changingTargetTierReplacesInsertionCandidates() {
+        val books = listOf(
+            book(),
+            book().copy(
+                copyId = "upper",
+                workId = "upper-work",
+                editionId = "upper-edition",
+                title = "上段の本",
+                shelfOrderKey = "60",
+            ),
+            book().copy(
+                copyId = "lower",
+                workId = "lower-work",
+                editionId = "lower-edition",
+                title = "下段の本",
+                location = "書斎 / 本棚A / 下段",
+                locationTierId = "lower-tier",
+                shelfOrderKey = "20",
+            ),
+        )
+        setLibraryContent(books)
+
+        composeRule.onNodeWithText("テスト本").performClick()
+        openCopyEditor("所蔵本")
+        composeRule.onNodeWithText("「上段の本」の後").assertExists()
+
+        composeRule.onNodeWithText("書斎 / 本棚A / 下段")
+            .performSemanticsAction(SemanticsActions.OnClick)
+
+        composeRule.onNodeWithText("「下段の本」の後").assertExists()
+        composeRule.onNodeWithText("「上段の本」の後").assertDoesNotExist()
+    }
+
+    @Test
     fun listShowsCopyLabelsAndEditionCopyCount() {
         val books = listOf(
             book().copy(copyId = "copy-1", copyLabel = "保存用"),
@@ -156,7 +192,10 @@ class LibraryLocationScreenTest {
                         roomId = "room",
                         name = "本棚A",
                         sortOrder = 0,
-                        tiers = listOf(LocationTier("tier", "shelf", "上段", 0, 1)),
+                        tiers = listOf(
+                            LocationTier("tier", "shelf", "上段", 0, 1),
+                            LocationTier("lower-tier", "shelf", "下段", 1, 2),
+                        ),
                     ),
                 ),
             ),
