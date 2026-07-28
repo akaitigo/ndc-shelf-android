@@ -19,11 +19,13 @@
 4. `verifyBackupPolicy`を実行し、API別のクラウド除外と端末間転送条件を検査する。
 5. `verifyLicenseReport`を実行し、直接・推移依存関係、空のライセンス割当、Apache-2.0・BSD-3-Clause・MIT本文の同梱を検査する。
 6. 新規・更新依存のライセンスとNOTICE要件を個別に確認する。自動生成結果だけで法的判断を完結させない。
-7. ストア公開前に、ストアの最新データセーフティ定義と署名済み成果物を再照合する。
+7. `:app:cyclonedxDirectBom`のSBOMを基準にGoogle Play SDK Index、提供元のData safety guidance、実際の通信挙動を確認する。
+8. ストア公開前に、ストアの最新データセーフティ定義と署名済み成果物を再照合する。詳細は[依存関係とサプライチェーン管理](DEPENDENCY_SECURITY.md)を参照する。
 
 ## 受け入れ条件
 
 - アプリ内の主要文面とOSSライセンス本文がネットワークなしで読める。
 - アプリ内、`PRIVACY.md`、README、SECURITY、ストア原稿の通信先・報告先・バックアップ説明が一致する。
-- `./gradlew verifyBackupPolicy verifyLicenseReport testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest`が成功する。
+- `./gradlew verifyBackupPolicy verifyLicenseReport :app:cyclonedxDirectBom testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest`が成功する。
+- CIのDependency ReviewとOSV-Scannerが成功し、SBOMとNOTICE artifactを取得できる。
 - UI変更を実機またはエミュレーターで確認し、情報画面とライセンス詳細のスクリーンショットをPRへ添付する。

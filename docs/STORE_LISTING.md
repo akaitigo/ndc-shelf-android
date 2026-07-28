@@ -25,4 +25,6 @@ NDC Shelfはアカウント、広告、開発者独自のアクセス解析・�
 
 - [v0.2リリースチェックリスト](releases/V0.2_RELEASE_CHECKLIST.md)の実機証跡を全て完了する。
 - [v0.2ロールバック手順](releases/V0.2_ROLLBACK.md)と`CHANGELOG.md`を公開担当者が確認する。
+- `release-compliance` artifactのSBOMでSDK Indexと提供元のData safety guidanceを再確認し、確認日・対象version・判断をリリースPRへ記録する。
+- OSV-ScannerとDependency Reviewに未解決の検出がなく、NOTICEをレビュー済みであることを確認する。
 - NDL Searchの最新利用条件を確認し、営利利用・法人配布・継続的大規模利用に該当する場合は必要な申請・連絡を完了する。

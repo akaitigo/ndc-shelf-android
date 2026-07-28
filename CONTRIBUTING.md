@@ -24,7 +24,7 @@ UI変更では、可能ならBefore / Afterのスクリーンショットを添�
 
 ## 依存関係の更新
 
-Dependabot PRも1件ずつrelease note、breaking change、license、互換性を確認し、通常のtest・lint・buildを通します。Android plugin、runtime、UI、databaseへ影響する更新ではinstrumentation testも実行します。CI成功だけを根拠に自動mergeせず、問題時はmainのmerge commitをrevertします。
+Dependabot PRも1件ずつrelease note、breaking change、license、互換性を確認し、通常のtest・lint・buildを通します。Android plugin、runtime、UI、databaseへ影響する更新ではinstrumentation testも実行します。CI成功だけを根拠に自動mergeせず、問題時はmainのmerge commitをrevertします。検証手順、SBOM、脆弱性例外は[依存関係とサプライチェーン管理](docs/DEPENDENCY_SECURITY.md)に従います。
 
 ## Commit
 

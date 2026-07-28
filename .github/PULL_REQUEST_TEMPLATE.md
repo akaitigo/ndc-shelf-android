@@ -16,6 +16,7 @@ Closes #
 - [ ] 対象を絞った追加test
 - [ ] 必要なemulatorまたは実機確認
 - [ ] GitHub Actions
+- [ ] 依存変更時: license / SBOM / SDK Index / Data safety
 
 未実施項目と理由:
 
