@@ -166,5 +166,6 @@ class LibraryCsvImporterTest {
         location = location,
         readingStatus = ReadingStatus.READING,
         addedAt = 1_700_000_000_000L,
+        copyLabel = "保存用",
     )
 }

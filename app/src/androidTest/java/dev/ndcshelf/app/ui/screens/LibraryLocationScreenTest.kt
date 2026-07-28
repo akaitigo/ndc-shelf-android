@@ -66,6 +66,22 @@ class LibraryLocationScreenTest {
         composeRule.onNodeWithText("棚へ入れる位置").assertIsDisplayed()
     }
 
+    @Test
+    fun listShowsCopyLabelsAndEditionCopyCount() {
+        val books = listOf(
+            book().copy(copyId = "copy-1", copyLabel = "保存用"),
+            book().copy(copyId = "copy-2", copyLabel = "貸出用"),
+        )
+        setLibraryContent(books)
+
+        composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
+        composeRule.onNodeWithText("貸出用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
+
+        composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").performClick()
+        composeRule.onNodeWithText("コピーごとの情報").assertIsDisplayed()
+        composeRule.onNodeWithText("同じ版で共通の情報").assertIsDisplayed()
+    }
+
     private fun setLibraryContent(books: List<LibraryBook>) {
         composeRule.setContent {
             NdcShelfTheme {

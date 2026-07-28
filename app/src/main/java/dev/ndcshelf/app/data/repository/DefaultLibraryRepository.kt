@@ -62,7 +62,10 @@ class DefaultLibraryRepository(
             ?: return AddBookResult.InvalidIsbn(rawIsbn)
 
         dao.findOwnedByIsbn(isbn13)?.let { existing ->
-            return AddBookResult.Duplicate(existing.toDomain())
+            return AddBookResult.Duplicate(
+                existing.toDomain(),
+                dao.countCopiesForEdition(existing.editionId),
+            )
         }
 
         val lookup = try {
@@ -122,6 +125,7 @@ class DefaultLibraryRepository(
                         location = "未設定",
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
+                        copyLabel = "1冊目",
                     ),
                 )
             }
@@ -149,8 +153,57 @@ class DefaultLibraryRepository(
                 location = "未設定",
                 readingStatus = ReadingStatus.UNREAD,
                 addedAt = addedAt,
+                copyLabel = "1冊目",
             ),
         )
+    }
+
+    override suspend fun addAnotherCopy(
+        rawIsbn: String,
+        copyLabel: String,
+    ): AddBookResult {
+        val isbn13 = Isbn.normalizeToIsbn13(rawIsbn)
+            ?: return AddBookResult.InvalidIsbn(rawIsbn)
+        return try {
+            database.withTransaction {
+                val existing = dao.findOwnedByIsbn(isbn13)
+                    ?: return@withTransaction AddBookResult.NotFound(isbn13)
+                val count = dao.countCopiesForEdition(existing.editionId)
+                val normalizedLabel = copyLabel.trim().ifEmpty { "${count + 1}冊目" }
+                if (normalizedLabel.length > MAX_COPY_LABEL_LENGTH || '\u0000' in normalizedLabel) {
+                    return@withTransaction AddBookResult.Failure(AddBookFailure.SAVE, isbn13)
+                }
+                val copyId = idFactory()
+                val addedAt = nowMillis()
+                dao.insertCopy(
+                    OwnedCopyEntity(
+                        id = copyId,
+                        editionId = existing.editionId,
+                        mediaType = MediaType.PHYSICAL.name,
+                        location = "未設定",
+                        readingStatus = ReadingStatus.UNREAD.name,
+                        addedAt = addedAt,
+                        copyLabel = normalizedLabel,
+                    ),
+                )
+                AddBookResult.Added(
+                    existing.toDomain().copy(
+                        copyId = copyId,
+                        mediaType = MediaType.PHYSICAL,
+                        location = "未設定",
+                        readingStatus = ReadingStatus.UNREAD,
+                        addedAt = addedAt,
+                        locationTierId = null,
+                        shelfOrderKey = null,
+                        copyLabel = normalizedLabel,
+                    ),
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            AddBookResult.Failure(AddBookFailure.SAVE, isbn13)
+        }
     }
 
     override suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult {
@@ -205,6 +258,7 @@ class DefaultLibraryRepository(
                     location = edit.location,
                     tierId = edit.locationTierId,
                     shelfOrderKey = shelfOrderKey,
+                    copyLabel = edit.copyLabel,
                     readingStatus = edit.readingStatus.name,
                 )
                 UpdateBookResult.Updated(
@@ -220,6 +274,7 @@ class DefaultLibraryRepository(
                         location = edit.location,
                         locationTierId = edit.locationTierId,
                         shelfOrderKey = shelfOrderKey,
+                        copyLabel = edit.copyLabel,
                         readingStatus = edit.readingStatus,
                     ),
                 )
@@ -260,6 +315,7 @@ class DefaultLibraryRepository(
                     location = previous.location,
                     tierId = previous.locationTierId,
                     shelfOrderKey = previous.shelfOrderKey,
+                    copyLabel = previous.copyLabel,
                     readingStatus = previous.readingStatus.name,
                 )
                 true
@@ -451,6 +507,7 @@ private fun LibraryBook.toCopyEntity() = OwnedCopyEntity(
     addedAt = addedAt,
     tierId = locationTierId,
     shelfOrderKey = shelfOrderKey,
+    copyLabel = copyLabel,
 )
 
 internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
@@ -474,7 +531,10 @@ internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     addedAt = addedAt,
     locationTierId = locationTierId,
     shelfOrderKey = shelfOrderKey,
+    copyLabel = copyLabel,
 )
 
 private inline fun <reified T : Enum<T>> String.toEnumOrDefault(default: T): T =
     enumValues<T>().firstOrNull { it.name == this } ?: default
+
+private const val MAX_COPY_LABEL_LENGTH = 100

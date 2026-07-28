@@ -145,7 +145,7 @@ class LibraryImportPlannerTest {
     fun `conflicts are skipped by default or mapped onto existing IDs for update`() {
         val existing = book(title = "旧題", location = "旧棚")
         val incoming = record(
-            copyId = "foreign-copy",
+            copyId = existing.copyId,
             workId = "foreign-work",
             editionId = "foreign-edition",
             title = "新題",
@@ -187,6 +187,43 @@ class LibraryImportPlannerTest {
         assertTrue(result.errors.any { it.field == "isbn13" && it.reason.contains("異なる既存蔵書") })
     }
 
+    @Test
+    fun `same ISBN records become separate copies of one edition`() {
+        val result = planner.preview(
+            batch(
+                record(copyId = "copy-1", workId = "work-a", editionId = "edition-a", copyLabel = "保存用"),
+                record(copyId = "copy-2", workId = "work-b", editionId = "edition-b", copyLabel = "貸出用"),
+            ),
+            existingBooks = emptyList(),
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+
+        assertEquals(2, result.preview.additions.size)
+        assertEquals(setOf("copy-1", "copy-2"), result.preview.additions.map { it.copyId }.toSet())
+        assertEquals(setOf("edition-a"), result.preview.additions.map { it.editionId }.toSet())
+        assertEquals(setOf("work-a"), result.preview.additions.map { it.workId }.toSet())
+        assertEquals(listOf("保存用", "貸出用"), result.preview.additions.map { it.copyLabel })
+    }
+
+    @Test
+    fun `new copy reuses matching existing edition but rejects changed edition metadata`() {
+        val existing = book(copyLabel = "1冊目")
+        val added = planner.preview(
+            batch(record(copyId = "copy-new", copyLabel = "2冊目")),
+            listOf(existing),
+            ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+        val conflict = planner.preview(
+            batch(record(copyId = "copy-other", title = "別の題名")),
+            listOf(existing),
+            ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Invalid
+
+        assertEquals(existing.editionId, added.preview.additions.single().editionId)
+        assertEquals(existing.workId, added.preview.additions.single().workId)
+        assertTrue(conflict.errors.any { it.field == "isbn13" && it.reason.contains("一致しません") })
+    }
+
     private fun batch(vararg records: UnvalidatedLibraryBook) = LibraryImportBatch(
         sourceSizeBytes = 1,
         records = records.toList(),
@@ -203,6 +240,7 @@ class LibraryImportPlannerTest {
         location: String = "本棚A",
         addedAt: Long = ADDED_AT,
         coverUrl: String? = null,
+        copyLabel: String? = null,
     ) = UnvalidatedLibraryBook(
         copyId = copyId,
         workId = workId,
@@ -220,6 +258,7 @@ class LibraryImportPlannerTest {
         location = location,
         readingStatus = "UNREAD",
         addedAt = addedAt,
+        copyLabel = copyLabel,
     )
 
     private fun book(
@@ -229,6 +268,7 @@ class LibraryImportPlannerTest {
         title: String = "本の題名",
         isbn13: String = "9784820418078",
         location: String = "本棚A",
+        copyLabel: String = "所蔵本",
     ) = LibraryBook(
         copyId = copyId,
         workId = workId,
@@ -246,6 +286,7 @@ class LibraryImportPlannerTest {
         location = location,
         readingStatus = ReadingStatus.UNREAD,
         addedAt = ADDED_AT,
+        copyLabel = copyLabel,
     )
 
     private companion object {

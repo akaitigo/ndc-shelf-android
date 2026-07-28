@@ -23,6 +23,10 @@ import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -35,6 +39,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.ConcurrentLinkedQueue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -138,6 +143,83 @@ class DefaultLibraryRepositoryIntegrationTest {
     }
 
     @Test
+    fun anotherCopy_reusesEditionAndDeletingOneCopyKeepsTheOther() = runBlocking {
+        var metadataCalls = 0
+        val repository = repository(
+            ids = listOf("work-1", "edition-1", "copy-1", "copy-2"),
+            service = BookMetadataService {
+                metadataCalls += 1
+                BookMetadataLookupResult.Found(metadata())
+            },
+        )
+        val first = (repository.addFromIsbn(ISBN) as AddBookResult.Added).book
+        val duplicate = repository.addFromIsbn(ISBN) as AddBookResult.Duplicate
+
+        val second = (repository.addAnotherCopy(ISBN, "保存用") as AddBookResult.Added).book
+
+        assertEquals(1, duplicate.copyCount)
+        assertEquals("保存用", second.copyLabel)
+        assertEquals(first.editionId, second.editionId)
+        assertEquals(1, metadataCalls)
+        assertEquals(1, database.libraryDao().getAllWorks().size)
+        assertEquals(1, database.libraryDao().getAllEditions().size)
+        assertEquals(2, database.libraryDao().getAllCopies().size)
+
+        repository.deleteBook(first.copyId)
+        assertEquals(listOf(second.copyId), database.libraryDao().getAllCopies().map { it.id })
+        assertEquals(1, database.libraryDao().getAllEditions().size)
+        assertEquals(1, database.libraryDao().getAllWorks().size)
+
+        repository.deleteBook(second.copyId)
+        assertTrue(database.libraryDao().getAllCopies().isEmpty())
+        assertTrue(database.libraryDao().getAllEditions().isEmpty())
+        assertTrue(database.libraryDao().getAllWorks().isEmpty())
+    }
+
+    @Test
+    fun concurrentDuplicateAdds_createDistinctAutoLabeledCopiesInOneEdition() = runBlocking {
+        val repository = repository(
+            ids = listOf("work-1", "edition-1", "copy-1", "copy-2", "copy-3"),
+            service = BookMetadataService { BookMetadataLookupResult.Found(metadata()) },
+        )
+        repository.addFromIsbn(ISBN)
+
+        val results = coroutineScope {
+            List(2) {
+                async(Dispatchers.Default) { repository.addAnotherCopy(ISBN, "") }
+            }.awaitAll()
+        }
+
+        assertTrue(results.all { it is AddBookResult.Added })
+        val copies = database.libraryDao().getAllCopies()
+        assertEquals(3, copies.size)
+        assertEquals(3, copies.map { it.id }.distinct().size)
+        assertEquals(setOf("1冊目", "2冊目", "3冊目"), copies.map { it.copyLabel }.toSet())
+        assertEquals(1, copies.map { it.editionId }.distinct().size)
+    }
+
+    @Test
+    fun importWritesMultipleCopiesForOneEditionAtomically() = runBlocking {
+        val repository = repository(emptyList(), BookMetadataService { BookMetadataLookupResult.NotFound })
+        val first = importBook("first", ISBN).copy(copyLabel = "保存用")
+        val second = first.copy(copyId = "copy-second", copyLabel = "貸出用")
+        val preview = LibraryImportPreview(
+            additions = listOf(first, second),
+            updates = emptyList(),
+            skippedCount = 0,
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+            existingSnapshot = emptyList(),
+        )
+
+        val result = repository.applyImport(preview) as ImportApplyResult.Applied
+
+        assertEquals(2, result.addedCount)
+        assertEquals(1, database.libraryDao().getAllWorks().size)
+        assertEquals(1, database.libraryDao().getAllEditions().size)
+        assertEquals(listOf("保存用", "貸出用"), database.libraryDao().getAllCopies().map { it.copyLabel })
+    }
+
+    @Test
     fun cancellationFromMetadataLookup_isPropagatedWithoutWrites() = runBlocking {
         val cancellation = CancellationException("cancelled")
         val repository = repository(
@@ -220,11 +302,11 @@ class DefaultLibraryRepositoryIntegrationTest {
         ids: List<String>,
         service: BookMetadataService,
     ): DefaultLibraryRepository {
-        val remainingIds = ArrayDeque(ids)
+        val remainingIds = ConcurrentLinkedQueue(ids)
         return DefaultLibraryRepository(
             database = database,
             metadataService = service,
-            idFactory = { remainingIds.removeFirst() },
+            idFactory = { requireNotNull(remainingIds.poll()) },
             nowMillis = { 1_700_000_000_000L },
         )
     }

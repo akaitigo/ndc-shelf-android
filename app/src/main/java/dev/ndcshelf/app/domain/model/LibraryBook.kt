@@ -19,6 +19,7 @@ data class LibraryBook(
     val addedAt: Long,
     val locationTierId: String? = null,
     val shelfOrderKey: String? = null,
+    val copyLabel: String = "所蔵本",
 ) {
     val ndcCategory: NdcCategory?
         get() = NdcCategory.fromCode(ndcCode)
@@ -35,6 +36,7 @@ data class LibraryBook(
             ndcCode,
             ndcCategory?.label,
             location,
+            copyLabel,
         ).any { value -> value.contains(normalized, ignoreCase = true) }
     }
 }

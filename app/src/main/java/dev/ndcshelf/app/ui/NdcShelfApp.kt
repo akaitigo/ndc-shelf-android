@@ -387,6 +387,7 @@ fun NdcShelfApp(viewModel: MainViewModel) {
                 onCameraError = viewModel::reportCameraError,
                 onRetry = viewModel::retryScan,
                 onClearState = viewModel::clearScanState,
+                onAddDuplicateCopy = viewModel::addDuplicateCopy,
                 contentPadding = contentPadding,
             )
 

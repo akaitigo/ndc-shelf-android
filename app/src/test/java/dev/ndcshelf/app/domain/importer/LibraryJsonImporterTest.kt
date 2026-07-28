@@ -26,6 +26,7 @@ class LibraryJsonImporterTest {
 
         val parsed = LibraryJsonImporter().parse(ByteArrayInputStream(exported))
             as LibraryJsonParseResult.Valid
+        assertEquals(1, parsed.batch.records.size)
         val planned = LibraryImportPlanner(nowMillis = { NOW }).preview(
             batch = parsed.batch,
             existingBooks = emptyList(),
@@ -56,8 +57,24 @@ class LibraryJsonImporterTest {
     }
 
     @Test
+    fun `schema one import defaults the copy label without data loss`() = runBlocking {
+        val source = validJson()
+            .replace("\"schemaVersion\": 2", "\"schemaVersion\": 1")
+            .replace("      \"copyLabel\": \"保存用\",\n", "")
+
+        val parsed = parse(source) as LibraryJsonParseResult.Valid
+        val planned = LibraryImportPlanner(nowMillis = { NOW }).preview(
+            parsed.batch,
+            emptyList(),
+            ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+
+        assertEquals("所蔵本", planned.preview.additions.single().copyLabel)
+    }
+
+    @Test
     fun `future schema version is rejected without exposing input`() = runBlocking {
-        val source = validJson().replace("\"schemaVersion\": 1", "\"schemaVersion\": 999")
+        val source = validJson().replace("\"schemaVersion\": 2", "\"schemaVersion\": 999")
 
         val result = parse(source) as LibraryJsonParseResult.Invalid
 
@@ -178,6 +195,7 @@ class LibraryJsonImporterTest {
         location = "書斎 / 本棚A",
         readingStatus = ReadingStatus.READING,
         addedAt = 1_700_000_000_000L,
+        copyLabel = "保存用",
     )
 
     private companion object {

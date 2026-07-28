@@ -99,7 +99,12 @@ class DefaultLibraryRepositoryBookEditTest {
     @Test
     fun undoDoesNotOverwriteAConcurrentChange() = runBlocking {
         val updated = repository.updateBook("copy-1", editedDraft()) as UpdateBookResult.Updated
-        database.libraryDao().updateCopy("copy-1", "別操作の棚", ReadingStatus.READ.name)
+        database.libraryDao().updateCopy(
+            copyId = "copy-1",
+            location = "別操作の棚",
+            readingStatus = ReadingStatus.READ.name,
+            copyLabel = "所蔵本",
+        )
 
         assertFalse(repository.restoreBook(updated.previous, updated.current))
         assertEquals(

@@ -62,7 +62,7 @@ class LibraryJsonImporter(
         reportUnknownFields(root, ROOT_FIELDS, null, errors)
         val schemaVersion = root.requiredLong("schemaVersion", null, errors)
         val unsupportedSchema = schemaVersion != null &&
-            schemaVersion != LibraryExporter.SCHEMA_VERSION.toLong()
+            schemaVersion !in 1..LibraryExporter.SCHEMA_VERSION.toLong()
         if (unsupportedSchema) {
             errors.addCapped(
                 ImportValidationError(
@@ -96,7 +96,7 @@ class LibraryJsonImporter(
                 errors.addCapped(rootError("bookCount", "booksの実際の件数と一致しません"))
             }
         }
-        if (unsupportedSchema || books == null || tooManyBooks) {
+        if (unsupportedSchema || schemaVersion == null || books == null || tooManyBooks) {
             return LibraryJsonParseResult.Invalid(errors)
         }
 
@@ -104,7 +104,8 @@ class LibraryJsonImporter(
         for ((index, element) in books.withIndex()) {
             currentCoroutineContext().ensureActive()
             if (errors.size < MAX_ERRORS) {
-                parseBook(index + 1, element, errors)?.let(records::add)
+                parseBook(index + 1, element, requireNotNull(schemaVersion).toInt(), errors)
+                    ?.let(records::add)
             }
         }
         if (errors.isNotEmpty()) return LibraryJsonParseResult.Invalid(errors)
@@ -121,6 +122,7 @@ class LibraryJsonImporter(
     private fun parseBook(
         recordNumber: Int,
         element: JsonElement,
+        schemaVersion: Int,
         errors: MutableList<ImportValidationError>,
     ): UnvalidatedLibraryBook? {
         val book = element as? JsonObject
@@ -130,7 +132,8 @@ class LibraryJsonImporter(
         }
         val before = errors.size
         reportUnknownFields(book, BOOK_FIELDS, recordNumber, errors)
-        BOOK_FIELDS.forEach { field ->
+        val requiredFields = if (schemaVersion >= 2) BOOK_FIELDS else BOOK_FIELDS - "copyLabel"
+        requiredFields.forEach { field ->
             if (field !in book) {
                 errors.addCapped(recordError(recordNumber, field, "項目がありません"))
             }
@@ -156,6 +159,7 @@ class LibraryJsonImporter(
         val mediaType = book.string("mediaType", recordNumber, nullable = false, errors)
         val location = book.string("location", recordNumber, nullable = false, errors)
         val readingStatus = book.string("readingStatus", recordNumber, nullable = false, errors)
+        val copyLabel = book.string("copyLabel", recordNumber, nullable = false, errors)
         val addedAt = book.long("addedAt", recordNumber, nullable = false, errors)
 
         if (errors.size != before) return null
@@ -176,6 +180,7 @@ class LibraryJsonImporter(
             location = location,
             readingStatus = readingStatus,
             addedAt = addedAt,
+            copyLabel = copyLabel,
         )
     }
 
@@ -336,6 +341,7 @@ class LibraryJsonImporter(
             "mediaType",
             "location",
             "readingStatus",
+            "copyLabel",
             "addedAt",
         )
     }

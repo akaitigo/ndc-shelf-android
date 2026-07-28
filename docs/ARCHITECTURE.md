@@ -121,7 +121,7 @@ erDiagram
     }
 ```
 
-`BookEdition.isbn13` は現在ユニークです。複数冊所蔵を正式に扱う段階では、既存Editionに新しいOwnedCopyを追加するユースケースを設けます。
+`BookEdition.isbn13`はユニークです。同じISBNを再スキャンした場合は既存Editionを再利用し、新しい`OwnedCopy`だけをトランザクションで追加します。`OwnedCopy.copyLabel`、置き場所、読書状態、取得日時はコピー固有であり、一覧では同一Editionを参照するコピー数と表示名を併記します。Edition共通の書誌情報とコピー固有情報をUI上でも分離し、削除対象は必ずコピー単位で示します。
 
 ### 置き場所
 

@@ -36,6 +36,7 @@ data class UnvalidatedLibraryBook(
     val location: String?,
     val readingStatus: String?,
     val addedAt: Long?,
+    val copyLabel: String? = null,
 )
 
 data class LibraryImportBatch(
@@ -112,14 +113,27 @@ class LibraryImportPlanner(
         val updates = mutableListOf<LibraryBook>()
         var skippedCount = 0
         val existingByCopyId = existingBooks.associateBy(LibraryBook::copyId)
-        val existingByIsbn = existingBooks.associateBy(LibraryBook::isbn13)
+        val existingByIsbn = existingBooks.groupBy(LibraryBook::isbn13)
         val existingByWorkId = existingBooks.groupBy(LibraryBook::workId)
         val existingByEditionId = existingBooks.groupBy(LibraryBook::editionId)
+        val inputEditionByIsbn = normalized.groupBy(LibraryBook::isbn13)
+            .mapValues { (_, copies) -> copies.first() }
 
-        normalized.forEachIndexed { index, book ->
-            val byCopyId = existingByCopyId[book.copyId]
-            val byIsbn = existingByIsbn[book.isbn13]
-            if (byCopyId != null && byIsbn != null && byCopyId.copyId != byIsbn.copyId) {
+        normalized.groupBy(LibraryBook::isbn13).forEach { (_, copies) ->
+            if (copies.map { it.sharedEditionFingerprint() }.distinct().size > 1) {
+                val book = copies.last()
+                errors.addCapped(recordError(
+                    normalized.indexOf(book) + 1,
+                    "isbn13",
+                    "同じISBNに異なる版情報が指定されています",
+                ))
+            }
+        }
+        if (errors.isNotEmpty()) return ImportPreviewResult.Invalid(errors.take(MAX_ERRORS))
+
+        normalized.forEachIndexed { index, rawBook ->
+            val byCopyId = existingByCopyId[rawBook.copyId]
+            if (byCopyId != null && byCopyId.isbn13 != rawBook.isbn13) {
                 errors.addCapped(recordError(
                     index + 1,
                     "isbn13",
@@ -128,8 +142,24 @@ class LibraryImportPlanner(
                 return@forEachIndexed
             }
 
-            val existing = byCopyId ?: byIsbn
-            if (existing == null) {
+            val existingEdition = existingByIsbn[rawBook.isbn13]?.firstOrNull()
+            val sharedEdition = existingEdition ?: inputEditionByIsbn.getValue(rawBook.isbn13)
+            if (byCopyId == null && existingEdition != null &&
+                existingEdition.sharedEditionFingerprint() != rawBook.sharedEditionFingerprint()
+            ) {
+                errors.addCapped(recordError(
+                    index + 1,
+                    "isbn13",
+                    "既存ISBNの版情報と一致しません",
+                ))
+                return@forEachIndexed
+            }
+            val book = rawBook.copy(
+                workId = sharedEdition.workId,
+                editionId = sharedEdition.editionId,
+            )
+
+            if (byCopyId == null) {
                 validateExistingReferences(
                     recordNumber = index + 1,
                     book = book,
@@ -142,9 +172,9 @@ class LibraryImportPlanner(
                 skippedCount += 1
             } else {
                 updates += book.copy(
-                    copyId = existing.copyId,
-                    workId = existing.workId,
-                    editionId = existing.editionId,
+                    copyId = byCopyId.copyId,
+                    workId = byCopyId.workId,
+                    editionId = byCopyId.editionId,
                 )
             }
         }
@@ -261,6 +291,13 @@ class LibraryImportPlanner(
         )
         val publishedYear = normalizePublishedYear(recordNumber, record.publishedYear, errors)
         val addedAt = normalizeAddedAt(recordNumber, record.addedAt, errors)
+        val copyLabel = requiredText(
+            recordNumber,
+            "copyLabel",
+            record.copyLabel ?: DEFAULT_COPY_LABEL,
+            MAX_COPY_LABEL_LENGTH,
+            errors,
+        )
 
         if (errors.size != before) return null
         return LibraryBook(
@@ -280,6 +317,7 @@ class LibraryImportPlanner(
             location = requireNotNull(location),
             readingStatus = requireNotNull(readingStatus),
             addedAt = requireNotNull(addedAt),
+            copyLabel = requireNotNull(copyLabel),
         )
     }
 
@@ -288,7 +326,6 @@ class LibraryImportPlanner(
         errors: MutableList<ImportValidationError>,
     ) {
         reportDuplicates(books, "copyId", LibraryBook::copyId, errors)
-        reportDuplicates(books, "isbn13", LibraryBook::isbn13, errors)
         books.groupBy(LibraryBook::workId).forEach { (_, group) ->
             if (group.map { it.title to it.primaryAuthor }.distinct().size > 1) {
                 val book = group.last()
@@ -478,11 +515,25 @@ class LibraryImportPlanner(
         classificationSource,
     )
 
+    private fun LibraryBook.sharedEditionFingerprint(): List<Any?> = listOf(
+        title,
+        primaryAuthor,
+        isbn13,
+        publisher,
+        publishedYear,
+        coverUrl,
+        ndcCode,
+        ndcEdition,
+        classificationSource,
+    )
+
     private companion object {
         const val MAX_ERRORS = 100
         const val ISBN_MAX_LENGTH = 32
         const val NDC_CODE_MAX_LENGTH = 32
         const val NDC_EDITION_MAX_LENGTH = 32
+        const val MAX_COPY_LABEL_LENGTH = 100
+        const val DEFAULT_COPY_LABEL = "所蔵本"
         const val MIN_PUBLISHED_YEAR = 1
         const val MAX_CLOCK_SKEW_MILLIS = 24 * 60 * 60 * 1000L
         val NDC_CODE_REGEX = Regex("""\d{3}(?:\.\d+)?""")
