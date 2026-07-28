@@ -2,10 +2,13 @@ package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.performScrollTo
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
@@ -43,10 +46,10 @@ class LibraryLocationScreenTest {
         setLibraryContent(listOf(book()))
 
         composeRule.onNodeWithText("テスト本").performClick()
-        composeRule.onNodeWithText("所蔵本").performClick()
+        openCopyEditor()
 
-        composeRule.onNodeWithText("登録済みの段").assertIsDisplayed()
-        composeRule.onNodeWithText("書斎 / 本棚A / 上段").assertIsDisplayed()
+        composeRule.onNodeWithText("登録済みの段").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("書斎 / 本棚A / 上段").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -59,13 +62,13 @@ class LibraryLocationScreenTest {
         setLibraryContent(books)
 
         composeRule.onNodeWithText("中央の本").performClick()
-        composeRule.onNodeWithText("所蔵本").performClick()
+        openCopyEditor()
 
-        composeRule.onNodeWithText("左: 左の本").assertIsDisplayed()
-        composeRule.onNodeWithText("右: 右の本").assertIsDisplayed()
-        composeRule.onNodeWithText("左へ移動").assertIsEnabled()
-        composeRule.onNodeWithText("右へ移動").assertIsEnabled()
-        composeRule.onNodeWithText("棚へ入れる位置").assertIsDisplayed()
+        composeRule.onNodeWithText("左: 左の本").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("右: 右の本").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("左へ移動").performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithText("右へ移動").performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithText("棚へ入れる位置").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -80,8 +83,8 @@ class LibraryLocationScreenTest {
         composeRule.onNodeWithText("貸出用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
 
         composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").performClick()
-        composeRule.onNodeWithText("コピーごとの情報").assertIsDisplayed()
-        composeRule.onNodeWithText("同じ版で共通の情報").assertIsDisplayed()
+        composeRule.onNodeWithText("コピーごとの情報").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("同じ版で共通の情報").performScrollTo().assertIsDisplayed()
     }
 
     private fun setLibraryContent(books: List<LibraryBook>) {
@@ -106,6 +109,10 @@ class LibraryLocationScreenTest {
                 )
             }
         }
+    }
+
+    private fun openCopyEditor() {
+        composeRule.onNode(hasText("所蔵本") and hasClickAction()).performClick()
     }
 
     private fun tree() = LocationTree(
