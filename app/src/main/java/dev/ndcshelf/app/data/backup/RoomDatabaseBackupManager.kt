@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.os.storage.StorageManager
+import android.util.Log
 import androidx.room.withTransaction
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.APP_DATABASE_VERSION
@@ -31,6 +32,7 @@ class RoomDatabaseBackupManager(
     private val automaticBackupDirectory: File,
     private val appVersion: String,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val spaceReservation: ((Long) -> Boolean)? = null,
 ) : DatabaseBackupManager {
     private val dao = database.libraryDao()
     private val locationDao = database.locationDao()
@@ -67,7 +69,8 @@ class RoomDatabaseBackupManager(
     override suspend fun restoreBackup(
         preview: DatabaseBackupPreview,
     ): DatabaseRestoreResult {
-        var automaticBackupName = ""
+        var automaticBackupName: String? = null
+        var automaticBackupVerified = false
         return try {
             automaticBackupDirectory.mkdirs()
             if (!automaticBackupDirectory.isDirectory) {
@@ -87,6 +90,7 @@ class RoomDatabaseBackupManager(
                 automaticBackupName = automaticBackup.name
                 val verifiedBackup = automaticBackup.inputStream().use(codec::decode)
                 check(verifiedBackup.snapshot == current) { "Rollback backup verification failed" }
+                automaticBackupVerified = true
 
                 dao.deleteAllScanAttempts()
                 dao.deleteAllScanSessions()
@@ -115,7 +119,7 @@ class RoomDatabaseBackupManager(
             }
             DatabaseRestoreResult.Success(
                 restoredCopyCount = preview.metadata.copyCount,
-                automaticBackupName = automaticBackupName,
+                automaticBackupName = requireNotNull(automaticBackupName),
             )
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -124,7 +128,7 @@ class RoomDatabaseBackupManager(
         } catch (_: Exception) {
             DatabaseRestoreResult.Failure(DatabaseBackupFailure.RESTORE_FAILED)
         } finally {
-            pruneAutomaticBackups(keepName = automaticBackupName)
+            cleanAutomaticBackups(automaticBackupName, automaticBackupVerified)
         }
     }
 
@@ -136,10 +140,10 @@ class RoomDatabaseBackupManager(
         shelves = locationDao.getAllShelves(),
         tiers = locationDao.getAllTiers(),
         wishlistItems = dao.getAllWishlistItems(),
-        scanSessions = dao.getAllScanSessions(),
-        scanAttempts = dao.getAllScanAttempts(),
         series = seriesDao.getAllSeries(),
         seriesMemberships = seriesDao.getAllMemberships(),
+        scanSessions = dao.getAllScanSessions(),
+        scanAttempts = dao.getAllScanAttempts(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {
@@ -160,6 +164,7 @@ class RoomDatabaseBackupManager(
     }
 
     private fun reserveAutomaticBackupSpace(requiredBytes: Long): Boolean {
+        spaceReservation?.let { return it(requiredBytes) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val storageManager = context.getSystemService(StorageManager::class.java)
             val storageUuid = storageManager.getUuidForPath(automaticBackupDirectory)
@@ -178,16 +183,37 @@ class RoomDatabaseBackupManager(
     private fun hasLegacyFreeSpace(requiredBytes: Long): Boolean =
         automaticBackupDirectory.usableSpace >= requiredBytes
 
-    private fun pruneAutomaticBackups(keepName: String) {
-        automaticBackupDirectory.listFiles()
+    private fun pruneAutomaticBackups(keepName: String?) {
+        val olderBackupLimit = if (keepName == null) {
+            MAX_AUTOMATIC_BACKUPS
+        } else {
+            MAX_AUTOMATIC_BACKUPS - 1
+        }
+        val deletionFailed = automaticBackupDirectory.listFiles()
             ?.filter { it.isFile && it.name.endsWith(".ndcshelfbackup") && it.name != keepName }
             ?.sortedByDescending(File::lastModified)
-            ?.drop(MAX_OLDER_AUTOMATIC_BACKUPS)
-            ?.forEach(File::delete)
+            ?.drop(olderBackupLimit)
+            ?.fold(false) { failed, file -> !file.delete() || failed }
+            ?: false
+        if (deletionFailed) Log.w(TAG, "Could not delete an older automatic backup")
+    }
+
+    private fun cleanAutomaticBackups(backupName: String?, verified: Boolean) {
+        try {
+            if (backupName != null && !verified &&
+                !File(automaticBackupDirectory, backupName).delete()
+            ) {
+                Log.w(TAG, "Could not delete an unverified automatic backup")
+            }
+            pruneAutomaticBackups(keepName = backupName.takeIf { verified })
+        } catch (_: Exception) {
+            Log.w(TAG, "Could not prune automatic backups")
+        }
     }
 
     companion object {
         private const val REQUIRED_SPACE_MULTIPLIER = 2L
-        private const val MAX_OLDER_AUTOMATIC_BACKUPS = 2
+        private const val MAX_AUTOMATIC_BACKUPS = 3
+        private const val TAG = "DatabaseBackup"
     }
 }
