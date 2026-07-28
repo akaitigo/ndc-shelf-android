@@ -1,6 +1,6 @@
 # 任意同期の脅威モデル
 
-最終更新日: 2026-07-27
+最終更新日: 2026-07-29
 
 ## 1. Problem and security objectives
 
@@ -39,7 +39,7 @@ flowchart TB
     end
     APP -->|TLS + signed E2EE envelope| NET[Untrusted network]
     NET --> BACKEND[Untrusted-for-confidentiality backend]
-    APP -->|OAuth code + PKCE| IDP[Authentication provider]
+    APP -->|OAuth adapter: code + PKCE| IDP[Authentication provider]
     OTHER[Other authorized device] -->|same protocol| BACKEND
     REVOKED[Revoked / stolen device] -. old plaintext may remain .-> OTHER
 ```
@@ -52,10 +52,10 @@ Android Keystoreはsigning keyとwrapping keyのextraction耐性を高めるが�
 
 | Category | Threat | Control | Required verification | Residual risk |
 | --- | --- | --- | --- | --- |
-| Spoofing | 攻撃者がdeviceを追加する | OAuth PKCEに加え、既存device署名、一回限りQR、verification code、10分expiry | unauthorized/replayed inviteを拒否 | 既存unlocked deviceを操作された場合は承認され得る |
+| Spoofing | 攻撃者がdeviceを追加する | backend認証に加え、既存device署名、一回限りQR、verification code、10分expiry。OAuth adapterはPKCE必須 | unauthorized/replayed inviteを拒否 | 既存unlocked deviceを操作された場合は承認され得る |
 | Spoofing | backendがdevice operationを偽造する | Keystore P-256 keyによるenvelope・registry署名 | unknown/revoked key、改ざん署名を拒否 | signing keyを使用できるmalwareは偽装可能 |
 | Tampering | ciphertext、header、head、順序を改ざんする | AES-GCM AAD、SHA-256 object ID、署名、per-device hash chain、CAS head | bit flip、object置換、欠落、古いheadをfail-closed | backendの選択的forkはdevice間比較なしで完全検出できない |
-| Tampering | 競合でfieldやmembershipをsilent dropする | version vector、field conflict ledger、membership独立entity、unique衝突の受信・適用vector分離 | property testと2実装conformance | winner選択は利用者意図と異なる場合がある |
+| Tampering | 競合でfieldやmembershipをsilent dropする | version vector、field conflict ledger、membership独立entity、unique衝突のreceived / processed vectorと未解決依存の分離 | property testと2実装conformance | winner選択は利用者意図と異なる場合がある |
 | Repudiation | どのdeviceが変更・削除したか否認する | signed operation ID、device label、local conflict/audit evidence | signatureとcounter chain検証 | device共有者個人までは特定しない |
 | Information disclosure | backend侵害で蔵書を読む | E2EE、backendにkeyを置かない、padding | backend dumpに平文・keyがない | traffic時刻、IP、object数・size、account関係は露出 |
 | Information disclosure | logs、crash report、backupにkeyやtitleを出す | structured redaction、key/export除外、analyticsなし | log scan、backup policy、secret scan | OS memory dump、root端末は対象外 |
@@ -131,4 +131,5 @@ remote full deleteは再認証、明示確認、削除receiptを要求する。b
 - [RFC 5869: HKDF](https://www.rfc-editor.org/rfc/rfc5869.html)
 - [RFC 8785: JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html)
 - [NIST SP 800-38D: AES-GCM](https://csrc.nist.gov/pubs/sp/800/38/d/final)
+- [RFC 8252: OAuth 2.0 for Native Apps](https://www.rfc-editor.org/rfc/rfc8252.html)
 - [OWASP MASVS](https://mas.owasp.org/MASVS/)

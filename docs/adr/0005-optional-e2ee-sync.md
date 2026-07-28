@@ -1,7 +1,7 @@
 # ADR 0005: 任意同期をE2EE operation logとして提供する
 
 - Status: Proposed
-- Date: 2026-07-27
+- Date: 2026-07-29
 - Issue: #36
 - Decision owners: repository maintainer and security reviewer
 
@@ -51,7 +51,7 @@ protocol v1は次を必須とする。
 - 端末追加時のkey wrappingはRFC 9180 HPKEの`DHKEM(P-256, HKDF-SHA256) / HKDF-SHA256 / AES-256-GCM` suiteを使う。
 - 各端末はAndroid Keystore内のP-256署名鍵でenvelopeへ`SHA256withECDSA`署名を行う。さらにKeystore内のnon-exportable AES-256-GCM wrapping keyでHPKE recipient private keyとepoch keyを暗号化保存する。API 23〜30ではECDH用Keystore purposeがないためHPKE private keyは使用時にprocess memoryへ復号する。StrongBoxは利用可能なら署名・wrapping keyへ推奨するが必須にしない。
 - transportは証明書検証を無効化しないHTTPSとし、TLS 1.2以上を必須、TLS 1.3を推奨する。E2EEとtransport暗号のどちらか一方で代替しない。
-- account認証はbackend adapterの責務だが、native appはauthorization code + PKCEを使い、passwordや長期tokenを独自収集しない。認証credentialはE2EE鍵と分離する。
+- account認証はbackend adapterの責務とする。OAuthを使うnative adapterはauthorization code + PKCEを必須とし、passwordを独自収集しない。account不要adapterは認証を要求せず、認証credentialは常にE2EE鍵と分離する。
 - operationは`deviceId + counter`のdotとversion vectorを持つ。wall clockは表示・診断だけに使い、競合の勝敗へ使わない。
 - 因果的に新しいfield updateを採用し、同時field updateはdotのbytewise順で大きい方を決定値とし、失われた候補をconflict logへ残す。entity deleteは同時updateに対してremove-winsとする。
 - tombstoneは全active deviceのackまたはdevice失効と、最低90日の双方を満たすまで削除しない。復元は旧IDのresurrectionではなく新IDで作成する。

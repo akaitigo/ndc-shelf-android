@@ -7,8 +7,8 @@
 ## Current State
 
 - branch: `agent/issue-36-sync-adr`
-- base: `agent/issue-35-v04-release`
-- base HEAD: `44ae33f`
+- base: `main`
+- base HEAD: `f92688e`
 - related Issue: #36
 - dependent Issues: #37、#38、#39
 - current application: Room v11、端末内DBが正本、同期用table・権限・依存なし

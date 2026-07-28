@@ -1,6 +1,6 @@
 # NDC Shelf Sync Protocol v1
 
-最終更新日: 2026-07-27
+最終更新日: 2026-07-29
 
 この文書の「必須」「禁止」「推奨」はprotocol v1のnormative requirementである。設計判断は[ADR 0005](adr/0005-optional-e2ee-sync.md)、脅威と残存riskは[同期脅威モデル](SYNC_THREAT_MODEL.md)を参照する。
 
@@ -66,7 +66,7 @@ local Roomをapplication-levelで暗号化しない判断は、既存dataのmigr
 | Edition | immutable ID、workId、ISBN、publisher、year、cover URL、NDC、source | parent削除はremove-wins |
 | OwnedCopy | immutable ID、editionId、media、reading status、location、tierId、shelfOrderKey、label、addedAt | `addedAt`は事実値であり競合時計ではない |
 | WishlistItem | editionId、status、createdAt、updatedAt | entity IDはeditionId |
-| Room / Shelf / Tier | immutable ID、parent ID、name、sortOrder | 同名unique衝突はquarantine対象 |
+| Room / Shelf / Tier | immutable ID、parent ID、name、sortOrder | 同名unique衝突はdomain conflict ledger対象 |
 | Series / Membership | immutable ID、name、workId、volume label、type、order key、origin | membershipを独立競合単位にする |
 | WorkGroup / Membership | immutable ID、display fields、substitution flag、workId | membershipを独立競合単位にする |
 
@@ -149,16 +149,27 @@ ciphertext payload:
 }
 ```
 
-- device content subkeyは`HKDF-SHA-256(epochKey, salt=libraryId, info="ndc-shelf-sync-v1/content" || epoch || deviceId)`で256-bit導出する。
+- device content subkeyはRFC 5869のextract-then-expandで導出する。`salt`は16-byteの`libraryId`、IKMは32-byteの`epochKey`、`info`はASCII `ndc-shelf-sync-v1/content`、`uint64be(epoch)`、16-byteの`deviceId`を順に連結したbytes、出力長は32 bytesとする。
 - content encryptionはAES-256-GCM、tagは128-bitとする。nonceは32-bitのzero prefixとbig-endian 64-bit `encryptionCounter`を連結した96-bit値とし、同じdevice subkeyで再利用してはならない。
 - `protectedHeader`のcanonical bytesをAEAD additional authenticated dataにする。
 - AEAD plaintextは`uint32be(canonicalJsonByteLength) || canonicalJsonBytes || randomPadding`とする。全体を最低64 KiB、以降64 KiB単位にしてから暗号化し、8 MiB上限はpadding前のcanonical JSONへ適用する。復号後はlength境界外をJSON parserへ渡さない。
-- `objectId`はcanonical `protectedHeader`、nonce、ciphertextを順に連結したbytesのSHA-256とする。`objectId`をAADへ含めず、循環参照を作らない。
-- signatureは`objectId`、canonical `protectedHeader`、nonce、ciphertextを順に連結したbytesへのECDSA P-256/SHA-256とする。
+- `objectId`はcanonical `protectedHeader`、12-byte nonce、ciphertextを順に連結したbytesのSHA-256とする。各要素はouter envelopeの別fieldから復号し、nonce長を固定するため境界は一意である。`objectId`をAADへ含めず、循環参照を作らない。
+- signatureはASCII `ndc-shelf-sync-v1/object-signature`、`0x00`、32-byteの`objectId`を順に連結したbytesへのECDSA P-256/SHA-256とする。署名はJCA `SHA256withECDSA`が生成するstrict ASN.1 DER形式とし、非canonical DER、末尾data、P-256範囲外の`r` / `s`を拒否する。
+- signing public keyはX.509 SubjectPublicKeyInfo DER、`signingDevicePublicKeyId`はそのDER bytesのSHA-256とする。HPKE P-256 public keyはRFC 9180の`SerializePublicKey`による65-byte uncompressed SEC1形式とし、形式変換をwire境界で曖昧にしない。
 - decrypt前にobject size、suite、epoch、device authorization、signature、object hashを検証する。
 - encryption counterのrollback、重複、overflowを検出したdevice IDは利用停止し、新device IDと新epochへrotationする。不審objectはapplyしない。
 
-暗号primitiveはplatform APIまたは保守されている監査済みlibraryを用い、ECDSA encoding、HPKE、canonical JSON、nonce生成を独自実装しない。
+暗号primitiveはplatform APIまたは保守されている監査済みlibraryを用い、ECDSA DER parser、HPKE、canonical JSON、nonce生成を独自実装しない。
+
+### 6.1 HPKE device key envelope
+
+epoch keyを新端末へ配布するHPKEはRFC 9180 base mode（`mode = 0x00`）、KEM `DHKEM(P-256, HKDF-SHA256)`（`0x0010`）、KDF `HKDF-SHA256`（`0x0001`）、AEAD `AES-256-GCM`（`0x0002`）を使う。
+
+- `info`はASCII `ndc-shelf-sync-v1/epoch-key`、`uint64be(epoch)`、16-byte recipient `deviceId`、32-byte registry hash、32-byte head hashを順に連結する。
+- AADはcanonical JSONのdevice authorizationから、HPKEの`enc`、ciphertext、signatureを除いたbytesとする。authorizationにはprotocol version、suite、library opaque ID、epoch、registry generation、registry hash、trusted head hash、sender signing key ID、recipient device ID、recipient HPKE public key、expiry、invite nonceを必須とする。
+- plaintextは32-byte epoch keyだけとし、HPKE出力の`enc`とciphertextは別fieldのunpadded base64urlで保存する。
+- `envelopeId`はcanonical authorization、HPKE `enc`、ciphertextを順に連結したbytesのSHA-256とする。senderはASCII `ndc-shelf-sync-v1/epoch-key-signature`、`0x00`、32-byte `envelopeId`を連結したbytesへ6節と同じECDSA encodingで署名する。recipientは署名、registry generation、registry / head hash、recipient ID、expiry、invite nonceの一回性を検証してからHPKEを開く。
+- RFC 9180の公開test vectorに加え、この固定`info` / AAD / encodingのrepository fixtureを全実装で共有する。
 
 ## 7. Operations and merge rules
 
@@ -174,7 +185,7 @@ operationは`upsertFields`、`deleteEntity`、`acknowledge`のいずれかで、
 6. 参照先未到着はpendingとし、親のtombstoneがwinnerなら子も適用しない。
 7. unique constraint違反を自動rename、overwrite、dropしない。署名・AEAD・schema・causalityが正しいtransactionは受信済みのdomain conflictとしてledgerへ全件保存し、利用者解決を要求する。
 
-clientは`receivedVector`と`appliedVector`を分ける。domain conflictはreceivedを進めるがappliedを進めず、そのtransactionが作るentityを参照する後続operationだけをpendingにする。無関係な後続operationは処理できる。signature、AEAD、schema、hash chain、causal contextが不正なobjectはsecurity quarantineとし、どちらのvectorも進めず同期を停止する。
+clientは`receivedVector`と`processedVector`を分ける。署名・schema・causalityが正しいdomain conflictはledgerへtransaction全体を保存した後に両vectorを進め、未反映entity / field IDを`unresolvedDependencies`へ記録する。後続operationは因果的なcounterだけを理由に停止せず、未解決IDを参照する場合だけpendingにする。これにより、同じdevice log上の無関係な後続operationを処理できる。signature、AEAD、schema、hash chain、causal contextが不正なobjectはsecurity quarantineとし、どちらのvectorも進めず同期を停止する。
 
 conflict ledgerは同期対象外のlocal evidenceで、元operation、entity、field、winner、loser、device label、検出時刻、解決operation IDをapp-private storageへ保持する。同じoperation logから各端末が再構築でき、秘密値を通常logやcrash reportへ出してはならない。
 
@@ -183,13 +194,13 @@ conflict ledgerは同期対象外のlocal evidenceで、元operation、entity、
 - deleteはentity generation全体へのtombstoneで、同時または因果的に古いupdateに対してremove-winsとする。
 - tombstone後のupdateはrejectし、旧IDを自動復活させない。
 - 利用者が復元する場合は新しいentity IDと参照を持つ新規作成にする。
-- cascadeは受信端末が現在のdomain foreign key規則から同じtransaction内で展開する。wire上も明示された子deleteを含め、実装差を検出する。
+- delete senderはprotocol schemaで定義した参照関係からcascade対象を同じtransaction内へ明示する。receiverは同じprotocol versionの期待closureと一致することを検証し、現在のRoom schemaだけから暗黙cascadeを追加しない。不一致はdomain conflictとしてtransaction全体を適用しない。
 - tombstone削除は全active deviceのversion vectorがdeleteをackし、失効端末を除外し、かつ90日経過した場合だけ許可する。
 
 ### 7.3 Membership and ordering
 
 - SeriesMembershipとWorkGroupMembershipは独立entityとしてadd/update/deleteする。parent entity全量のset置換は禁止する。
-- membershipの同時追加は異なるIDなら両方保持する。domain unique constraintに違反する場合はquarantineし、自動選択しない。
+- membershipの同時追加は異なるIDなら両方保持する。domain unique constraintに違反する場合はconflict ledgerへ保存し、自動選択しない。
 - shelfとseriesの順序は既存fractional order keyを同期する。同じkeyはentity IDを最終tie-breakerにして表示する。
 - 同じentityの同時moveは`shelfOrderKey`または`sortOrderKey` fieldの通常競合として解決し、loserをconflict logへ残す。
 - key圧縮は対象container全体の明示transactionとし、既知headへのpreconditionを要求する。precondition不一致なら再計算する。
@@ -203,18 +214,19 @@ counterとversion vectorだけを因果・競合に使う。端末時計が過�
 ### 8.1 Initial opt-in
 
 1. 送信対象、除外対象、metadata、鍵紛失時挙動、backendをpreviewする。
-2. backendへauthorization code + PKCEでsign-inする。
+2. backend adapterが要求する認証を行う。OAuthを使うnative adapterはauthorization code + PKCEを必須とする。filesystem等のaccount不要adapterはこの手順を省略する。
 3. P-256 signing keyとAES-256-GCM wrapping keyをAndroid Keystoreへ生成する。hardware-backed statusを記録するが、非対応端末を排除しない。
-4. RFC 9180 HPKE用P-256 recipient key pairと256-bitのepoch 1 keyをCSPRNGで生成し、private keyとepoch keyをKeystore wrapping keyで暗号化してapp-private storageへ保存する。backendが保持するroot keyやescrow keyは作らない。
+4. RFC 9180 HPKE用P-256 recipient key pairと256-bitのepoch 1 keyをCSPRNGで生成し、private keyとepoch keyをKeystore wrapping keyで暗号化してapp-private storageへ保存する。backendが保持するroot keyやescrow keyは作らない。`epoch`と`registryGeneration`は0を禁止したunsigned 32-bit整数とし、JSONで正確に表現できる範囲を超えない。
 5. device公開鍵、署名済みdevice registry、HPKE-wrapped epoch key、空headをbackendへ登録する。
 6. 最初のencrypted snapshot uploadが成功してから同期ONを確定する。失敗時はremote partial stateを削除し、local dataを変更しない。
 
-E2EE key、auth token、device private keyはAndroid backup、domain backup、logs、clipboardへ含めない。HPKE private keyとepoch keyの平文は暗号operation中だけmemoryへ置き、使用後に可能な範囲でzeroizeする。Keystore operationはmain threadで行わない。Android API 31で追加された`PURPOSE_AGREE_KEY`をv1の必須条件にせず、API 23〜最新APIで同じwire suiteを使う。
+E2EE key、auth token、device private keyはAndroid backup、domain backup、logs、clipboardへ含めない。HPKE private keyとepoch keyの平文は暗号operation中だけmemoryへ置き、使用後に可能な範囲でzeroizeする。Keystore wrappingは`setRandomizedEncryptionRequired(true)`のAES-256-GCMにnonce生成を委ね、返された96-bit nonceと128-bit tagを保存し、key種別・library ID・key versionをAADで認証する。caller指定nonceを使わず、wrapped blobはnonce、ciphertext、tag、key alias versionを持つ。Keystore operationはmain threadで行わない。Android API 31で追加された`PURPOSE_AGREE_KEY`をv1の必須条件にせず、API 23〜最新APIで同じwire suiteを使う。
 
 ### 8.2 Add and revoke device
 
 - 新端末はbackend認証だけでは復号権限を得ない。既存authorized deviceが表示する短時間・一回限りのQRをscanし、双方が表示する6桁以上のverification codeを照合する。
 - 既存端末は新端末公開鍵、device ID、expiry、nonceを含むauthorizationへ署名し、current epoch keyをHPKEでwrapする。
+- 既存端末はauthorizationに固定したtrusted headを基にcurrent epochで新しいbootstrap snapshotを作る。新端末はそのsnapshotと以後のcurrent-epoch operationから開始し、過去epoch keyを受け取らない。
 - QR secret、authorizationは10分で失効し、一度使ったnonceを再利用しない。backendは未使用状態をatomicに消費する。
 - 端末失効はregistry generationを進める署名済みremove operationと新epoch作成を同一管理transactionで行う。失効端末へ新keyをwrapしない。
 - envelopeは作成時のregistry generationをAEADで認証する`protectedHeader`に持つ。active clientは失効generation以後に旧端末が作成したobjectを拒否する。失効端末の未同期編集は自動取込せず、必要なら利用者が別端末で再入力する。
@@ -249,7 +261,7 @@ adapterは少なくとも次を提供する。
 - `putDeviceEnvelopeIfAuthorized()`
 - `requestRemoteDeletion()` / `getDeletionReceipt()`
 
-capabilityはprotocol major/minor、suite、max object size、CAS、retention、deletion SLA、rate limit、export availabilityを署名付きJSONで返す。必須capability不一致ではuploadを開始しない。objectはcontent-addressedかつimmutableで、同じIDへ異なるbytesを保存してはならない。
+capabilityはprotocol major/minor、suite、max object size、CAS、retention、deletion SLA、rate limit、export availabilityを認証済みchannelで返す。HTTPS adapterは通常の証明書検証で応答元を認証し、offline adapterは利用者が選択した保存先を信頼境界とする。追加の署名を使うadapterは、信頼鍵の配布・rotationをadapter仕様で定義する。必須capability不一致ではuploadを開始しない。objectはcontent-addressedかつimmutableで、同じIDへ異なるbytesを保存してはならない。
 
 headはlibrary generation、current epoch、snapshot object ID、各device log head、registry hashを含む。clientは前回確認したheadまたはそのdescendantだけを受け入れる。古いhead、署名chain欠落、CAS競合ではlocal dataを変更せず再取得する。
 
@@ -296,3 +308,4 @@ compactionは全active deviceがcheckpointまでackした場合だけ、新し�
 - [RFC 8785: JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html)
 - [NIST SP 800-38D: AES-GCM](https://csrc.nist.gov/pubs/sp/800/38/d/final)
 - [RFC 7636: OAuth PKCE](https://www.rfc-editor.org/rfc/rfc7636.html)
+- [RFC 8252: OAuth 2.0 for Native Apps](https://www.rfc-editor.org/rfc/rfc8252.html)
