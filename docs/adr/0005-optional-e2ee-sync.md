@@ -1,6 +1,6 @@
 # ADR 0005: 任意同期をE2EE operation logとして提供する
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-07-29
 - Issue: #36
 - Decision owners: repository maintainer and security reviewer
@@ -104,7 +104,7 @@ algorithm suite、wire field、競合規則のnormativeな詳細は[同期protoc
 | backend停止・侵害・誤同期の復旧 | `SYNC_PROTOCOL.md` 10、`SYNC_THREAT_MODEL.md` 4 |
 | STRIDE、residual risk、Non-goals | `SYNC_THREAT_MODEL.md` 3、7 |
 
-ADRはDraft PRでsecurity・architecture reviewを受け、merge時に`Accepted`へ変更する。未公開の脆弱性はPRへ記載せずprivate reportingを使用する。
+2026-07-29にsecurity・architecture review、一次仕様との照合、GitHub Actions run 30399983566を完了し、`Accepted`とした。未公開の脆弱性はPRへ記載せずprivate reportingを使用する。
 
 ## Rollback
 

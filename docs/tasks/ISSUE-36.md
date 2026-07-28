@@ -74,7 +74,7 @@
 - [x] STRIDEで脅威、対策、検証、残存リスク、Non-goalsを記録する。
 - [x] 後続Issue #37・#38が参照するnormative requirementを明記する。
 - [x] Draft PR #100を作成する。
-- [ ] 最終HEADでGitHub Actions成功を確認する。
+- [x] GitHub Actions run 30399983566でverify、dependency review、OSV、API 29／35のinstrumentation成功を確認する。
 
 ## Stop Conditions
 
