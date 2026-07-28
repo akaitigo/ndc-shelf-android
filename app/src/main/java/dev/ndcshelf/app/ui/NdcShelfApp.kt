@@ -96,7 +96,11 @@ fun NdcShelfApp(
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
     var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
     var showSeriesEditor by rememberSaveable { mutableStateOf(false) }
-    var showWorkVariantEditor by rememberSaveable { mutableStateOf(false) }
+    var workVariantWorkId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(workVariantWorkId) {
+        workVariantWorkId?.let(viewModel::prepareWorkVariantEditor)
+    }
 
     LaunchedEffect(seriesEditorState) {
         if (seriesEditorState === SeriesEditorUiState.Removed) {
@@ -402,11 +406,11 @@ fun NdcShelfApp(
             AppDestination.LIBRARY -> {
                 val criteria by viewModel.librarySearchCriteria.collectAsStateWithLifecycle()
                 val result by viewModel.librarySearchResult.collectAsStateWithLifecycle()
-                if (showWorkVariantEditor) {
+                if (workVariantWorkId != null) {
                     WorkVariantScreen(
                         state = workVariantState,
                         onBack = {
-                            showWorkVariantEditor = false
+                            workVariantWorkId = null
                             viewModel.clearWorkVariantState()
                         },
                         onLink = viewModel::linkWorkVariant,
@@ -451,8 +455,7 @@ fun NdcShelfApp(
                         selected = AppDestination.SERIES
                     },
                     onManageVariants = { workId ->
-                        viewModel.prepareWorkVariantEditor(workId)
-                        showWorkVariantEditor = true
+                        workVariantWorkId = workId
                     },
                     contentPadding = contentPadding,
                 )
