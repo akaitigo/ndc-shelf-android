@@ -100,6 +100,7 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
+          profile: pixel_7
           disable-animations: true
           script: >-
             ./gradlew connectedDebugAndroidTest

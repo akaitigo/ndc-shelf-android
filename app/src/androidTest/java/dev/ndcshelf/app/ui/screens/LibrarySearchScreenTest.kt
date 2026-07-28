@@ -3,6 +3,8 @@ package dev.ndcshelf.app.ui.screens
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -38,7 +40,7 @@ class LibrarySearchScreenTest {
             onSortChange = { sort = it },
         )
 
-        composeRule.onNodeWithText("読書中").performClick()
+        composeRule.onNode(hasText("読書中") and hasClickAction()).performClick()
         composeRule.onNodeWithText("タイトル").performClick()
 
         assertEquals(ReadingStatus.READING, status)

@@ -5,12 +5,14 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.StateRestorationTester
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.v2.runComposeUiTest
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
@@ -61,17 +63,22 @@ class BookDetailScreenTest {
         composeRule.onNodeWithTag(BOOK_DETAIL_TEST_TAG).assertIsDisplayed()
         composeRule.onNodeWithText(first.title).assertIsDisplayed()
         composeRule.onNodeWithContentDescription("${first.title} の表紙なし").assertIsDisplayed()
-        composeRule.onNodeWithText("未分類").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("所有コピー 2冊").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("紙・電子").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("NDLから再取得・照合").performScrollTo().assertIsDisplayed()
+        scrollDetailTo(hasText("未分類"))
+        composeRule.onNodeWithText("未分類").assertIsDisplayed()
+        scrollDetailTo(hasText("所有コピー 2冊"))
+        composeRule.onNodeWithText("所有コピー 2冊").assertIsDisplayed()
+        scrollDetailTo(hasText("紙・電子"))
+        composeRule.onNodeWithText("紙・電子").assertIsDisplayed()
+        scrollDetailTo(hasText("NDLから再取得・照合"))
+        composeRule.onNodeWithText("NDLから再取得・照合").assertIsDisplayed()
+        scrollDetailTo(hasText("シリーズを整理（準備中）"))
         composeRule.onNodeWithText("シリーズを整理（準備中）")
-            .performScrollTo()
             .assertIsDisplayed()
             .assertIsNotEnabled()
+        scrollDetailTo(hasContentDescription("保存用、場所 書庫、未読、電子。タップして編集"))
         composeRule.onNodeWithContentDescription(
             "保存用、場所 書庫、未読、電子。タップして編集",
-        ).performScrollTo().performClick()
+        ).performClick()
         assertEquals("copy-2", editedCopyId)
     }
 
@@ -125,6 +132,10 @@ class BookDetailScreenTest {
         addedAt = 1,
         bibliographicSource = BibliographicSource.MANUAL,
     )
+
+    private fun scrollDetailTo(matcher: androidx.compose.ui.test.SemanticsMatcher) {
+        composeRule.onNodeWithTag(BOOK_DETAIL_TEST_TAG).performScrollToNode(matcher)
+    }
 }
 
 class BookDetailRestorationTest {

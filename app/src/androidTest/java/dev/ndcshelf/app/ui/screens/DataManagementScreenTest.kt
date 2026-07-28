@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -39,13 +40,19 @@ class DataManagementScreenTest {
     fun destructiveRestore_isSeparatedAndExplainsReplacement() {
         setContent(bookCount = 3)
 
-        composeRule.onNodeWithText("現在のデータを置き換える操作")
-            .performScrollTo()
-            .assertIsDisplayed()
+        composeRule.onNodeWithTag(DATA_LIST_TAG)
+            .performScrollToNode(hasText("現在のデータを置き換える操作"))
+        composeRule.onNodeWithText("現在のデータを置き換える操作").assertIsDisplayed()
+        composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(
+            hasText(
+                "現在の全データをバックアップ内容で置き換えます。実行直前の状態はアプリ内へ自動退避します。",
+            ),
+        )
         composeRule.onNodeWithText(
             "現在の全データをバックアップ内容で置き換えます。実行直前の状態はアプリ内へ自動退避します。",
-        ).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag(RESTORE_TAG).performScrollTo().assertIsEnabled()
+        ).assertIsDisplayed()
+        composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(hasTestTag(RESTORE_TAG))
+        composeRule.onNodeWithTag(RESTORE_TAG).assertIsEnabled()
     }
 
     @Test
