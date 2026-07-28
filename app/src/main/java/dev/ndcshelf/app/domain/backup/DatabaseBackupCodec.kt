@@ -6,6 +6,7 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
+import dev.ndcshelf.app.data.local.WishlistItemEntity
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -45,6 +46,7 @@ internal class DatabaseBackupCodec(
             workCount = snapshot.works.size,
             editionCount = snapshot.editions.size,
             copyCount = snapshot.copies.size,
+            wishlistCount = snapshot.wishlistItems.size,
         )
         val manifest = encodeManifest(metadata, payload.sha256()).toString().encodeToByteArray()
         val archive = ByteArrayOutputStream().use { bytes ->
@@ -90,11 +92,13 @@ internal class DatabaseBackupCodec(
             workCount = manifest.requiredInt("workCount"),
             editionCount = manifest.requiredInt("editionCount"),
             copyCount = manifest.requiredInt("copyCount"),
+            wishlistCount = if (formatVersion < 6) 0 else manifest.requiredInt("wishlistCount"),
         )
         val snapshot = decodePayload(parseObject(payloadBytes), formatVersion)
         if (metadata.workCount != snapshot.works.size ||
             metadata.editionCount != snapshot.editions.size ||
-            metadata.copyCount != snapshot.copies.size
+            metadata.copyCount != snapshot.copies.size ||
+            metadata.wishlistCount != snapshot.wishlistItems.size
         ) {
             invalid("Manifest counts do not match payload")
         }
@@ -133,6 +137,7 @@ internal class DatabaseBackupCodec(
         put("workCount", JsonPrimitive(metadata.workCount))
         put("editionCount", JsonPrimitive(metadata.editionCount))
         put("copyCount", JsonPrimitive(metadata.copyCount))
+        put("wishlistCount", JsonPrimitive(metadata.wishlistCount))
     }
 
     private fun encodePayload(snapshot: DatabaseSnapshot) = buildJsonObject {
@@ -205,11 +210,22 @@ internal class DatabaseBackupCodec(
                 })
             }
         })
+        put("wishlistItems", buildJsonArray {
+            snapshot.wishlistItems.forEach { item ->
+                add(buildJsonObject {
+                    put("editionId", JsonPrimitive(item.editionId))
+                    put("status", JsonPrimitive(item.status))
+                    put("createdAt", JsonPrimitive(item.createdAt))
+                    put("updatedAt", JsonPrimitive(item.updatedAt))
+                })
+            }
+        })
     }
 
     private fun decodePayload(payload: JsonObject, formatVersion: Int): DatabaseSnapshot {
         val schemaVersion = payload["schemaVersion"]?.jsonPrimitive?.intOrNull ?: 1
         if (schemaVersion > CURRENT_PAYLOAD_SCHEMA_VERSION) unsupported("Newer payload schema")
+        if (schemaVersion != formatVersion) invalid("Format and payload schema versions differ")
         val works = payload.requiredArray("works").map { element ->
             val value = element.jsonObject
             BookWorkEntity(
@@ -279,7 +295,16 @@ internal class DatabaseBackupCodec(
                 sortOrder = value.requiredInt("sortOrder"),
             )
         }
-        return DatabaseSnapshot(works, editions, copies, rooms, shelves, tiers)
+        val wishlistItems = payload.versionedArray("wishlistItems", schemaVersion, 6).map { element ->
+            val value = element.jsonObject
+            WishlistItemEntity(
+                editionId = value.requiredString("editionId"),
+                status = value.requiredString("status"),
+                createdAt = value.requiredLong("createdAt"),
+                updatedAt = value.requiredLong("updatedAt"),
+            )
+        }
+        return DatabaseSnapshot(works, editions, copies, rooms, shelves, tiers, wishlistItems)
     }
 
     private fun validateSnapshot(snapshot: DatabaseSnapshot) {
@@ -288,7 +313,8 @@ internal class DatabaseBackupCodec(
             snapshot.copies.size > limits.maxRecords ||
             snapshot.rooms.size > limits.maxRecords ||
             snapshot.shelves.size > limits.maxRecords ||
-            snapshot.tiers.size > limits.maxRecords
+            snapshot.tiers.size > limits.maxRecords ||
+            snapshot.wishlistItems.size > limits.maxRecords
         ) tooLarge("Too many records")
         snapshot.works.ensureUnique(BookWorkEntity::id)
         snapshot.editions.ensureUnique(BookEditionEntity::id)
@@ -299,6 +325,7 @@ internal class DatabaseBackupCodec(
         snapshot.shelves.ensureUnique(LocationShelfEntity::id)
         snapshot.shelves.ensureUnique { it.roomId to it.name }
         snapshot.tiers.ensureUnique(LocationTierEntity::id)
+        snapshot.wishlistItems.ensureUnique(WishlistItemEntity::editionId)
         snapshot.tiers.ensureUnique { it.shelfId to it.name }
         val workIds = snapshot.works.mapTo(hashSetOf(), BookWorkEntity::id)
         val editionIds = snapshot.editions.mapTo(hashSetOf(), BookEditionEntity::id)
@@ -310,7 +337,8 @@ internal class DatabaseBackupCodec(
                 it.editionId !in editionIds || it.tierId != null && it.tierId !in tierIds
             } ||
             snapshot.shelves.any { it.roomId !in roomIds } ||
-            snapshot.tiers.any { it.shelfId !in shelfIds }
+            snapshot.tiers.any { it.shelfId !in shelfIds } ||
+            snapshot.wishlistItems.any { it.editionId !in editionIds }
         ) invalid("Foreign key reference is missing")
         if (snapshot.copies.any { copy ->
                 copy.tierId == null && copy.shelfOrderKey != null ||
@@ -328,6 +356,14 @@ internal class DatabaseBackupCodec(
             }
         ) {
             invalid("Invalid copy label")
+        }
+        if (snapshot.wishlistItems.any { item ->
+                item.status !in WISHLIST_STATUSES ||
+                    item.createdAt < 0 ||
+                    item.updatedAt < item.createdAt
+            }
+        ) {
+            invalid("Invalid wishlist item")
         }
         val strings = buildList {
             snapshot.works.forEach { add(it.id); add(it.title); add(it.primaryAuthor) }
@@ -349,6 +385,7 @@ internal class DatabaseBackupCodec(
             snapshot.rooms.forEach { add(it.id); add(it.name) }
             snapshot.shelves.forEach { add(it.id); add(it.roomId); add(it.name) }
             snapshot.tiers.forEach { add(it.id); add(it.shelfId); add(it.name) }
+            snapshot.wishlistItems.forEach { add(it.editionId); add(it.status) }
         }
         if (strings.any { it.length > limits.maxStringLength }) invalid("String is too long")
         if (strings.sumOf { it.length.toLong() } > limits.maxTotalCharacters) {
@@ -447,14 +484,15 @@ internal class DatabaseBackupCodec(
         throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 5
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 5
+        const val CURRENT_FORMAT_VERSION = 6
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 6
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val FORMAT_ID = "ndc-shelf-room-backup"
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val PAYLOAD_ENTRY = "database.json"
         private val ALLOWED_ENTRIES = setOf(MANIFEST_ENTRY, PAYLOAD_ENTRY)
         private val SUPPORTED_FORMAT_VERSIONS = 1..CURRENT_FORMAT_VERSION
+        private val WISHLIST_STATUSES = setOf("WANTED", "RESERVED")
     }
 }
 

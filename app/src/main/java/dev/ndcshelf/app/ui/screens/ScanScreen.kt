@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,18 +65,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.ndcshelf.app.R
+import dev.ndcshelf.app.BookstoreUiState
 import dev.ndcshelf.app.ScanFailure
 import dev.ndcshelf.app.ScanUiState
+import dev.ndcshelf.app.domain.model.BookstoreBook
+import dev.ndcshelf.app.domain.model.PurchaseStatus
+import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.ui.components.CameraPreview
 
 @Composable
 fun ScanScreen(
     scanState: ScanUiState,
+    bookstoreState: BookstoreUiState,
+    wishlist: List<BookstoreBook>,
     onSubmitIsbn: (String) -> Unit,
+    onLookupBookstore: (String) -> Unit,
     onCameraError: (String) -> Unit,
+    onBookstoreCameraError: (String) -> Unit,
     onRetry: () -> Unit,
+    onRetryBookstore: () -> Unit,
     onClearState: () -> Unit,
+    onClearBookstoreState: () -> Unit,
     onAddDuplicateCopy: (String) -> Unit = {},
+    onChangePurchaseState: (PurchaseTransition) -> Unit,
+    onSelectWishlistItem: (BookstoreBook) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
@@ -91,6 +105,11 @@ fun ScanScreen(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasCameraPermission = granted
+    }
+    var mode by rememberSaveable { mutableStateOf(ScanMode.LIBRARY) }
+    var wishlistQuery by rememberSaveable { mutableStateOf("") }
+    val visibleWishlist = remember(wishlist, wishlistQuery) {
+        wishlist.filter { it.matches(wishlistQuery) }
     }
 
     LaunchedEffect(Unit) {
@@ -111,15 +130,35 @@ fun ScanScreen(
     ) {
         item {
             Text(
-                text = "Quick Scan",
+                text = stringResource(
+                    if (mode == ScanMode.LIBRARY) R.string.scan_title else R.string.bookstore_title,
+                ),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "裏表紙のISBNバーコードを、続けてかざすだけ。",
+                text = stringResource(
+                    if (mode == ScanMode.LIBRARY) {
+                        R.string.scan_description
+                    } else {
+                        R.string.bookstore_description
+                    },
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = mode == ScanMode.LIBRARY,
+                    onClick = { mode = ScanMode.LIBRARY },
+                    label = { Text(stringResource(R.string.scan_mode_library)) },
+                )
+                FilterChip(
+                    selected = mode == ScanMode.BOOKSTORE,
+                    onClick = { mode = ScanMode.BOOKSTORE },
+                    label = { Text(stringResource(R.string.scan_mode_bookstore)) },
+                )
+            }
         }
 
         item {
@@ -134,9 +173,17 @@ fun ScanScreen(
                     CameraPreview(
                         onIsbnDetected = { isbn ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onSubmitIsbn(isbn)
+                            if (mode == ScanMode.LIBRARY) {
+                                onSubmitIsbn(isbn)
+                            } else {
+                                onLookupBookstore(isbn)
+                            }
                         },
-                        onCameraError = onCameraError,
+                        onCameraError = if (mode == ScanMode.LIBRARY) {
+                            onCameraError
+                        } else {
+                            onBookstoreCameraError
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                     Box(
@@ -174,19 +221,69 @@ fun ScanScreen(
         }
 
         item {
-            ScanResultCard(
-                state = scanState,
-                onRetry = onRetry,
-                onClear = onClearState,
-                onAddDuplicateCopy = onAddDuplicateCopy,
-            )
+            if (mode == ScanMode.LIBRARY) {
+                ScanResultCard(
+                    state = scanState,
+                    onRetry = onRetry,
+                    onClear = onClearState,
+                    onAddDuplicateCopy = onAddDuplicateCopy,
+                )
+            } else {
+                BookstoreResultCard(
+                    state = bookstoreState,
+                    onRetry = onRetryBookstore,
+                    onClear = onClearBookstoreState,
+                    onChangeState = onChangePurchaseState,
+                )
+            }
         }
 
         item {
             ManualIsbnEntry(
-                isLoading = scanState is ScanUiState.Loading,
-                onSubmit = onSubmitIsbn,
+                isLoading = if (mode == ScanMode.LIBRARY) {
+                    scanState is ScanUiState.Loading
+                } else {
+                    bookstoreState is BookstoreUiState.Loading ||
+                        bookstoreState is BookstoreUiState.Updating
+                },
+                onSubmit = if (mode == ScanMode.LIBRARY) onSubmitIsbn else onLookupBookstore,
             )
+        }
+
+        if (mode == ScanMode.BOOKSTORE) {
+            item {
+                Text(
+                    text = stringResource(R.string.bookstore_saved_title, wishlist.size),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                OutlinedTextField(
+                    value = wishlistQuery,
+                    onValueChange = { wishlistQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.bookstore_search)) },
+                    singleLine = true,
+                )
+            }
+            if (visibleWishlist.isEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(
+                            if (wishlist.isEmpty()) {
+                                R.string.bookstore_empty
+                            } else {
+                                R.string.bookstore_no_match
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                items(visibleWishlist, key = BookstoreBook::editionId) { book ->
+                    WishlistCard(book = book, onClick = { onSelectWishlistItem(book) })
+                }
+            }
         }
 
         item {
@@ -209,6 +306,8 @@ fun ScanScreen(
         }
     }
 }
+
+private enum class ScanMode { LIBRARY, BOOKSTORE }
 
 @Composable
 private fun CameraPermissionCard(onRequestPermission: () -> Unit) {
@@ -358,6 +457,194 @@ private fun ScanResultCard(
             }
         }
     }
+}
+
+@Composable
+internal fun BookstoreResultCard(
+    state: BookstoreUiState,
+    onRetry: () -> Unit,
+    onClear: () -> Unit,
+    onChangeState: (PurchaseTransition) -> Unit,
+) {
+    when (state) {
+        BookstoreUiState.Idle -> Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Text(
+                text = stringResource(R.string.bookstore_idle),
+                modifier = Modifier.padding(14.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        is BookstoreUiState.Loading -> ResultSurface {
+            CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.bookstore_loading), fontWeight = FontWeight.SemiBold)
+                Text(
+                    state.isbn,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        is BookstoreUiState.Result -> BookstoreBookResult(
+            book = state.book,
+            busy = false,
+            onClear = onClear,
+            onChangeState = onChangeState,
+        )
+
+        is BookstoreUiState.Updating -> BookstoreBookResult(
+            book = state.book,
+            busy = true,
+            onClear = onClear,
+            onChangeState = onChangeState,
+        )
+
+        is BookstoreUiState.Error -> ResultSurface {
+            Icon(
+                Icons.Rounded.ErrorOutline,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                text = state.failure.message(state.isbn13),
+                modifier = Modifier.weight(1f),
+            )
+            Column(horizontalAlignment = Alignment.End) {
+                if (state.retryIsbn != null) {
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.scan_retry)) }
+                }
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.import_close))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookstoreBookResult(
+    book: BookstoreBook,
+    busy: Boolean,
+    onClear: () -> Unit,
+    onChangeState: (PurchaseTransition) -> Unit,
+) {
+    ResultSurface {
+        Icon(
+            Icons.Rounded.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(book.title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        book.primaryAuthor,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onClear, enabled = !busy) {
+                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.import_close))
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                Column {
+                    Text(
+                        stringResource(R.string.bookstore_owned_count, book.ownedCopyCount),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        stringResource(R.string.bookstore_owned_label),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                Column {
+                    Text(
+                        book.purchaseStatus.label(),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                    Text(
+                        stringResource(R.string.bookstore_plan_label),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            if (busy) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { onChangeState(PurchaseTransition.WANTED) },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.bookstore_wanted)) }
+                FilledTonalButton(
+                    onClick = { onChangeState(PurchaseTransition.RESERVED) },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.bookstore_reserved)) }
+            }
+            Button(
+                onClick = { onChangeState(PurchaseTransition.PURCHASED) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.bookstore_purchased)) }
+        }
+    }
+}
+
+@Composable
+private fun WishlistCard(book: BookstoreBook, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(book.purchaseStatus.label(), color = MaterialTheme.colorScheme.tertiary)
+            Text(book.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(book.primaryAuthor, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(R.string.bookstore_list_meta, book.isbn13, book.ownedCopyCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PurchaseStatus?.label(): String = when (this) {
+    PurchaseStatus.WANTED -> stringResource(R.string.bookstore_wanted)
+    PurchaseStatus.RESERVED -> stringResource(R.string.bookstore_reserved)
+    null -> stringResource(R.string.bookstore_not_planned)
 }
 
 @Composable
