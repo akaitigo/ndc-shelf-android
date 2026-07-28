@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -46,23 +47,40 @@ class LibraryLocationScreenTest {
         setLibraryContent(listOf(book()))
 
         composeRule.onNodeWithText("テスト本").performClick()
-        openCopyEditor()
+        openCopyEditor("所蔵本")
 
         composeRule.onNodeWithText("登録済みの段").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("書斎 / 本棚A / 上段").performScrollTo().assertIsDisplayed()
+        composeRule.onNode(hasText("書斎 / 本棚A / 上段") and hasClickAction())
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
     fun bookEditorShowsNeighborsAndAccessibleMoveActions() {
         val books = listOf(
-            book().copy(copyId = "left", title = "左の本", shelfOrderKey = "20"),
-            book().copy(copyId = "middle", title = "中央の本", shelfOrderKey = "40"),
-            book().copy(copyId = "right", title = "右の本", shelfOrderKey = "60"),
+            book().copy(
+                copyId = "left",
+                title = "左の本",
+                copyLabel = "左側用",
+                shelfOrderKey = "20",
+            ),
+            book().copy(
+                copyId = "middle",
+                title = "中央の本",
+                copyLabel = "中央用",
+                shelfOrderKey = "40",
+            ),
+            book().copy(
+                copyId = "right",
+                title = "右の本",
+                copyLabel = "右側用",
+                shelfOrderKey = "60",
+            ),
         )
         setLibraryContent(books)
 
         composeRule.onNodeWithText("中央の本").performClick()
-        openCopyEditor()
+        openCopyEditor("中央用")
 
         composeRule.onNodeWithText("左: 左の本").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("右: 右の本").performScrollTo().assertIsDisplayed()
@@ -83,6 +101,7 @@ class LibraryLocationScreenTest {
         composeRule.onNodeWithText("貸出用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
 
         composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").performClick()
+        openCopyEditor("保存用")
         composeRule.onNodeWithText("コピーごとの情報").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("同じ版で共通の情報").performScrollTo().assertIsDisplayed()
     }
@@ -111,8 +130,10 @@ class LibraryLocationScreenTest {
         }
     }
 
-    private fun openCopyEditor() {
-        composeRule.onNode(hasText("所蔵本") and hasClickAction()).performClick()
+    private fun openCopyEditor(copyLabel: String) {
+        composeRule.onNodeWithContentDescription(
+            "$copyLabel、場所 書斎 / 本棚A / 上段、未読、紙。タップして編集",
+        ).performClick()
     }
 
     private fun tree() = LocationTree(
