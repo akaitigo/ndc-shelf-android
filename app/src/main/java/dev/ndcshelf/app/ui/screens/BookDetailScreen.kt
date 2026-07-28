@@ -65,6 +65,12 @@ internal fun BookDetailScreen(
     require(copies.isNotEmpty())
     require(copies.map(LibraryBook::editionId).distinct().size == 1)
     val edition = copies.first()
+    val physicalLabel = stringResource(R.string.book_detail_media_physical)
+    val digitalLabel = stringResource(R.string.book_detail_media_digital)
+    val mediaLabels = listOfNotNull(
+        physicalLabel.takeIf { copies.any { it.mediaType == MediaType.PHYSICAL } },
+        digitalLabel.takeIf { copies.any { it.mediaType == MediaType.DIGITAL } },
+    ).joinToString("・")
     BackHandler(onBack = onBack)
 
     LazyColumn(
@@ -141,7 +147,7 @@ internal fun BookDetailScreen(
                 )
                 DetailValue(
                     stringResource(R.string.book_detail_media),
-                    edition.mediaType.label(),
+                    mediaLabels,
                 )
             }
         }

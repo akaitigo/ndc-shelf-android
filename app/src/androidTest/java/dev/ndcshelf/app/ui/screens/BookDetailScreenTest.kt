@@ -42,7 +42,12 @@ class BookDetailScreenTest {
                 BookDetailScreen(
                     copies = listOf(
                         first.copy(copyId = "copy-1", copyLabel = "閲覧用"),
-                        first.copy(copyId = "copy-2", copyLabel = "保存用", location = "書庫"),
+                        first.copy(
+                            copyId = "copy-2",
+                            copyLabel = "保存用",
+                            location = "書庫",
+                            mediaType = MediaType.DIGITAL,
+                        ),
                     ),
                     onBack = {},
                     onEditCopy = { editedCopyId = it },
@@ -58,13 +63,14 @@ class BookDetailScreenTest {
         composeRule.onNodeWithContentDescription("${first.title} の表紙なし").assertIsDisplayed()
         composeRule.onNodeWithText("未分類").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("所有コピー 2冊").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("紙・電子").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("NDLから再取得・照合").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("シリーズを整理（準備中）")
             .performScrollTo()
             .assertIsDisplayed()
             .assertIsNotEnabled()
         composeRule.onNodeWithContentDescription(
-            "保存用、場所 書庫、未読、紙。タップして編集",
+            "保存用、場所 書庫、未読、電子。タップして編集",
         ).performScrollTo().performClick()
         assertEquals("copy-2", editedCopyId)
     }
