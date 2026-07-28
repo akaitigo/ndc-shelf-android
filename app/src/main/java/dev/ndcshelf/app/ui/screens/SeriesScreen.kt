@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -44,6 +45,9 @@ import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
 import dev.ndcshelf.app.domain.model.SeriesMembershipType
 import dev.ndcshelf.app.domain.model.SeriesOverview
+import dev.ndcshelf.app.domain.model.SeriesReleaseCandidate
+import dev.ndcshelf.app.domain.model.SeriesReleaseState
+import dev.ndcshelf.app.domain.model.SeriesWatchOverview
 import dev.ndcshelf.app.domain.model.SeriesVolume
 import dev.ndcshelf.app.domain.model.SeriesVolumeState
 import java.text.DateFormat
@@ -52,12 +56,14 @@ import java.util.Date
 @Composable
 fun SeriesScreen(
     series: List<SeriesOverview>,
+    watches: List<SeriesWatchOverview> = emptyList(),
     selectedSeriesId: String?,
     onSelectSeries: (String?) -> Unit,
     onOpenEdition: (String) -> Unit,
     onOpenBookstore: (String) -> Unit,
     onManageSuggestions: () -> Unit = {},
     onRemoveMembership: (String) -> Unit = {},
+    onSetWatchEnabled: (String, Boolean) -> Unit = { _, _ -> },
     contentPadding: PaddingValues,
 ) {
     val selectedSeries = series.firstOrNull { it.series.id == selectedSeriesId }
@@ -71,10 +77,12 @@ fun SeriesScreen(
     } else {
         SeriesDetail(
             overview = selectedSeries,
+            watch = watches.firstOrNull { it.watch.seriesId == selectedSeries.series.id },
             onBack = { onSelectSeries(null) },
             onOpenEdition = onOpenEdition,
             onOpenBookstore = onOpenBookstore,
             onRemoveMembership = onRemoveMembership,
+            onSetWatchEnabled = onSetWatchEnabled,
             contentPadding = contentPadding,
         )
     }
@@ -214,10 +222,12 @@ private fun SeriesCatalogCard(overview: SeriesOverview, onClick: () -> Unit) {
 @Composable
 private fun SeriesDetail(
     overview: SeriesOverview,
+    watch: SeriesWatchOverview?,
     onBack: () -> Unit,
     onOpenEdition: (String) -> Unit,
     onOpenBookstore: (String) -> Unit,
     onRemoveMembership: (String) -> Unit,
+    onSetWatchEnabled: (String, Boolean) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val dateFormatter = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
@@ -257,6 +267,15 @@ private fun SeriesDetail(
             }
         }
         item { SeriesSummary(overview) }
+        item {
+            SeriesWatchCard(
+                overview = overview,
+                watch = watch,
+                dateFormatter = dateFormatter,
+                onSetEnabled = onSetWatchEnabled,
+                onOpenBookstore = onOpenBookstore,
+            )
+        }
         if (overview.isConfirmedMainStoryComplete) {
             item {
                 Surface(
@@ -294,6 +313,106 @@ private fun SeriesDetail(
             }
         }
     }
+}
+
+@Composable
+private fun SeriesWatchCard(
+    overview: SeriesOverview,
+    watch: SeriesWatchOverview?,
+    dateFormatter: DateFormat,
+    onSetEnabled: (String, Boolean) -> Unit,
+    onOpenBookstore: (String) -> Unit,
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.series_watch_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.series_watch_frequency),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = watch?.watch?.enabled == true,
+                    onCheckedChange = { onSetEnabled(overview.series.id, it) },
+                )
+            }
+            Text(
+                stringResource(R.string.series_watch_privacy, overview.series.name),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            watch?.watch?.lastSuccessfulAt?.let {
+                Text(
+                    stringResource(R.string.series_watch_last_checked, dateFormatter.format(Date(it))),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            if (watch?.candidates?.isNotEmpty() == true) {
+                Text(
+                    stringResource(R.string.series_watch_candidates),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                watch.candidates.take(MAX_VISIBLE_RELEASE_CANDIDATES).forEach { candidate ->
+                    SeriesReleaseCandidateRow(candidate, onOpenBookstore)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeriesReleaseCandidateRow(
+    candidate: SeriesReleaseCandidate,
+    onOpenBookstore: (String) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(candidate.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    listOfNotNull(candidate.primaryAuthor, candidate.publisher, candidate.publishedDate)
+                        .filter(String::isNotBlank).joinToString(" ・ "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(candidate.state.labelResource()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (candidate.isbn13 != null && candidate.state != SeriesReleaseState.OWNED) {
+                TextButton(onClick = { onOpenBookstore(candidate.isbn13) }) {
+                    Text(stringResource(R.string.series_watch_open_bookstore))
+                }
+            }
+        }
+    }
+}
+
+private fun SeriesReleaseState.labelResource(): Int = when (this) {
+    SeriesReleaseState.NEW -> R.string.series_watch_state_new
+    SeriesReleaseState.WANTED -> R.string.series_watch_state_wanted
+    SeriesReleaseState.RESERVED -> R.string.series_watch_state_reserved
+    SeriesReleaseState.OWNED -> R.string.series_watch_state_owned
 }
 
 @Composable
@@ -485,4 +604,5 @@ private fun SeriesMembershipType.label(): String = when (this) {
 
 const val SERIES_LIST_TEST_TAG = "series-list"
 const val SERIES_DETAIL_TEST_TAG = "series-detail"
+private const val MAX_VISIBLE_RELEASE_CANDIDATES = 20
 const val SERIES_EMPTY_TEST_TAG = "series-empty"

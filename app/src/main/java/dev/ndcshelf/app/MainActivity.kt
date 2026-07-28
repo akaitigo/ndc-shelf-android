@@ -24,6 +24,8 @@ class MainActivity : ComponentActivity() {
             librarySearchSettings = application.container.librarySearchSettings,
             seriesRepository = application.container.seriesRepository,
             workGroupRepository = application.container.workGroupRepository,
+            seriesWatchRepository = application.container.seriesWatchRepository,
+            seriesWatchScheduler = application.container.seriesWatchScheduler,
         )
     }
 

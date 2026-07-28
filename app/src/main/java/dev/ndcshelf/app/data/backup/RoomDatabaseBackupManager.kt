@@ -38,6 +38,7 @@ class RoomDatabaseBackupManager(
     private val locationDao = database.locationDao()
     private val seriesDao = database.seriesDao()
     private val workGroupDao = database.workGroupDao()
+    private val seriesWatchDao = database.seriesWatchDao()
     private val codec = DatabaseBackupCodec(APP_DATABASE_VERSION)
 
     override suspend fun createBackup(output: OutputStream): DatabaseBackupCreateResult = try {
@@ -97,6 +98,8 @@ class RoomDatabaseBackupManager(
                 dao.deleteAllScanSessions()
                 dao.deleteAllCopies()
                 dao.deleteAllWishlistItems()
+                seriesWatchDao.deleteAllCandidates()
+                seriesWatchDao.deleteAllWatches()
                 seriesDao.deleteAllMemberships()
                 seriesDao.deleteAllSeries()
                 workGroupDao.deleteAllMemberships()
@@ -111,6 +114,8 @@ class RoomDatabaseBackupManager(
                 workGroupDao.upsertMemberships(preview.snapshot.workGroupMemberships)
                 seriesDao.upsertSeriesItems(preview.snapshot.series)
                 seriesDao.upsertMemberships(preview.snapshot.seriesMemberships)
+                seriesWatchDao.upsertWatches(preview.snapshot.seriesWatches)
+                seriesWatchDao.upsertCandidates(preview.snapshot.seriesReleaseCandidates)
                 dao.upsertEditions(preview.snapshot.editions)
                 dao.upsertWishlistItems(preview.snapshot.wishlistItems)
                 locationDao.upsertRooms(preview.snapshot.rooms)
@@ -151,6 +156,8 @@ class RoomDatabaseBackupManager(
         scanAttempts = dao.getAllScanAttempts(),
         workGroups = workGroupDao.getAllGroups(),
         workGroupMemberships = workGroupDao.getAllMemberships(),
+        seriesWatches = seriesWatchDao.getAllWatches(),
+        seriesReleaseCandidates = seriesWatchDao.getAllCandidates(),
     )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {

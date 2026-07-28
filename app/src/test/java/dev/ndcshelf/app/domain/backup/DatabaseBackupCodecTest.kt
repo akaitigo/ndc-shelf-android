@@ -6,6 +6,8 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
+import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
+import dev.ndcshelf.app.data.local.SeriesWatchEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
@@ -107,20 +109,20 @@ class DatabaseBackupCodecTest {
         val olderManifest = original.toMutableMap().apply {
             this["manifest.json"] = requireNotNull(this["manifest.json"])
                 .decodeToString()
-                .replace("\"formatVersion\":11", "\"formatVersion\":10")
+                .replace("\"formatVersion\":12", "\"formatVersion\":10")
                 .encodeToByteArray()
         }
         val olderPayload = archiveWithPayload(
             original,
             requireNotNull(original["database.json"])
                 .decodeToString()
-                .replace("\"schemaVersion\":11", "\"schemaVersion\":10"),
+                .replace("\"schemaVersion\":12", "\"schemaVersion\":10"),
         )
         val missingPayloadSchema = archiveWithPayload(
             original,
             requireNotNull(original["database.json"])
                 .decodeToString()
-                .replace("\"schemaVersion\":11,", ""),
+                .replace("\"schemaVersion\":12,", ""),
         )
 
         listOf(zip(olderManifest), olderPayload, missingPayloadSchema).forEach { invalidArchive ->
@@ -137,13 +139,13 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":11", "\"schemaVersion\":7")
+            .replace("\"schemaVersion\":12", "\"schemaVersion\":7")
             .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":11", "\"formatVersion\":7")
+            .replace("\"formatVersion\":12", "\"formatVersion\":7")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
 
@@ -156,19 +158,24 @@ class DatabaseBackupCodecTest {
 
     @Test
     fun `format eight backup keeps scan history and bibliographic source without series`() {
-        val snapshot = sampleSnapshot().copy(series = emptyList(), seriesMemberships = emptyList())
+        val snapshot = sampleSnapshot().copy(
+            series = emptyList(),
+            seriesMemberships = emptyList(),
+            seriesWatches = emptyList(),
+            seriesReleaseCandidates = emptyList(),
+        )
         val (archive, _) = codec.encode(snapshot, "0.3.0", 1)
         val entries = unzip(archive).toMutableMap()
         val originalPayload = requireNotNull(entries["database.json"])
         val oldPayload = originalPayload.decodeToString()
-            .replace("\"schemaVersion\":11", "\"schemaVersion\":8")
+            .replace("\"schemaVersion\":12", "\"schemaVersion\":8")
             .replace(",\"series\":[]", "")
             .replace(",\"seriesMemberships\":[]", "")
             .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":11", "\"formatVersion\":8")
+            .replace("\"formatVersion\":12", "\"formatVersion\":8")
             .replace(",\"seriesCount\":0,\"seriesMembershipCount\":0", "")
             .replace(originalPayload.sha256(), oldPayload.sha256())
             .encodeToByteArray()
@@ -285,7 +292,7 @@ class DatabaseBackupCodecTest {
         val entries = unzip(archive).toMutableMap()
         val payload = requireNotNull(entries["database.json"])
             .decodeToString()
-            .replace("\"schemaVersion\":11", "\"schemaVersion\":10")
+            .replace("\"schemaVersion\":12", "\"schemaVersion\":10")
             .replace(
                 Regex(",\"workGroups\":\\[.*?],\"workGroupMemberships\":\\[.*?]"),
                 "",
@@ -293,7 +300,7 @@ class DatabaseBackupCodecTest {
             .encodeToByteArray()
         val manifest = requireNotNull(entries["manifest.json"])
             .decodeToString()
-            .replace("\"formatVersion\":11", "\"formatVersion\":10")
+            .replace("\"formatVersion\":12", "\"formatVersion\":10")
             .replace(Regex(",\"workGroupCount\":\\d+,\"workGroupMembershipCount\":\\d+"), "")
             .replace(Regex("\"payloadSha256\":\"[0-9a-f]+\""), "\"payloadSha256\":\"${payload.sha256()}\"")
             .encodeToByteArray()
@@ -487,6 +494,24 @@ class DatabaseBackupCodecTest {
         workGroupMemberships = listOf(
             WorkGroupMembershipEntity("work-group-member-1", "work-group-1", "work-1", 1),
             WorkGroupMembershipEntity("work-group-member-2", "work-group-1", "work-2", 1),
+        ),
+        seriesWatches = listOf(
+            SeriesWatchEntity("series-1", "吾輩シリーズ", true, 1, 3, 4, 4),
+        ),
+        seriesReleaseCandidates = listOf(
+            SeriesReleaseCandidateEntity(
+                id = "candidate-1",
+                seriesId = "series-1",
+                sourceRecordId = "ndl-1",
+                title = "吾輩シリーズ 下巻",
+                primaryAuthor = "夏目漱石",
+                isbn13 = null,
+                publisher = "出版社",
+                publishedDate = "2026",
+                firstSeenAt = 4,
+                lastSeenAt = 5,
+                notifiedAt = 5,
+            ),
         ),
     )
 

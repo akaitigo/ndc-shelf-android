@@ -3,6 +3,7 @@ package dev.ndcshelf.app
 import android.app.Application
 import android.content.Context
 import androidx.room.Room
+import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
@@ -12,26 +13,36 @@ import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
+import dev.ndcshelf.app.data.remote.NdlSeriesReleaseService
 import dev.ndcshelf.app.data.repository.DefaultLibraryRepository
 import dev.ndcshelf.app.data.repository.RoomLocationRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesRepository
+import dev.ndcshelf.app.data.repository.RoomSeriesWatchRepository
 import dev.ndcshelf.app.data.repository.RoomWorkGroupRepository
+import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
+import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
 import dev.ndcshelf.app.domain.repository.SeriesRepository
+import dev.ndcshelf.app.domain.repository.SeriesWatchRepository
+import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
 import dev.ndcshelf.app.domain.repository.WorkGroupRepository
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class NdcShelfApplication : Application(), SingletonImageLoader.Factory {
+class NdcShelfApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
     val container: AppContainer by lazy {
         AppContainer(this)
     }
 
     override fun newImageLoader(context: Context): ImageLoader = createNdlCoverImageLoader(context)
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().build()
+
 }
 
 internal fun createNdlCoverImageLoader(context: Context): ImageLoader = ImageLoader.Builder(context)
@@ -97,6 +108,15 @@ class AppContainer(application: Application) {
     val seriesRepository: SeriesRepository = RoomSeriesRepository(database)
 
     val workGroupRepository: WorkGroupRepository = RoomWorkGroupRepository(database)
+
+    val seriesWatchRepository: SeriesWatchRepository = RoomSeriesWatchRepository(
+        database = database,
+        source = NdlSeriesReleaseService(),
+    )
+
+    val seriesWatchScheduler: SeriesWatchScheduler = AndroidSeriesWatchScheduler(application)
+
+    val seriesReleaseNotifier = AndroidSeriesReleaseNotifier(application)
 
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
 

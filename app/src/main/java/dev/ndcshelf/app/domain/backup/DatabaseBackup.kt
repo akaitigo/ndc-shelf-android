@@ -6,6 +6,8 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
+import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
+import dev.ndcshelf.app.data.local.SeriesWatchEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
@@ -28,6 +30,8 @@ data class DatabaseSnapshot(
     val seriesMemberships: List<SeriesMembershipEntity> = emptyList(),
     val workGroups: List<WorkGroupEntity> = emptyList(),
     val workGroupMemberships: List<WorkGroupMembershipEntity> = emptyList(),
+    val seriesWatches: List<SeriesWatchEntity> = emptyList(),
+    val seriesReleaseCandidates: List<SeriesReleaseCandidateEntity> = emptyList(),
 )
 
 data class DatabaseBackupMetadata(
@@ -45,6 +49,8 @@ data class DatabaseBackupMetadata(
     val seriesMembershipCount: Int = 0,
     val workGroupCount: Int = 0,
     val workGroupMembershipCount: Int = 0,
+    val seriesWatchCount: Int = 0,
+    val seriesReleaseCandidateCount: Int = 0,
 )
 
 class DatabaseBackupPreview internal constructor(

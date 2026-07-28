@@ -1,8 +1,11 @@
 package dev.ndcshelf.app.ui
 
 import android.app.Activity
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
@@ -34,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +53,7 @@ import dev.ndcshelf.app.LibraryExportUiState
 import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.SeriesEditorUiState
+import dev.ndcshelf.app.SeriesWatchMutationUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.ui.screens.InsightsScreen
@@ -91,15 +96,39 @@ fun NdcShelfApp(
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
     val seriesEditorState by viewModel.seriesEditorState.collectAsStateWithLifecycle()
+    val seriesWatchMutationState by viewModel.seriesWatchMutationState.collectAsStateWithLifecycle()
     val workVariantState by viewModel.workVariantState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
     var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
     var showSeriesEditor by rememberSaveable { mutableStateOf(false) }
     var workVariantWorkId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingSeriesWatchId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(workVariantWorkId) {
         workVariantWorkId?.let(viewModel::prepareWorkVariantEditor)
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        pendingSeriesWatchId?.let { seriesId ->
+            if (granted) viewModel.setSeriesWatchEnabled(seriesId, true)
+            else viewModel.reportSeriesWatchPermissionDenied()
+        }
+        pendingSeriesWatchId = null
+    }
+
+    fun setSeriesWatch(seriesId: String, enabled: Boolean) {
+        if (!enabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            viewModel.setSeriesWatchEnabled(seriesId, enabled)
+        } else {
+            pendingSeriesWatchId = seriesId
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     LaunchedEffect(seriesEditorState) {
@@ -109,6 +138,20 @@ fun NdcShelfApp(
         } else if (seriesEditorState === SeriesEditorUiState.Error && !showSeriesEditor) {
             snackbarHostState.showSnackbar(resources.getString(R.string.series_membership_remove_error))
             viewModel.clearSeriesEditorState()
+        }
+    }
+
+    LaunchedEffect(seriesWatchMutationState) {
+        val message = when (seriesWatchMutationState) {
+            SeriesWatchMutationUiState.PermissionDenied -> R.string.series_watch_permission_denied
+            SeriesWatchMutationUiState.Invalid, SeriesWatchMutationUiState.Error ->
+                R.string.series_watch_update_error
+            SeriesWatchMutationUiState.Updated -> R.string.series_watch_updated
+            else -> null
+        }
+        if (message != null) {
+            snackbarHostState.showSnackbar(resources.getString(message))
+            viewModel.clearSeriesWatchMutationState()
         }
     }
 
@@ -491,6 +534,7 @@ fun NdcShelfApp(
 
             AppDestination.SERIES -> {
                 val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
+                val seriesWatches by viewModel.seriesWatches.collectAsStateWithLifecycle()
                 if (showSeriesEditor) {
                     val seriesSuggestions by viewModel.seriesSuggestions.collectAsStateWithLifecycle()
                     SeriesSuggestionScreen(
@@ -513,6 +557,7 @@ fun NdcShelfApp(
                 } else {
                     SeriesScreen(
                         series = seriesCatalog,
+                        watches = seriesWatches,
                         selectedSeriesId = selectedSeriesId,
                         onSelectSeries = { selectedSeriesId = it },
                         onOpenEdition = { editionId ->
@@ -529,6 +574,7 @@ fun NdcShelfApp(
                             showSeriesEditor = true
                         },
                         onRemoveMembership = viewModel::removeSeriesMembership,
+                        onSetWatchEnabled = ::setSeriesWatch,
                         contentPadding = contentPadding,
                     )
                 }

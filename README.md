@@ -15,6 +15,7 @@
 - シリーズ別の所有巻・既知巻・読了巻・最新所有巻と、確認済み本編だけの欠巻候補
 - タイトルからのシリーズ・巻候補を編集し、新規または既存シリーズへ確認付きで一括登録
 - 文庫・新装版・電子版を、版固有情報を残した可逆な作品グループとして確認付きで関連付け
+- シリーズ単位の明示設定による、週1回の新刊書誌候補確認と重複しない通知
 - 登録済みISBNの重複警告
 - タイトル、著者、ISBN、NDC、置き場所の横断検索
 - Room側の絞り込み、読書状態フィルター、追加日・書誌・NDC・棚順の並べ替え
@@ -98,6 +99,8 @@ cd ndc-shelf-android
 
 暗所・小型バーコード・100冊連続・端末差の確認条件は[スキャン実機検証手順](docs/SCAN_DEVICE_TESTING.md)を使用してください。
 
+通知権限、再起動、時計変更、バックアップ復元を含む新刊候補の確認は[シリーズ新刊候補の実機確認](docs/SERIES_WATCH_DEVICE_TESTING.md)を使用してください。
+
 Room schemaとRepositoryのテスト構成、Migration追加手順は[docs/DATABASE_TESTING.md](docs/DATABASE_TESTING.md)を参照してください。
 
 NDL Searchへの書誌・表紙通信、障害分類、再試行、表紙キャッシュの境界は[docs/NETWORK_BOUNDARY.md](docs/NETWORK_BOUNDARY.md)を参照してください。
@@ -106,7 +109,7 @@ NDL Searchへの書誌・表紙通信、障害分類、再試行、表紙キャ�
 
 利用者向け変更は[CHANGELOG.md](CHANGELOG.md)、v0.2の公開判定は[リリースチェックリスト](docs/releases/V0.2_RELEASE_CHECKLIST.md)、v0.3候補は[release notes](docs/releases/V0.3_RELEASE_NOTES.md)、[release checklist](docs/releases/V0.3_RELEASE_CHECKLIST.md)、[rollback手順](docs/releases/V0.3_ROLLBACK.md)を参照してください。
 
-NDL Search APIの利用にAPIキーは不要です。アプリはISBNの登録時だけ、対象ISBNをNDL Searchへ送信します。蔵書データは端末内に保存され、Androidのクラウドバックアップからも除外されます。Android 9以降の端末間転送ではRoom DBだけを移行対象にします。表紙表示時はNDL SearchのHTTPS画像URLへ接続し、最大50MiBの端末キャッシュを利用します。バーコード画像と認識結果はML Kitにより端末内処理されますが、同SDKは診断・利用分析メトリクスをGoogleへ送信します。詳しい取扱いは[PRIVACY.md](PRIVACY.md)、バックアップ判断は[docs/BACKUP_THREAT_MODEL.md](docs/BACKUP_THREAT_MODEL.md)を参照してください。
+NDL Search APIの利用にAPIキーは不要です。ISBN検索時は対象ISBNだけを送信し、シリーズの定期確認を明示的に有効にした場合だけ対象シリーズ名と検索開始年をシリーズごとに週1回送信します。一時障害時は失敗した確認だけを指数バックオフで再試行します。蔵書データは端末内に保存され、Androidのクラウドバックアップからも除外されます。Android 9以降の端末間転送ではRoom DBだけを移行対象にします。表紙表示時はNDL SearchのHTTPS画像URLへ接続し、最大50MiBの端末キャッシュを利用します。バーコード画像と認識結果はML Kitにより端末内処理されますが、同SDKは診断・利用分析メトリクスをGoogleへ送信します。詳しい取扱いは[PRIVACY.md](PRIVACY.md)、バックアップ判断は[docs/BACKUP_THREAT_MODEL.md](docs/BACKUP_THREAT_MODEL.md)を参照してください。
 
 SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLとして取得・解析します。
 
@@ -132,6 +135,7 @@ SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLと�
 - [x] 漫画・シリーズの所有巻・欠巻候補・読了状況の可視化
 - [x] シリーズ候補の編集・一括確定・関連解除
 - [x] 版違いの可逆な作品グループと任意のシリーズ代替判定
+- [x] オプトインのシリーズ新刊候補確認
 - [ ] シリーズ統合
 - [ ] バックアップ同期（任意・オプトイン）
 - [ ] AI司書（任意・オプトイン）

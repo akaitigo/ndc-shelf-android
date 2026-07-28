@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 10
+const val APP_DATABASE_VERSION = 11
 
 @Database(
     entities = [
@@ -14,6 +14,8 @@ const val APP_DATABASE_VERSION = 10
         WorkGroupMembershipEntity::class,
         SeriesEntity::class,
         SeriesMembershipEntity::class,
+        SeriesWatchEntity::class,
+        SeriesReleaseCandidateEntity::class,
         BookEditionEntity::class,
         LocationRoomEntity::class,
         LocationShelfEntity::class,
@@ -41,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_7_8,
             MIGRATION_8_9,
             MIGRATION_9_10,
+            MIGRATION_10_11,
         )
     }
 
@@ -51,6 +54,65 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seriesDao(): SeriesDao
 
     abstract fun workGroupDao(): WorkGroupDao
+
+    abstract fun seriesWatchDao(): SeriesWatchDao
+}
+
+private val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS series_watches (
+                seriesId TEXT NOT NULL PRIMARY KEY,
+                queryTitle TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                lastCheckedAt INTEGER,
+                lastSuccessfulAt INTEGER,
+                FOREIGN KEY(seriesId) REFERENCES series(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_series_watches_enabled ON series_watches(enabled)")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS series_release_candidates (
+                id TEXT NOT NULL PRIMARY KEY,
+                seriesId TEXT NOT NULL,
+                sourceRecordId TEXT NOT NULL,
+                title TEXT NOT NULL,
+                primaryAuthor TEXT NOT NULL,
+                isbn13 TEXT,
+                publisher TEXT,
+                publishedDate TEXT,
+                firstSeenAt INTEGER NOT NULL,
+                lastSeenAt INTEGER NOT NULL,
+                notifiedAt INTEGER,
+                FOREIGN KEY(seriesId) REFERENCES series(id)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_series_release_candidates_seriesId " +
+                "ON series_release_candidates(seriesId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                "index_series_release_candidates_seriesId_sourceRecordId " +
+                "ON series_release_candidates(seriesId, sourceRecordId)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_series_release_candidates_isbn13 " +
+                "ON series_release_candidates(isbn13)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_series_release_candidates_notifiedAt " +
+                "ON series_release_candidates(notifiedAt)",
+        )
+    }
 }
 
 private val MIGRATION_9_10 = object : Migration(9, 10) {

@@ -189,6 +189,8 @@ erDiagram
 
 `BookEdition.isbn13`はユニークです。同じISBNを再スキャンした場合は既存Editionを再利用し、新しい`OwnedCopy`だけをトランザクションで追加します。`OwnedCopy.copyLabel`、置き場所、読書状態、取得日時はコピー固有であり、一覧では同一Editionを参照するコピー数と表示名を併記します。Edition共通の書誌情報とコピー固有情報をUI上でも分離し、削除対象は必ずコピー単位で示します。
 
+`SeriesWatch`はシリーズ単位の明示的な外部確認設定、`SeriesReleaseCandidate`はNDLで確認した書誌候補と通知状態を保持します。初回取得は基準線として通知せず、決定的な候補IDと`notifiedAt`で後続の重複通知を防ぎます。ISBNが一致する候補は`OwnedCopy`と`WishlistItem`から所有済み・欲しい・予約済みを導出し、候補へ蔵書状態を複製しません。
+
 ### 書店モード
 
 未所有の購入候補は`OwnedCopy`を作らず、Editionに対して最大1件の`WishlistItem`として保存します。永続化する`PurchaseStatus`は`WANTED`と`RESERVED`だけで、読書状態とは別の列挙です。`PURCHASED`は保存状態ではなく遷移命令とし、単一トランザクションで既存Editionを再利用した`OwnedCopy`を追加して`WishlistItem`を削除します。すでに所有しているEditionにも追加購入の予定を持てます。

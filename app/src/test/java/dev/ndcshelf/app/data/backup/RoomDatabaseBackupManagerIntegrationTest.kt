@@ -9,6 +9,9 @@ import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
+import dev.ndcshelf.app.data.local.SeriesEntity
+import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
+import dev.ndcshelf.app.data.local.SeriesWatchEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
@@ -161,6 +164,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
         dao.upsertWorks(snapshot.works)
         database.workGroupDao().upsertGroups(snapshot.workGroups)
         database.workGroupDao().upsertMemberships(snapshot.workGroupMemberships)
+        database.seriesDao().upsertSeriesItems(snapshot.series)
+        database.seriesWatchDao().upsertWatches(snapshot.seriesWatches)
+        database.seriesWatchDao().upsertCandidates(snapshot.seriesReleaseCandidates)
         dao.upsertEditions(snapshot.editions)
         dao.upsertCopies(snapshot.copies)
         dao.upsertScanSessions(snapshot.scanSessions)
@@ -172,6 +178,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
         dao.deleteAllScanAttempts()
         dao.deleteAllScanSessions()
         dao.deleteAllCopies()
+        database.seriesWatchDao().deleteAllCandidates()
+        database.seriesWatchDao().deleteAllWatches()
+        database.seriesDao().deleteAllSeries()
         database.workGroupDao().deleteAllMemberships()
         database.workGroupDao().deleteAllGroups()
         dao.deleteAllEditions()
@@ -188,6 +197,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
             scanAttempts = dao.getAllScanAttempts(),
             workGroups = database.workGroupDao().getAllGroups(),
             workGroupMemberships = database.workGroupDao().getAllMemberships(),
+            series = database.seriesDao().getAllSeries(),
+            seriesWatches = database.seriesWatchDao().getAllWatches(),
+            seriesReleaseCandidates = database.seriesWatchDao().getAllCandidates(),
         )
     }
 
@@ -242,6 +254,27 @@ class RoomDatabaseBackupManagerIntegrationTest {
                 "$prefix-group",
                 "$prefix-work-alt",
                 1,
+            ),
+        ),
+        series = listOf(SeriesEntity("$prefix-series", "$prefix-series-title", 1, 2)),
+        seriesWatches = listOf(
+            SeriesWatchEntity(
+                "$prefix-series", "$prefix-series-title", true, 1, 2, 3, 3,
+            ),
+        ),
+        seriesReleaseCandidates = listOf(
+            SeriesReleaseCandidateEntity(
+                id = "$prefix-candidate",
+                seriesId = "$prefix-series",
+                sourceRecordId = "$prefix-ndl-record",
+                title = "$prefix-series-title 2",
+                primaryAuthor = "$prefix-author",
+                isbn13 = null,
+                publisher = null,
+                publishedDate = "2026",
+                firstSeenAt = 3,
+                lastSeenAt = 4,
+                notifiedAt = 4,
             ),
         ),
     )

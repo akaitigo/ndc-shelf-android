@@ -442,6 +442,35 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun version10MigrationAddsSeriesWatchTablesWithCascadeAndUniqueSourceRecord() {
+        migrationHelper.createDatabase(V10_DATABASE, 10).apply {
+            execSQL("INSERT INTO series (id, name, createdAt, updatedAt) VALUES ('series', '年代記', 1, 1)")
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V10_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+
+        migrated.execSQL(
+            "INSERT INTO series_watches " +
+                "(seriesId, queryTitle, enabled, createdAt, updatedAt, lastCheckedAt, lastSuccessfulAt) " +
+                "VALUES ('series', '年代記', 1, 1, 1, NULL, NULL)",
+        )
+        migrated.assertForeignKey("series_watches", "series", "seriesId", "id")
+        migrated.assertForeignKey("series_release_candidates", "series", "seriesId", "id")
+        migrated.assertIndex(
+            "series_release_candidates",
+            "index_series_release_candidates_seriesId_sourceRecordId",
+            true,
+        )
+        migrated.close()
+    }
+
     private fun androidx.sqlite.db.SupportSQLiteDatabase.queryNames(
         sql: String,
         column: String,
@@ -501,6 +530,7 @@ class AppDatabaseMigrationTest {
         const val V7_DATABASE = "migration-v7"
         const val V8_DATABASE = "migration-v8"
         const val V9_DATABASE = "migration-v9"
+        const val V10_DATABASE = "migration-v10"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

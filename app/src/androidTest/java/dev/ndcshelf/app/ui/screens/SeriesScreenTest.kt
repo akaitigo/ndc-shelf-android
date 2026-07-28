@@ -2,7 +2,9 @@ package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -13,6 +15,10 @@ import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.SeriesMembership
 import dev.ndcshelf.app.domain.model.SeriesMembershipType
 import dev.ndcshelf.app.domain.model.SeriesOverview
+import dev.ndcshelf.app.domain.model.SeriesReleaseCandidate
+import dev.ndcshelf.app.domain.model.SeriesReleaseState
+import dev.ndcshelf.app.domain.model.SeriesWatch
+import dev.ndcshelf.app.domain.model.SeriesWatchOverview
 import dev.ndcshelf.app.domain.model.SeriesVolume
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import org.junit.Assert.assertEquals
@@ -107,21 +113,78 @@ class SeriesScreenTest {
         composeRule.onNodeWithText("確認済みの未所有本編").assertDoesNotExist()
     }
 
+    @Test
+    fun releaseWatchIsOffByDefaultDisclosesTransmissionAndRequestsExplicitOptIn() {
+        var mutation: Pair<String, Boolean>? = null
+        setContent(
+            series = listOf(overview(volume("1巻"))),
+            selectedSeriesId = "series",
+            onSetWatchEnabled = { seriesId, enabled -> mutation = seriesId to enabled },
+        )
+
+        composeRule.onNodeWithText("新刊候補を定期確認").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("シリーズ名「銀河叙事詩」と検索開始年", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(isToggleable()).performScrollTo().assertIsOff().performClick()
+
+        assertEquals("series" to true, mutation)
+    }
+
+    @Test
+    fun releaseCandidateShowsPurchaseStateAndOpensBookstore() {
+        var openedIsbn: String? = null
+        val watch = SeriesWatchOverview(
+            watch = SeriesWatch("series", "銀河叙事詩", true, 1, 2, 3, 3),
+            candidates = listOf(
+                SeriesReleaseCandidate(
+                    id = "candidate",
+                    seriesId = "series",
+                    title = "銀河叙事詩 2巻",
+                    primaryAuthor = "星野 著",
+                    isbn13 = "9784000000039",
+                    publisher = "星雲社",
+                    publishedDate = "2026-08",
+                    firstSeenAt = 3,
+                    lastSeenAt = 3,
+                    notifiedAt = null,
+                    state = SeriesReleaseState.RESERVED,
+                ),
+            ),
+        )
+        setContent(
+            series = listOf(overview(volume("1巻"))),
+            watches = listOf(watch),
+            selectedSeriesId = "series",
+            onOpenBookstore = { openedIsbn = it },
+        )
+
+        composeRule.onNodeWithText("銀河叙事詩 2巻").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("予約済み").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("書店モード").performScrollTo().performClick()
+
+        assertEquals("9784000000039", openedIsbn)
+    }
+
     private fun setContent(
         series: List<SeriesOverview>,
+        watches: List<SeriesWatchOverview> = emptyList(),
         selectedSeriesId: String? = null,
         onSelectSeries: (String?) -> Unit = {},
         onOpenEdition: (String) -> Unit = {},
         onOpenBookstore: (String) -> Unit = {},
+        onSetWatchEnabled: (String, Boolean) -> Unit = { _, _ -> },
     ) {
         composeRule.setContent {
             NdcShelfTheme {
                 SeriesScreen(
                     series = series,
+                    watches = watches,
                     selectedSeriesId = selectedSeriesId,
                     onSelectSeries = onSelectSeries,
                     onOpenEdition = onOpenEdition,
                     onOpenBookstore = onOpenBookstore,
+                    onSetWatchEnabled = onSetWatchEnabled,
                     contentPadding = PaddingValues(),
                 )
             }
