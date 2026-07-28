@@ -203,4 +203,13 @@
     <string name="location_cancel">キャンセル</string>
     <string name="insights_locations_title">分類別の置き場所</string>
     <string name="insights_location_item">NDC %1$s ・ %2$s</string>
+    <string name="shelf_order_title">棚内の並び</string>
+    <string name="shelf_order_left_neighbor">左: %1$s</string>
+    <string name="shelf_order_right_neighbor">右: %1$s</string>
+    <string name="shelf_order_edge">端</string>
+    <string name="shelf_order_move_left">左へ移動</string>
+    <string name="shelf_order_move_right">右へ移動</string>
+    <string name="shelf_order_insert_title">棚へ入れる位置</string>
+    <string name="shelf_order_insert_start">先頭</string>
+    <string name="shelf_order_insert_after">「%1$s」の後</string>
 </resources>

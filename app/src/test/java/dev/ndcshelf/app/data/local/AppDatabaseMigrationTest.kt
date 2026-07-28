@@ -125,6 +125,41 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version2LocationCopiesReceiveStableOrderKeys() {
+        migrationHelper.createDatabase(V2_DATABASE, 2).apply {
+            execSQL("INSERT INTO book_works VALUES ('work-1', '本A', '著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition-1', 'work-1', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN')",
+            )
+            execSQL("INSERT INTO location_rooms VALUES ('room-1', '書斎', 0)")
+            execSQL("INSERT INTO location_shelves VALUES ('shelf-1', 'room-1', '本棚', 0)")
+            execSQL("INSERT INTO location_tiers VALUES ('tier-1', 'shelf-1', '上段', 0)")
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-b', 'edition-1', 'PHYSICAL', '旧位置', 'UNREAD', 2, 'tier-1')",
+            )
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V2_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+        migrated.query(
+            "SELECT location, tierId, shelfOrderKey FROM owned_copies WHERE id = 'copy-b'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("旧位置", cursor.getString(0))
+            assertEquals("tier-1", cursor.getString(1))
+            assertEquals("0000000000000002636f70792d62", cursor.getString(2))
+        }
+        migrated.close()
+    }
+
+    @Test
     fun malformedExistingSchema_isRejectedInsteadOfBeingDestructivelyRecreated() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.deleteDatabase(CORRUPT_DATABASE)
@@ -198,6 +233,7 @@ class AppDatabaseMigrationTest {
 
     private companion object {
         const val V1_DATABASE = "migration-v1"
+        const val V2_DATABASE = "migration-v2"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

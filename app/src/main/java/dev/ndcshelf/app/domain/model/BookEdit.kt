@@ -13,6 +13,9 @@ data class BookEditDraft(
     val location: String,
     val readingStatus: ReadingStatus,
     val locationTierId: String? = null,
+    val locationInsertAfterCopyId: String? = null,
+    val locationInsertAtStart: Boolean = false,
+    val locationPositionSpecified: Boolean = false,
 )
 
 data class ValidatedBookEdit(
@@ -25,6 +28,9 @@ data class ValidatedBookEdit(
     val location: String,
     val readingStatus: ReadingStatus,
     val locationTierId: String? = null,
+    val locationInsertAfterCopyId: String? = null,
+    val locationInsertAtStart: Boolean = false,
+    val locationPositionSpecified: Boolean = false,
 )
 
 data class BookEditValidationError(
@@ -94,6 +100,9 @@ class BookEditValidator(
                 location = requireNotNull(location),
                 readingStatus = draft.readingStatus,
                 locationTierId = draft.locationTierId,
+                locationInsertAfterCopyId = draft.locationInsertAfterCopyId,
+                locationInsertAtStart = draft.locationInsertAtStart,
+                locationPositionSpecified = draft.locationPositionSpecified,
             ),
         )
     }

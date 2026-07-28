@@ -30,6 +30,8 @@ import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
+import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
+import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.scanner.Isbn
 import kotlinx.coroutines.CancellationException
@@ -167,6 +169,17 @@ class DefaultLibraryRepository(
                         listOf(BookEditValidationError(BookEditField.LOCATION, "選択した場所が見つかりません")),
                     )
                 }
+                val shelfOrderKey = resolveShelfOrderKey(previous, edit)
+                    ?: if (edit.locationTierId == null) null else {
+                        return@withTransaction UpdateBookResult.Invalid(
+                            listOf(
+                                BookEditValidationError(
+                                    BookEditField.LOCATION,
+                                    "選択した挿入位置が見つかりません",
+                                ),
+                            ),
+                        )
+                    }
                 val source = if (
                     edit.ndcCode != previous.ndcCode || edit.ndcEdition != previous.ndcEdition
                 ) {
@@ -191,6 +204,7 @@ class DefaultLibraryRepository(
                     copyId = previous.copyId,
                     location = edit.location,
                     tierId = edit.locationTierId,
+                    shelfOrderKey = shelfOrderKey,
                     readingStatus = edit.readingStatus.name,
                 )
                 UpdateBookResult.Updated(
@@ -205,6 +219,7 @@ class DefaultLibraryRepository(
                         classificationSource = source,
                         location = edit.location,
                         locationTierId = edit.locationTierId,
+                        shelfOrderKey = shelfOrderKey,
                         readingStatus = edit.readingStatus,
                     ),
                 )
@@ -244,6 +259,7 @@ class DefaultLibraryRepository(
                     copyId = previous.copyId,
                     location = previous.location,
                     tierId = previous.locationTierId,
+                    shelfOrderKey = previous.shelfOrderKey,
                     readingStatus = previous.readingStatus.name,
                 )
                 true
@@ -253,6 +269,35 @@ class DefaultLibraryRepository(
         } catch (_: Exception) {
             false
         }
+    }
+
+    override suspend fun moveBookWithinTier(
+        copyId: String,
+        direction: ShelfMoveDirection,
+    ): ShelfMoveResult = try {
+        database.withTransaction {
+            val copy = dao.findCopyById(copyId) ?: return@withTransaction ShelfMoveResult.NotFound
+            val tierId = copy.tierId ?: return@withTransaction ShelfMoveResult.NotFound
+            ensureTierKeys(tierId)
+            val ordered = database.locationDao().getOrderedCopies(tierId)
+            val index = ordered.indexOfFirst { it.id == copyId }
+            if (index < 0) return@withTransaction ShelfMoveResult.NotFound
+            val target = index + if (direction == ShelfMoveDirection.LEFT) -1 else 1
+            if (target !in ordered.indices) return@withTransaction ShelfMoveResult.Boundary
+            val withoutCurrent = ordered.filterNot { it.id == copyId }
+            val insertionIndex = target.coerceIn(0, withoutCurrent.size)
+            val left = withoutCurrent.getOrNull(insertionIndex - 1)?.shelfOrderKey
+            val right = withoutCurrent.getOrNull(insertionIndex)?.shelfOrderKey
+            check(database.locationDao().updateCopyOrder(
+                copyId,
+                FractionalOrderKey.between(left, right, copyId),
+            ) == 1)
+            ShelfMoveResult.Moved
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        ShelfMoveResult.Failure
     }
 
     override suspend fun deleteBook(copyId: String): DeleteBookResult = try {
@@ -326,6 +371,47 @@ class DefaultLibraryRepository(
         )
         dao.upsertCopies(books.map(LibraryBook::toCopyEntity))
     }
+
+    private suspend fun resolveShelfOrderKey(
+        previous: LibraryBook,
+        edit: dev.ndcshelf.app.domain.model.ValidatedBookEdit,
+    ): String? {
+        val tierId = edit.locationTierId ?: return null
+        if (tierId == previous.locationTierId && !edit.locationPositionSpecified) {
+            return previous.shelfOrderKey ?: appendOrderKey(tierId, previous.copyId)
+        }
+        ensureTierKeys(tierId)
+        val copies = database.locationDao().getOrderedCopies(tierId, previous.copyId)
+        val insertionIndex = when {
+            edit.locationInsertAtStart -> 0
+            edit.locationInsertAfterCopyId != null -> {
+                val index = copies.indexOfFirst { it.id == edit.locationInsertAfterCopyId }
+                if (index < 0) return null
+                index + 1
+            }
+            else -> copies.size
+        }
+        return FractionalOrderKey.between(
+            copies.getOrNull(insertionIndex - 1)?.shelfOrderKey,
+            copies.getOrNull(insertionIndex)?.shelfOrderKey,
+            previous.copyId,
+        )
+    }
+
+    private suspend fun appendOrderKey(tierId: String, copyId: String): String {
+        ensureTierKeys(tierId)
+        val last = database.locationDao().getOrderedCopies(tierId, copyId).lastOrNull()
+        return FractionalOrderKey.between(last?.shelfOrderKey, null, copyId)
+    }
+
+    private suspend fun ensureTierKeys(tierId: String) {
+        val copies = database.locationDao().getOrderedCopies(tierId)
+        if (!FractionalOrderKey.requiresCompaction(copies.map { it.shelfOrderKey })) return
+        copies.forEachIndexed { index, copy ->
+            val key = FractionalOrderKey.compact(index, copies.size)
+            check(database.locationDao().updateCopyOrder(copy.id, key) == 1)
+        }
+    }
 }
 
 private fun BookMetadataFailure.toAddBookFailure(): AddBookFailure = when (this) {
@@ -364,6 +450,7 @@ private fun LibraryBook.toCopyEntity() = OwnedCopyEntity(
     readingStatus = readingStatus.name,
     addedAt = addedAt,
     tierId = locationTierId,
+    shelfOrderKey = shelfOrderKey,
 )
 
 internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
@@ -386,6 +473,7 @@ internal fun LibraryBookRow.toDomain(): LibraryBook = LibraryBook(
     readingStatus = readingStatus.toEnumOrDefault(ReadingStatus.UNREAD),
     addedAt = addedAt,
     locationTierId = locationTierId,
+    shelfOrderKey = shelfOrderKey,
 )
 
 private inline fun <reified T : Enum<T>> String.toEnumOrDefault(default: T): T =

@@ -17,6 +17,11 @@ interface LibraryRepository {
 
     suspend fun updateBook(copyId: String, draft: BookEditDraft): UpdateBookResult
 
+    suspend fun moveBookWithinTier(
+        copyId: String,
+        direction: ShelfMoveDirection,
+    ): ShelfMoveResult = ShelfMoveResult.Failure
+
     suspend fun restoreBook(previous: LibraryBook, expectedCurrent: LibraryBook): Boolean
 
     suspend fun deleteBook(copyId: String): DeleteBookResult
@@ -29,6 +34,15 @@ interface LibraryRepository {
     ): ImportPreviewResult
 
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
+}
+
+enum class ShelfMoveDirection { LEFT, RIGHT }
+
+sealed interface ShelfMoveResult {
+    data object Moved : ShelfMoveResult
+    data object Boundary : ShelfMoveResult
+    data object NotFound : ShelfMoveResult
+    data object Failure : ShelfMoveResult
 }
 
 sealed interface DeleteBookResult {

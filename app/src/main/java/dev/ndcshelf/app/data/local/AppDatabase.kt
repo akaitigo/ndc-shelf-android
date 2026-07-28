@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 2
+const val APP_DATABASE_VERSION = 3
 
 @Database(
     entities = [
@@ -24,12 +24,29 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME = "ndc-shelf.db"
 
         // Register every manual migration here so production and migration tests use one graph.
-        val MIGRATIONS: List<Migration> = listOf(MIGRATION_1_2)
+        val MIGRATIONS: List<Migration> = listOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 
     abstract fun libraryDao(): LibraryDao
 
     abstract fun locationDao(): LocationDao
+}
+
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE owned_copies ADD COLUMN shelfOrderKey TEXT")
+        db.execSQL(
+            """
+            UPDATE owned_copies
+            SET shelfOrderKey = printf('%016x', addedAt) || lower(hex(id))
+            WHERE tierId IS NOT NULL
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_owned_copies_tierId_shelfOrderKey " +
+                "ON owned_copies(tierId, shelfOrderKey)",
+        )
+    }
 }
 
 private val MIGRATION_1_2 = object : Migration(1, 2) {

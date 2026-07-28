@@ -141,6 +141,7 @@ class DatabaseBackupCodecTest {
                 readingStatus = "READING",
                 addedAt = 1_700_000_000_000,
                 tierId = "tier-1",
+                shelfOrderKey = "7f0011223344556677",
             ),
         ),
         rooms = listOf(LocationRoomEntity("room-1", "書斎", 0)),
