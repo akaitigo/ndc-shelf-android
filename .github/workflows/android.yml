@@ -4,6 +4,11 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  schedule:
+    - cron: "17 20 * * 1"
+  workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -15,16 +20,18 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       - name: Verify
         run: >-
@@ -32,6 +39,7 @@ jobs:
           verifyV02ReleaseConfiguration
           verifyBackupPolicy
           verifyLicenseReport
+          :app:cyclonedxDirectBom
           testDebugUnitTest
           lintDebug
           assembleDebug
@@ -39,3 +47,116 @@ jobs:
 
       - name: Verify exported Room schemas are committed
         run: git diff --exit-code -- app/schemas
+
+      - name: Verify vulnerability exceptions
+        run: .github/scripts/verify-osv-exceptions.sh
+
+      - name: Verify action references are immutable
+        run: .github/scripts/verify-action-pins.sh
+
+      - name: Upload release compliance artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-compliance
+          path: |
+            app/build/reports/cyclonedx/ndc-shelf.cdx.json
+            app/build/reports/licenses/THIRD-PARTY-NOTICES.json
+          if-no-files-found: error
+          retention-days: 30
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          license-check: true
+          vulnerability-check: true
+          show-openssf-scorecard: true
+
+  osv-scan:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download release compliance artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-compliance
+          path: release-compliance
+
+      - name: Scan SBOM with OSV
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --format=json
+            --output=osv-results.json
+            -L=release-compliance/app/build/reports/cyclonedx/ndc-shelf.cdx.json
+            --config=osv-scanner.toml
+
+      - name: Enforce vulnerability policy
+        uses: google/osv-scanner-action/osv-reporter-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --output=osv-results.sarif
+            --new=osv-results.json
+            --gh-annotations=true
+            --fail-on-vuln=true
+
+      - name: Upload OSV SARIF artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: osv-scanner-sarif
+          path: osv-results.sarif
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish OSV findings to code scanning
+        if: >-
+          ${{ !cancelled() &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.31.10
+        with:
+          sarif_file: osv-results.sarif
+
+  publish-compliance:
+    if: github.event_name == 'release'
+    needs: [verify, osv-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release compliance artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-compliance
+          path: release-compliance
+
+      - name: Attach SBOM and notices to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release upload "${GITHUB_REF_NAME}"
+          release-compliance/app/build/reports/cyclonedx/ndc-shelf.cdx.json
+          release-compliance/app/build/reports/licenses/THIRD-PARTY-NOTICES.json
+          --clobber
