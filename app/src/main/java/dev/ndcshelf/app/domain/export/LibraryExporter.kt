@@ -151,7 +151,7 @@ object LibraryExporter {
 
     private fun String.safeForSpreadsheet(): String {
         val firstMeaningful = firstOrNull { !it.isWhitespace() }
-        return if (firstMeaningful in FORMULA_PREFIXES) "'$this" else this
+        return if (firstMeaningful == '\'' || firstMeaningful in FORMULA_PREFIXES) "'$this" else this
     }
 
     private val FORMULA_PREFIXES = setOf('=', '+', '-', '@')

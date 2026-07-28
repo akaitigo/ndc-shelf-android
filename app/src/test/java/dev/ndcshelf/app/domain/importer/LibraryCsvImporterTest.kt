@@ -24,6 +24,13 @@ class LibraryCsvImporterTest {
         val exported = LibraryExporter.export(listOf(original), LibraryExportFormat.CSV)
 
         val parsed = importer().parse(ByteArrayInputStream(exported)) as LibraryCsvParseResult.Valid
+        val record = parsed.batch.records.single()
+        assertEquals(original.title, record.title)
+        assertEquals(original.primaryAuthor, record.primaryAuthor)
+        assertEquals(original.publisher.orEmpty(), record.publisher)
+        assertEquals(original.location, record.location)
+        assertEquals(original.copyLabel, record.copyLabel)
+
         val planned = planner().preview(
             parsed.batch,
             existingBooks = emptyList(),
@@ -32,6 +39,47 @@ class LibraryCsvImporterTest {
 
         assertEquals(listOf(original.copy(location = "+書斎\n本棚A")), planned.preview.additions)
         assertEquals(emptyList<ImportValidationError>(), parsed.warnings)
+    }
+
+    @Test
+    fun `exported CSV round trip preserves apostrophes before formula prefixes`() = runBlocking {
+        val original = sampleBook(
+            title = "'=TITLE()",
+            location = "  '@LOCATION",
+        ).copy(
+            primaryAuthor = "'+AUTHOR",
+            publisher = "'-PUBLISHER",
+            copyLabel = "'ordinary apostrophe",
+        )
+        val exported = LibraryExporter.export(listOf(original), LibraryExportFormat.CSV)
+
+        val parsed = importer().parse(ByteArrayInputStream(exported)) as LibraryCsvParseResult.Valid
+        val record = parsed.batch.records.single()
+        assertEquals(original.title, record.title)
+        assertEquals(original.primaryAuthor, record.primaryAuthor)
+        assertEquals(original.publisher, record.publisher)
+        assertEquals(original.location, record.location)
+        assertEquals(original.copyLabel, record.copyLabel)
+
+        val planned = planner().preview(
+            parsed.batch,
+            existingBooks = emptyList(),
+            conflictPolicy = ImportConflictPolicy.SKIP_EXISTING,
+        ) as ImportPreviewResult.Valid
+
+        assertEquals(listOf(original.copy(location = "'@LOCATION")), planned.preview.additions)
+    }
+
+    @Test
+    fun `manually authored ordinary apostrophe is not treated as protection`() = runBlocking {
+        val source = requiredHeader() +
+            "\n'Book,'Author,9784820418078,NDL,PHYSICAL,'Shelf,READING,1"
+
+        val result = parse(source) as LibraryCsvParseResult.Valid
+
+        assertEquals("'Book", result.batch.records.single().title)
+        assertEquals("'Author", result.batch.records.single().primaryAuthor)
+        assertEquals("'Shelf", result.batch.records.single().location)
     }
 
     @Test
