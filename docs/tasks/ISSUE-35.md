@@ -77,16 +77,16 @@ git diff --exit-code -- app/schemas
 
 ## Acceptance Criteria
 
-- [ ] Room v7の匿名蔵書fixtureがv11へ欠落なくMigrationされる。
-- [ ] Migrationはseries、work group、watch、release candidateを推測生成しない。
-- [ ] 整数巻、上下巻、外伝、合本、文庫、新装版を匿名fixtureで検証する。
-- [ ] 候補確定・解除・版関連付けが可逆である。
-- [ ] 欠巻候補は確認済み本編だけから算出し、不明データを断定しない。
-- [ ] 通知OFFで通信せず、ON時の初回baseline、頻度、重複、offline縮退を検証する。
-- [ ] 正規Gradle検証とAndroid OS上のinstrumentation testが成功する。
-- [ ] v0.4 release checklist、既知制約、rollbackを更新する。
-- [ ] 実機未実施項目は理由、手順、必要証跡、残存リスクを明記する。
-- [ ] Draft PRを作成し、GitHub Actions成功を確認する。
+- [x] Room v7の匿名蔵書fixtureがv11へ欠落なくMigrationされる。
+- [x] Migrationはseries、work group、watch、release candidateを推測生成しない。
+- [x] 整数巻、上下巻、外伝、合本、文庫、新装版を匿名fixtureで検証する。
+- [x] 候補確定・解除・版関連付けが可逆である。
+- [x] 欠巻候補は確認済み本編だけから算出し、不明データを断定しない。
+- [x] 通知OFFで通信せず、ON時の初回baseline、頻度、重複、offline縮退を検証する。
+- [x] 正規Gradle検証とAndroid OS上のinstrumentation testが成功する。
+- [x] v0.4 release checklist、既知制約、rollbackを更新する。
+- [x] 実機未実施項目は理由、手順、必要証跡、残存リスクを明記する。
+- [x] Draft PRを作成し、GitHub Actions成功を確認する。
 
 ## Stop Conditions
 
