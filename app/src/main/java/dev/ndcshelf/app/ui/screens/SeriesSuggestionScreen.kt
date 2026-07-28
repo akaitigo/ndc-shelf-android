@@ -319,10 +319,16 @@ private fun EditableSuggestionCard(
                     )
                 }
                 IconButton(enabled = canMoveUp, onClick = onMoveUp) {
-                    Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.series_move_up))
+                    Icon(
+                        Icons.Rounded.ArrowUpward,
+                        stringResource(R.string.series_move_up, row.suggestion.sourceTitle),
+                    )
                 }
                 IconButton(enabled = canMoveDown, onClick = onMoveDown) {
-                    Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.series_move_down))
+                    Icon(
+                        Icons.Rounded.ArrowDownward,
+                        stringResource(R.string.series_move_down, row.suggestion.sourceTitle),
+                    )
                 }
             }
             OutlinedTextField(

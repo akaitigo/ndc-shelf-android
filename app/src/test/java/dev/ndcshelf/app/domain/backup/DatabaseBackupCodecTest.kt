@@ -249,7 +249,7 @@ class DatabaseBackupCodecTest {
               "schemaVersion":9,
               "works":[{"id":"work-1","title":"作品 上巻","primaryAuthor":"著者"}],
               "editions":[],"copies":[],"rooms":[],"shelves":[],"tiers":[],
-              "wishlistItems":[],
+              "wishlistItems":[],"scanSessions":[],"scanAttempts":[],
               "series":[{"id":"series-1","name":"作品","createdAt":1,"updatedAt":2}],
               "seriesMemberships":[{
                 "id":"member-1","seriesId":"series-1","workId":"work-1",
@@ -263,6 +263,7 @@ class DatabaseBackupCodecTest {
               "format":"ndc-shelf-room-backup","formatVersion":9,"databaseVersion":8,
               "createdAt":1,"appVersion":"0.4.0","payloadSha256":"${payload.sha256()}",
               "workCount":1,"editionCount":0,"copyCount":0,"wishlistCount":0,
+              "scanSessionCount":0,"scanAttemptCount":0,
               "seriesCount":1,"seriesMembershipCount":1
             }
         """.trimIndent().encodeToByteArray()

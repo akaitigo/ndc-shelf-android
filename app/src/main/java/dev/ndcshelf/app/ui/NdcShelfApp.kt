@@ -89,8 +89,6 @@ fun NdcShelfApp(
     val locationMutationState by viewModel.locationMutationState.collectAsStateWithLifecycle()
     val shelfMoveState by viewModel.shelfMoveState.collectAsStateWithLifecycle()
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
-    val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
-    val seriesSuggestions by viewModel.seriesSuggestions.collectAsStateWithLifecycle()
     val seriesEditorState by viewModel.seriesEditorState.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -469,45 +467,49 @@ fun NdcShelfApp(
                 bookstoreRequestKey = bookstoreRequestKey,
             )
 
-            AppDestination.SERIES -> if (showSeriesEditor) {
-                SeriesSuggestionScreen(
-                    suggestions = seriesSuggestions,
-                    catalog = seriesCatalog,
-                    focusedSuggestion = (seriesEditorState as? SeriesEditorUiState.Ready)?.suggestion,
-                    state = seriesEditorState,
-                    onConfirm = viewModel::confirmSeries,
-                    onBack = {
-                        showSeriesEditor = false
-                        viewModel.clearSeriesEditorState()
-                    },
-                    onSaved = { seriesId ->
-                        selectedSeriesId = seriesId
-                        showSeriesEditor = false
-                    },
-                    onClearState = viewModel::clearSeriesEditorState,
-                    contentPadding = contentPadding,
-                )
-            } else {
-                SeriesScreen(
-                    series = seriesCatalog,
-                    selectedSeriesId = selectedSeriesId,
-                    onSelectSeries = { selectedSeriesId = it },
-                    onOpenEdition = { editionId ->
-                        viewModel.selectLibraryEdition(editionId)
-                        selected = AppDestination.LIBRARY
-                    },
-                    onOpenBookstore = { isbn ->
-                        bookstoreRequestKey += 1
-                        viewModel.lookupBookstore(isbn)
-                        selected = AppDestination.SCAN
-                    },
-                    onManageSuggestions = {
-                        viewModel.clearSeriesEditorState()
-                        showSeriesEditor = true
-                    },
-                    onRemoveMembership = viewModel::removeSeriesMembership,
-                    contentPadding = contentPadding,
-                )
+            AppDestination.SERIES -> {
+                val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
+                if (showSeriesEditor) {
+                    val seriesSuggestions by viewModel.seriesSuggestions.collectAsStateWithLifecycle()
+                    SeriesSuggestionScreen(
+                        suggestions = seriesSuggestions,
+                        catalog = seriesCatalog,
+                        focusedSuggestion = (seriesEditorState as? SeriesEditorUiState.Ready)?.suggestion,
+                        state = seriesEditorState,
+                        onConfirm = viewModel::confirmSeries,
+                        onBack = {
+                            showSeriesEditor = false
+                            viewModel.clearSeriesEditorState()
+                        },
+                        onSaved = { seriesId ->
+                            selectedSeriesId = seriesId
+                            showSeriesEditor = false
+                        },
+                        onClearState = viewModel::clearSeriesEditorState,
+                        contentPadding = contentPadding,
+                    )
+                } else {
+                    SeriesScreen(
+                        series = seriesCatalog,
+                        selectedSeriesId = selectedSeriesId,
+                        onSelectSeries = { selectedSeriesId = it },
+                        onOpenEdition = { editionId ->
+                            viewModel.selectLibraryEdition(editionId)
+                            selected = AppDestination.LIBRARY
+                        },
+                        onOpenBookstore = { isbn ->
+                            bookstoreRequestKey += 1
+                            viewModel.lookupBookstore(isbn)
+                            selected = AppDestination.SCAN
+                        },
+                        onManageSuggestions = {
+                            viewModel.clearSeriesEditorState()
+                            showSeriesEditor = true
+                        },
+                        onRemoveMembership = viewModel::removeSeriesMembership,
+                        contentPadding = contentPadding,
+                    )
+                }
             }
 
             AppDestination.INSIGHTS -> {

@@ -2,11 +2,15 @@ package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import dev.ndcshelf.app.SeriesEditorUiState
@@ -53,12 +57,17 @@ class SeriesSuggestionScreenTest {
         composeRule.onNodeWithText("年代記").performClick()
         composeRule.onNodeWithTag(SERIES_EDITOR_TEST_TAG).assertIsDisplayed()
 
+        scrollEditorTo(hasTestTag(SERIES_NAME_FIELD_TEST_TAG))
         composeRule.onNodeWithTag(SERIES_NAME_FIELD_TEST_TAG).performTextClearance()
         composeRule.onNodeWithTag(SERIES_NAME_FIELD_TEST_TAG).performTextInput("年代記 完全版")
+        scrollEditorTo(hasTestTag(SERIES_VOLUME_FIELD_TEST_TAG_PREFIX + "one"))
         val firstVolume = composeRule.onNodeWithTag(SERIES_VOLUME_FIELD_TEST_TAG_PREFIX + "one")
         firstVolume.performTextClearance()
         firstVolume.performTextInput("上巻")
-        composeRule.onAllNodesWithContentDescription("刊行順を上へ")[1].performClick()
+        val moveSecondUp = "年代記 2巻を刊行順で上へ"
+        scrollEditorTo(hasContentDescription(moveSecondUp))
+        composeRule.onNodeWithContentDescription(moveSecondUp).performClick()
+        scrollEditorTo(hasText("選択した2冊を確定"))
         composeRule.onNodeWithText("選択した2冊を確定").performClick()
 
         assertEquals(SeriesConfirmationTarget.New("年代記 完全版"), confirmation?.first)
@@ -88,6 +97,7 @@ class SeriesSuggestionScreenTest {
         composeRule.onNodeWithText("低信頼度・要確認").assertIsDisplayed()
         composeRule.onNodeWithText("既存シリーズ").performClick()
         composeRule.onNodeWithText("保存済み年代記").performClick()
+        scrollEditorTo(hasText("選択した1冊を確定"))
         composeRule.onNodeWithText("選択した1冊を確定").performClick()
 
         assertEquals(SeriesConfirmationTarget.Existing("existing"), target)
@@ -113,6 +123,10 @@ class SeriesSuggestionScreenTest {
                 )
             }
         }
+    }
+
+    private fun scrollEditorTo(matcher: androidx.compose.ui.test.SemanticsMatcher) {
+        composeRule.onNodeWithTag(SERIES_EDITOR_TEST_TAG).performScrollToNode(matcher)
     }
 
     private fun suggestion(workId: String, label: String) = SeriesSuggestion(

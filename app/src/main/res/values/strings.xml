@@ -301,8 +301,8 @@
     <string name="series_target_existing">既存シリーズ</string>
     <string name="series_name_label">シリーズ名</string>
     <string name="series_volume_label">巻ラベル</string>
-    <string name="series_move_up">刊行順を上へ</string>
-    <string name="series_move_down">刊行順を下へ</string>
+    <string name="series_move_up">%1$sを刊行順で上へ</string>
+    <string name="series_move_down">%1$sを刊行順で下へ</string>
     <string name="series_confirm_selected">選択した%1$d冊を確定</string>
     <string name="series_confidence_high">高信頼度・要確認</string>
     <string name="series_confidence_medium">中信頼度・要確認</string>
