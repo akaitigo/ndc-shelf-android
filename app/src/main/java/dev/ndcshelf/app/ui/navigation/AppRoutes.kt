@@ -56,6 +56,9 @@ data class SeriesSuggestionRoute(
 @Serializable
 data object ConsentRoute
 
+@Serializable
+data object OnboardingRoute
+
 enum class TopLevelDestination(
     val route: Any,
     @StringRes val labelRes: Int,

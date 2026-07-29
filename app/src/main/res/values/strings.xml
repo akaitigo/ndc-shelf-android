@@ -481,4 +481,27 @@
     <string name="consent_purpose_ai_title">AI司書（今後提供予定）</string>
     <string name="consent_purpose_not_available">この機能は未提供です。提供時に内容を提示し、同意なしでは通信しません。</string>
     <string name="data_privacy_consent_button">プライバシーと同意を管理</string>
+
+    <string name="onboarding_step_indicator">%1$d / %2$d</string>
+    <string name="onboarding_skip">スキップ</string>
+    <string name="onboarding_back">戻る</string>
+    <string name="onboarding_next">次へ</string>
+    <string name="onboarding_welcome_title">NDC Shelfへようこそ</string>
+    <string name="onboarding_welcome_body">蔵書をISBNで登録し、日本十進分類法（NDC）で整理して、部屋・本棚・段の実際の置き場所まで管理できるアプリです。すべての蔵書データは端末の中にだけ保存されます。アカウント登録は不要です。</string>
+    <string name="onboarding_camera_title">カメラは使わなくても大丈夫</string>
+    <string name="onboarding_camera_body">バーコードのスキャンにはカメラを使いますが、カメラ権限は任意です。許可しない場合や読み取れない本は、ISBNの手入力や、タイトル・著者を直接入力する手動登録で同じように追加できます。カメラの映像は保存も送信もされません。</string>
+    <string name="onboarding_privacy_title">外部に送るのはISBNだけ</string>
+    <string name="onboarding_privacy_body">書誌情報の取得時は、入力・読み取ったISBNだけを国立国会図書館サーチへHTTPSで送信します。タイトル、読書状態、置き場所、メモが送信されることはありません。データはJSON/CSVでのエクスポートと、チェックサム付き完全バックアップでいつでも持ち出せます。その他の外部通信を伴う機能は、使い始めるときに個別に説明し、同意なしでは動作しません。</string>
+    <string name="onboarding_start_title">最初の一冊を登録しましょう</string>
+    <string name="onboarding_start_body">好きな方法で始められます。あとからいつでも切り替えられ、この案内は「情報」画面から再表示できます。</string>
+    <string name="onboarding_action_scan">バーコードをスキャンする</string>
+    <string name="onboarding_action_manual">ISBN・手動で入力する</string>
+    <string name="onboarding_action_import">既存データをインポートする</string>
+    <string name="info_replay_onboarding">はじめての使い方を見る</string>
+    <string name="library_help_button">本棚のヘルプ</string>
+    <string name="library_help_title">本棚の見かた</string>
+    <string name="library_help_ndc">NDC（日本十進分類法）: 図書館と同じ0〜9類の分類番号です。書誌取得時に自動で付き、手動で補正できます。</string>
+    <string name="library_help_location">置き場所: 部屋・本棚・段の階層で管理します。段の中の並び順も記録され、本を戻す位置を確認できます。</string>
+    <string name="library_help_reading_status">読書状態: 未読・読書中・読了を本（コピー）ごとに記録し、絞り込みに使えます。</string>
+    <string name="help_close">閉じる</string>
 </resources>

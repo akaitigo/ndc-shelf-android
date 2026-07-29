@@ -59,8 +59,10 @@ import dev.ndcshelf.app.R
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.SeriesWatchMutationUiState
 import dev.ndcshelf.app.WorkVariantViewModel
+import dev.ndcshelf.app.data.local.SharedPreferencesOnboardingStore
 import dev.ndcshelf.app.domain.consent.ConsentPurpose
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
+import dev.ndcshelf.app.domain.model.OnboardingStore
 import dev.ndcshelf.app.ui.navigation.ConsentRoute
 import dev.ndcshelf.app.ui.navigation.DataGraph
 import dev.ndcshelf.app.ui.navigation.DataRoute
@@ -68,6 +70,7 @@ import dev.ndcshelf.app.ui.navigation.InfoRoute
 import dev.ndcshelf.app.ui.navigation.InsightsRoute
 import dev.ndcshelf.app.ui.navigation.LibraryGraph
 import dev.ndcshelf.app.ui.navigation.LibraryRoute
+import dev.ndcshelf.app.ui.navigation.OnboardingRoute
 import dev.ndcshelf.app.ui.navigation.ScanRoute
 import dev.ndcshelf.app.ui.navigation.SeriesGraph
 import dev.ndcshelf.app.ui.navigation.SeriesRoute
@@ -80,6 +83,7 @@ import dev.ndcshelf.app.ui.screens.ConsentScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
 import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
+import dev.ndcshelf.app.ui.screens.OnboardingScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.SeriesScreen
 import dev.ndcshelf.app.ui.screens.SeriesSuggestionScreen
@@ -96,9 +100,14 @@ fun NdcShelfApp(
     requestedEditionId: String? = null,
     onBookDetailRequestHandled: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
+    onboardingStore: OnboardingStore? = null,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
+    val onboarding =
+        onboardingStore ?: remember(context) {
+            SharedPreferencesOnboardingStore(context.applicationContext)
+        }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
@@ -777,6 +786,32 @@ fun NdcShelfApp(
                     versionCode = BuildConfig.VERSION_CODE,
                     buildType = BuildConfig.BUILD_TYPE,
                     onOpenUrl = ::openExternalUrl,
+                    onReplayOnboarding = {
+                        navController.navigate(OnboardingRoute) { launchSingleTop = true }
+                    },
+                    contentPadding = contentPadding,
+                )
+            }
+
+            composable<OnboardingRoute> {
+                fun completeAndClose() {
+                    onboarding.markCompleted()
+                    navController.popBackStack()
+                }
+                OnboardingScreen(
+                    onStartScan = {
+                        completeAndClose()
+                        navigateToTab(ScanRoute)
+                    },
+                    onManualEntry = {
+                        completeAndClose()
+                        navigateToTab(ScanRoute)
+                    },
+                    onImport = {
+                        completeAndClose()
+                        navigateToTab(DataGraph)
+                    },
+                    onSkip = ::completeAndClose,
                     contentPadding = contentPadding,
                 )
             }
@@ -789,6 +824,13 @@ fun NdcShelfApp(
             navController.currentBackStackEntryFlow.first()
             navigateToTab(LibraryGraph)
             viewModel.selectLibraryEdition(requestedEditionId)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!onboarding.hasCompleted()) {
+            navController.currentBackStackEntryFlow.first()
+            navController.navigate(OnboardingRoute) { launchSingleTop = true }
         }
     }
 }
