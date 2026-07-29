@@ -1,9 +1,12 @@
 package dev.ndcshelf.app
 
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -50,7 +53,17 @@ class E2eManualRegistrationTest {
             .onNodeWithText(text(R.string.manual_registration_open))
             .performScrollTo()
             .performClick()
-        composeRule.waitForIdle()
+        try {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule
+                    .onAllNodesWithText(text(R.string.manual_registration_title))
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            composeRule.onRoot().printToLog("E2E_DIAG")
+            throw timeout
+        }
 
         // タイトルだけで登録できる
         composeRule

@@ -123,7 +123,7 @@ jobs:
           script: |
             adb logcat -c || true
             ./gradlew connectedDebugAndroidTest --stacktrace --no-configuration-cache --console=plain || \
-              (echo "::group::Crash logcat"; adb logcat -d -s AndroidRuntime:E ACRA:E TestRunner:I THREAD_STATE:E; echo "::endgroup::"; exit 1)
+              (echo "::group::Crash logcat"; adb logcat -d -s AndroidRuntime:E E2E_DIAG:D TestRunner:I; echo "::endgroup::"; exit 1)
 
   dependency-review:
     if: github.event_name == 'pull_request'

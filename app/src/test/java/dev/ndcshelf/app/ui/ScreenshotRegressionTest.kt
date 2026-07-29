@@ -10,8 +10,11 @@ import androidx.compose.ui.unit.Density
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.ndcshelf.app.BookDeleteUiState
+import dev.ndcshelf.app.InsightsUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
+import dev.ndcshelf.app.domain.insights.InsightsMonth
+import dev.ndcshelf.app.domain.insights.LibraryInsightsCalculator
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
@@ -117,7 +120,22 @@ private fun LibraryFixture() {
 
 @Composable
 private fun InsightsFixture() {
-    InsightsScreen(books = anonymousBooks(), contentPadding = PaddingValues())
+    val books = anonymousBooks()
+    val insights =
+        LibraryInsightsCalculator().calculate(
+            books = books,
+            sessions = emptyList(),
+            excludedCopyIds = emptySet(),
+            nowMillis = 1_753_000_000_000,
+            currentMonth = InsightsMonth(2026, 7),
+            rediscoverySeed = 42L,
+        )
+    InsightsScreen(
+        state = InsightsUiState.Ready(books = books, insights = insights),
+        onExcludeBook = {},
+        onResetExclusions = {},
+        contentPadding = PaddingValues(),
+    )
 }
 
 @Composable
