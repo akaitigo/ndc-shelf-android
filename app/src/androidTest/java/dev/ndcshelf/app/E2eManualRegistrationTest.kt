@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.rule.GrantPermissionRule
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +21,11 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class E2eManualRegistrationTest {
+    // スキャンタブ初回表示の権限システムダイアログでテストが停止しないよう事前付与する。
+    // 権限拒否時の代替経路（手入力）はCameraPermissionCardTestで検証済み。
+    @get:Rule
+    val grantCamera: GrantPermissionRule = GrantPermissionRule.grant(android.Manifest.permission.CAMERA)
+
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
