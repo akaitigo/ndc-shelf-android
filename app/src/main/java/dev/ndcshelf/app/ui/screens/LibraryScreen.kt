@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -231,14 +232,27 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(top = contentPadding.calculateTopPadding()),
         ) {
+            var showHelp by rememberSaveable { mutableStateOf(false) }
+            if (showHelp) {
+                LibraryHelpDialog(onDismiss = { showHelp = false })
+            }
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
             ) {
-                Text(
-                    text = "My Library",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "My Library",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { showHelp = true }) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.HelpOutline,
+                            contentDescription = stringResource(R.string.library_help_button),
+                        )
+                    }
+                }
                 Text(
                     text = "${libraryStats?.totalCount ?: books.size}冊の本を、ちゃんと見つけられる場所。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -1501,5 +1515,23 @@ private fun LocationNameDialog(
             Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.location_save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.location_cancel)) } },
+    )
+}
+
+@Composable
+private fun LibraryHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.library_help_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.library_help_ndc))
+                Text(stringResource(R.string.library_help_location))
+                Text(stringResource(R.string.library_help_reading_status))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.help_close)) }
+        },
     )
 }

@@ -1,13 +1,9 @@
 package dev.ndcshelf.app.ui
 
 import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -30,8 +26,8 @@ import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
-import dev.ndcshelf.app.ui.navigation.DataRoute
-import dev.ndcshelf.app.ui.navigation.LibraryRoute
+import dev.ndcshelf.app.ui.navigation.OnboardingRoute
+import dev.ndcshelf.app.ui.navigation.ScanRoute
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,7 +37,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
-import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -53,7 +49,7 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
-class NdcShelfAppNavigationTest {
+class OnboardingFlowTest {
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -71,7 +67,53 @@ class NdcShelfAppNavigationTest {
     }
 
     @Test
-    fun tabClickNavigatesToDataAndBackReturnsToLibrary() {
+    fun firstLaunchShowsOnboardingAndSkipPersistsCompletion() {
+        val store = InMemoryOnboardingStore(completed = false)
+        setContent(store)
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.onboarding_welcome_title))
+            .assertIsDisplayed()
+
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_skip)).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(store.hasCompleted())
+        composeRule
+            .onNodeWithText(context.getString(R.string.onboarding_welcome_title))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun completedOnboardingIsNotShownOnLaunch() {
+        setContent(InMemoryOnboardingStore(completed = true))
+        composeRule.waitForIdle()
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.onboarding_welcome_title))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun cameraPageExplainsManualAlternativeBeforeAnyPermissionRequest() {
+        val store = InMemoryOnboardingStore(completed = false)
+        setContent(store)
+
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_next)).performClick()
+        composeRule.waitForIdle()
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.onboarding_camera_title))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.onboarding_camera_body))
+            .assertIsDisplayed()
+        assertFalse(store.hasCompleted())
+    }
+
+    @Test
+    fun scanActionCompletesOnboardingAndOpensScanTab() {
+        val store = InMemoryOnboardingStore(completed = false)
         lateinit var navController: TestNavHostController
         composeRule.setContent {
             navController =
@@ -82,29 +124,29 @@ class NdcShelfAppNavigationTest {
                 NdcShelfApp(
                     viewModel = viewModel(),
                     navController = navController,
-                    onboardingStore = InMemoryOnboardingStore(completed = true),
+                    onboardingStore = store,
                 )
             }
         }
+        val next = context.getString(R.string.onboarding_next)
+        repeat(3) {
+            composeRule.onNodeWithText(next).performClick()
+            composeRule.waitForIdle()
+        }
 
-        composeRule.onNodeWithText(context.getString(R.string.navigation_data)).performClick()
-        composeRule.waitForIdle()
-
-        val current = requireNotNull(navController.currentDestination)
-        assertTrue(current.hasRoute<DataRoute>())
         composeRule
-            .onNodeWithText(context.getString(R.string.data_management_title))
-            .assertIsDisplayed()
-
-        composeRule.runOnUiThread { navController.popBackStack() }
+            .onNodeWithText(context.getString(R.string.onboarding_action_scan))
+            .performClick()
         composeRule.waitForIdle()
 
-        val afterBack = requireNotNull(navController.currentDestination)
-        assertTrue(afterBack.hasRoute<LibraryRoute>())
+        assertTrue(store.hasCompleted())
+        val destination = requireNotNull(navController.currentDestination)
+        assertTrue(destination.hasRoute<ScanRoute>())
     }
 
     @Test
-    fun reselectingSameTabDoesNotStackDuplicateEntries() {
+    fun infoScreenCanReplayCompletedOnboarding() {
+        val store = InMemoryOnboardingStore(completed = true)
         lateinit var navController: TestNavHostController
         composeRule.setContent {
             navController =
@@ -115,81 +157,54 @@ class NdcShelfAppNavigationTest {
                 NdcShelfApp(
                     viewModel = viewModel(),
                     navController = navController,
-                    onboardingStore = InMemoryOnboardingStore(completed = true),
-                )
-            }
-        }
-        val dataLabel = context.getString(R.string.navigation_data)
-
-        composeRule.onNodeWithText(dataLabel).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText(dataLabel).performClick()
-        composeRule.waitForIdle()
-
-        composeRule.runOnUiThread { navController.popBackStack() }
-        composeRule.waitForIdle()
-
-        val afterBack = requireNotNull(navController.currentDestination)
-        assertTrue(afterBack.hasRoute<LibraryRoute>())
-    }
-
-    @Test
-    fun selectedTabSurvivesStateRestoration() {
-        val restorationTester = StateRestorationTester(composeRule)
-        restorationTester.setContent {
-            NdcShelfTheme {
-                NdcShelfApp(
-                    viewModel = viewModel(),
-                    onboardingStore = InMemoryOnboardingStore(completed = true),
+                    onboardingStore = store,
                 )
             }
         }
 
-        composeRule.onNodeWithText(context.getString(R.string.navigation_data)).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.navigation_info)).performClick()
         composeRule.waitForIdle()
         composeRule
-            .onNodeWithText(context.getString(R.string.data_management_title))
-            .assertIsDisplayed()
-
-        restorationTester.emulateSavedInstanceStateRestore()
+            .onNodeWithText(context.getString(R.string.info_replay_onboarding))
+            .performClick()
         composeRule.waitForIdle()
 
+        val destination = requireNotNull(navController.currentDestination)
+        assertTrue(destination.hasRoute<OnboardingRoute>())
         composeRule
-            .onNodeWithText(context.getString(R.string.data_management_title))
+            .onNodeWithText(context.getString(R.string.onboarding_welcome_title))
             .assertIsDisplayed()
     }
 
     @Test
-    fun deepLinkToDeletedEditionClearsSelectionWithoutCrash() {
-        val repository = FakeNavigationRepository()
-        val viewModel = MainViewModel(repository, dispatcher, dispatcher)
-        var handled = false
+    fun libraryHelpDialogExplainsNdcLocationAndReadingStatus() {
+        setContent(InMemoryOnboardingStore(completed = true))
+        composeRule.waitForIdle()
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.library_help_button))
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(context.getString(R.string.library_help_ndc)).assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.library_help_location)).assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.library_help_reading_status))
+            .assertExists()
+    }
+
+    private fun setContent(store: InMemoryOnboardingStore) {
         composeRule.setContent {
-            var requested by remember { mutableStateOf<String?>("edition-missing") }
             NdcShelfTheme {
-                NdcShelfApp(
-                    viewModel = viewModel,
-                    requestedEditionId = requested,
-                    onBookDetailRequestHandled = {
-                        handled = true
-                        requested = null
-                    },
-                    onboardingStore = InMemoryOnboardingStore(completed = true),
-                )
+                NdcShelfApp(viewModel = viewModel(), onboardingStore = store)
             }
         }
-        composeRule.waitForIdle()
-
-        // 削除済み・無効IDへのdeep linkは選択を残さず安全に処理される
-        assertTrue(handled)
-        assertEquals(null, viewModel.librarySearchCriteria.value.selectedEditionId)
-        composeRule.onNodeWithText(context.getString(R.string.navigation_library)).assertIsDisplayed()
     }
 
-    private fun viewModel(): MainViewModel = MainViewModel(FakeNavigationRepository(), dispatcher, dispatcher)
+    private fun viewModel(): MainViewModel = MainViewModel(FakeOnboardingRepository(), dispatcher, dispatcher)
 }
 
-private class FakeNavigationRepository : LibraryRepository {
+private class FakeOnboardingRepository : LibraryRepository {
     override fun observeLibrary(): Flow<List<LibraryBook>> = flowOf(emptyList())
 
     override suspend fun addFromIsbn(rawIsbn: String): AddBookResult = AddBookResult.Failure(AddBookFailure.SAVE, rawIsbn)
@@ -211,7 +226,7 @@ private class FakeNavigationRepository : LibraryRepository {
     override suspend fun previewImport(
         batch: LibraryImportBatch,
         conflictPolicy: ImportConflictPolicy,
-    ): ImportPreviewResult = error("Not used in navigation tests")
+    ): ImportPreviewResult = error("Not used in onboarding tests")
 
-    override suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult = error("Not used in navigation tests")
+    override suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult = error("Not used in onboarding tests")
 }
