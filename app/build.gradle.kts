@@ -22,13 +22,29 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        // 署名鍵はリポジトリへ置かず、CIのrelease environment secretsまたは
+        // ローカル環境変数からだけ供給する。未設定ならreleaseは未署名で生成される。
+        val keystorePath = System.getenv("NDC_SHELF_UPLOAD_KEYSTORE_PATH")
+        if (!keystorePath.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("NDC_SHELF_UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("NDC_SHELF_UPLOAD_KEY_ALIAS")
+                keyPassword = System.getenv("NDC_SHELF_UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
