@@ -50,6 +50,7 @@ import dev.ndcshelf.app.BookEditFailure
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.BuildConfig
 import dev.ndcshelf.app.DatabaseBackupUiState
+import dev.ndcshelf.app.InsightsViewModel
 import dev.ndcshelf.app.LibraryExportUiState
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.MainActivity
@@ -835,8 +836,23 @@ fun NdcShelfApp(
             }
 
             composable<InsightsRoute> {
-                val books by viewModel.books.collectAsStateWithLifecycle()
-                InsightsScreen(books = books, contentPadding = contentPadding)
+                val application = context.applicationContext as NdcShelfApplication
+                val insightsViewModel: InsightsViewModel =
+                    viewModel(
+                        factory =
+                            InsightsViewModel.factory(
+                                libraryRepository = application.container.libraryRepository,
+                                readingHistoryRepository = application.container.readingHistoryRepository,
+                                exclusionStore = application.container.insightsExclusionStore,
+                            ),
+                    )
+                val insightsState by insightsViewModel.state.collectAsStateWithLifecycle()
+                InsightsScreen(
+                    state = insightsState,
+                    onExcludeBook = insightsViewModel::excludeBook,
+                    onResetExclusions = insightsViewModel::resetExclusions,
+                    contentPadding = contentPadding,
+                )
             }
 
             navigation<DataGraph>(startDestination = DataRoute) {
