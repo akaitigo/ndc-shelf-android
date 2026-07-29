@@ -9,7 +9,10 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
+import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
 import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
+import dev.ndcshelf.app.data.consent.RoomConsentRepository
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
@@ -22,8 +25,7 @@ import dev.ndcshelf.app.data.repository.RoomWorkGroupRepository
 import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
 import dev.ndcshelf.app.data.sync.RoomSyncEngine
 import dev.ndcshelf.app.data.sync.RoomSyncStatusRepository
-import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
-import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
+import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
@@ -36,7 +38,10 @@ import okio.Path.Companion.toOkioPath
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class NdcShelfApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
+class NdcShelfApplication :
+    Application(),
+    SingletonImageLoader.Factory,
+    Configuration.Provider {
     val container: AppContainer by lazy {
         AppContainer(this)
     }
@@ -45,74 +50,81 @@ class NdcShelfApplication : Application(), SingletonImageLoader.Factory, Configu
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().build()
-
 }
 
-internal fun createNdlCoverImageLoader(context: Context): ImageLoader = ImageLoader.Builder(context)
-    .memoryCache {
-        MemoryCache.Builder()
-            .maxSizePercent(context, 0.10)
-            .build()
-    }
-    .diskCache {
-        DiskCache.Builder()
-            .directory(context.cacheDir.resolve("ndl-cover-cache").toOkioPath())
-            .maxSizeBytes(NDL_COVER_DISK_CACHE_BYTES)
-            .build()
-    }
-    .components {
-        add(
-            OkHttpNetworkFetcherFactory(
-                callFactory = {
-                    OkHttpClient.Builder()
-                        .connectTimeout(5, TimeUnit.SECONDS)
-                        .readTimeout(10, TimeUnit.SECONDS)
-                        .callTimeout(15, TimeUnit.SECONDS)
-                        .followRedirects(false)
-                        .retryOnConnectionFailure(false)
-                        .addInterceptor { chain ->
-                            val request = chain.request()
-                            if (!NdlEndpointPolicy.isAllowedCoverUrl(request.url.toString())) {
-                                throw IOException("Blocked non-NDL cover URL")
-                            }
-                            chain.proceed(
-                                request.newBuilder()
-                                    .header("Accept", "image/*")
-                                    .header(
-                                        "User-Agent",
-                                        "NDC-Shelf/${BuildConfig.VERSION_NAME} (Android)",
-                                    )
-                                    .build(),
-                            )
-                        }
-                        .build()
-                },
-            ),
-        )
-    }
-    .build()
+internal fun createNdlCoverImageLoader(context: Context): ImageLoader =
+    ImageLoader
+        .Builder(context)
+        .memoryCache {
+            MemoryCache
+                .Builder()
+                .maxSizePercent(context, 0.10)
+                .build()
+        }.diskCache {
+            DiskCache
+                .Builder()
+                .directory(context.cacheDir.resolve("ndl-cover-cache").toOkioPath())
+                .maxSizeBytes(NDL_COVER_DISK_CACHE_BYTES)
+                .build()
+        }.components {
+            add(
+                OkHttpNetworkFetcherFactory(
+                    callFactory = {
+                        OkHttpClient
+                            .Builder()
+                            .connectTimeout(5, TimeUnit.SECONDS)
+                            .readTimeout(10, TimeUnit.SECONDS)
+                            .callTimeout(15, TimeUnit.SECONDS)
+                            .followRedirects(false)
+                            .retryOnConnectionFailure(false)
+                            .addInterceptor { chain ->
+                                val request = chain.request()
+                                if (!NdlEndpointPolicy.isAllowedCoverUrl(request.url.toString())) {
+                                    throw IOException("Blocked non-NDL cover URL")
+                                }
+                                chain.proceed(
+                                    request
+                                        .newBuilder()
+                                        .header("Accept", "image/*")
+                                        .header(
+                                            "User-Agent",
+                                            "NDC-Shelf/${BuildConfig.VERSION_NAME} (Android)",
+                                        ).build(),
+                                )
+                            }.build()
+                    },
+                ),
+            )
+        }.build()
 
 internal const val NDL_COVER_DISK_CACHE_BYTES = 50L * 1024 * 1024
 
-class AppContainer(application: Application) {
-    private val database = Room.databaseBuilder(
-        application,
-        AppDatabase::class.java,
-        AppDatabase.DATABASE_NAME,
-    ).addMigrations(*AppDatabase.MIGRATIONS.toTypedArray()).build()
+class AppContainer(
+    application: Application,
+) {
+    private val database =
+        Room
+            .databaseBuilder(
+                application,
+                AppDatabase::class.java,
+                AppDatabase.DATABASE_NAME,
+            ).addMigrations(*AppDatabase.MIGRATIONS.toTypedArray())
+            .build()
 
-    val syncEngine = RoomSyncEngine(
-        database,
-        RoomSyncDomainStore(database),
-    )
+    val syncEngine =
+        RoomSyncEngine(
+            database,
+            RoomSyncDomainStore(database),
+        )
 
     val syncStatusRepository = RoomSyncStatusRepository(database)
 
-    val libraryRepository: LibraryRepository = DefaultLibraryRepository(
-        database = database,
-        metadataService = NdlBookMetadataService(),
-        syncJournal = syncEngine,
-    )
+    val libraryRepository: LibraryRepository =
+        DefaultLibraryRepository(
+            database = database,
+            metadataService = NdlBookMetadataService(),
+            syncJournal = syncEngine,
+        )
 
     val locationRepository: LocationRepository = RoomLocationRepository(database, syncJournal = syncEngine)
 
@@ -120,21 +132,25 @@ class AppContainer(application: Application) {
 
     val workGroupRepository: WorkGroupRepository = RoomWorkGroupRepository(database, syncJournal = syncEngine)
 
-    val seriesWatchRepository: SeriesWatchRepository = RoomSeriesWatchRepository(
-        database = database,
-        source = NdlSeriesReleaseService(),
-    )
+    val seriesWatchRepository: SeriesWatchRepository =
+        RoomSeriesWatchRepository(
+            database = database,
+            source = NdlSeriesReleaseService(),
+        )
 
     val seriesWatchScheduler: SeriesWatchScheduler = AndroidSeriesWatchScheduler(application)
 
     val seriesReleaseNotifier = AndroidSeriesReleaseNotifier(application)
 
+    val consentRepository: ConsentRepository = RoomConsentRepository(database)
+
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
 
-    val databaseBackupManager = RoomDatabaseBackupManager(
-        context = application,
-        database = database,
-        automaticBackupDirectory = application.noBackupFilesDir.resolve("restore-backups"),
-        appVersion = BuildConfig.VERSION_NAME,
-    )
+    val databaseBackupManager =
+        RoomDatabaseBackupManager(
+            context = application,
+            database = database,
+            automaticBackupDirectory = application.noBackupFilesDir.resolve("restore-backups"),
+            appVersion = BuildConfig.VERSION_NAME,
+        )
 }

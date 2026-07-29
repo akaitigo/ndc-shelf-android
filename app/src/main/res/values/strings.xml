@@ -448,4 +448,37 @@
     <string name="series_watch_permission_denied">通知が許可されなかったため、定期確認は有効にしていません。</string>
     <string name="series_watch_update_error">定期確認の設定を更新できませんでした。</string>
     <string name="series_watch_updated">定期確認の設定を更新しました。</string>
+
+    <string name="consent_screen_title">プライバシーと同意</string>
+    <string name="consent_screen_description">外部と通信する機能はすべて初期状態で無効です。機能ごとに目的・送信先・送信内容を確認してから、個別に同意できます。同意はいつでも撤回でき、撤回しても本棚のローカル機能は制限されません。</string>
+    <string name="consent_status_none">未同意（外部通信は行われません）</string>
+    <string name="consent_status_granted">%1$sに同意（説明の第%2$d版）</string>
+    <string name="consent_status_revoked">%1$sに撤回済み（外部通信は行われません）</string>
+    <string name="consent_detail_purpose_label">目的:</string>
+    <string name="consent_detail_destination_label">送信先:</string>
+    <string name="consent_detail_items_label">送信項目:</string>
+    <string name="consent_detail_retention_label">保存期間:</string>
+    <string name="consent_detail_third_party_label">第三者提供:</string>
+    <string name="consent_grant_button">内容を確認して同意する</string>
+    <string name="consent_revoke_button">同意を撤回する</string>
+    <string name="consent_revoke_confirm_title">同意を撤回しますか？</string>
+    <string name="consent_revoked_notice">撤回すると自動確認は直ちに停止し、以後外部への送信は行われません。シリーズごとの設定は端末内に残るため、再同意すれば同じ設定で再開できます。</string>
+    <string name="consent_reconsent_required">送信内容の説明が更新されたため、継続には再同意が必要です。再同意するまで外部通信は行われません。</string>
+    <string name="consent_preview_title">送信内容の確認</string>
+    <string name="consent_preview_description">同意すると、次の項目だけが送信されます。</string>
+    <string name="consent_preview_empty">現在の送信対象はありません。シリーズの新刊確認を有効にすると、そのシリーズ名だけが送信対象になります。</string>
+    <string name="consent_preview_more">ほか%1$d件</string>
+    <string name="consent_accept_button">同意する</string>
+    <string name="consent_cancel_button">同意しない</string>
+    <string name="consent_purpose_series_watch_title">シリーズ新刊の自動確認</string>
+    <string name="consent_purpose_series_watch_purpose">有効化したシリーズの新刊候補を週1回まで自動確認する</string>
+    <string name="consent_purpose_series_watch_destination">国立国会図書館サーチ（ndlsearch.ndl.go.jp、HTTPSのみ）</string>
+    <string name="consent_purpose_series_watch_items">有効化したシリーズ名（検索クエリとして送信）</string>
+    <string name="consent_purpose_series_watch_retention">アプリは端末外へ保存しません（NDLサーチの検索処理にのみ使用されます）</string>
+    <string name="consent_purpose_series_watch_third_party">なし（国立国会図書館サーチ以外へ送信しません）</string>
+    <string name="consent_purpose_sync_title">複数端末の同期（今後提供予定）</string>
+    <string name="consent_purpose_nl_search_title">自然言語検索のクラウドモード（今後提供予定）</string>
+    <string name="consent_purpose_ai_title">AI司書（今後提供予定）</string>
+    <string name="consent_purpose_not_available">この機能は未提供です。提供時に内容を提示し、同意なしでは通信しません。</string>
+    <string name="data_privacy_consent_button">プライバシーと同意を管理</string>
 </resources>

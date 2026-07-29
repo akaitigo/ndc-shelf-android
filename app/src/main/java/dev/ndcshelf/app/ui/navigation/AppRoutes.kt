@@ -23,6 +23,9 @@ data object LibraryGraph
 data object SeriesGraph
 
 @Serializable
+data object DataGraph
+
+@Serializable
 data object LibraryRoute
 
 @Serializable
@@ -50,6 +53,9 @@ data class SeriesSuggestionRoute(
     val workId: String? = null,
 )
 
+@Serializable
+data object ConsentRoute
+
 enum class TopLevelDestination(
     val route: Any,
     @StringRes val labelRes: Int,
@@ -59,6 +65,6 @@ enum class TopLevelDestination(
     SCAN(ScanRoute, R.string.navigation_scan, Icons.Rounded.QrCodeScanner),
     SERIES(SeriesGraph, R.string.navigation_series, Icons.Rounded.CollectionsBookmark),
     INSIGHTS(InsightsRoute, R.string.navigation_insights, Icons.Rounded.Analytics),
-    DATA(DataRoute, R.string.navigation_data, Icons.Rounded.Storage),
+    DATA(DataGraph, R.string.navigation_data, Icons.Rounded.Storage),
     INFO(InfoRoute, R.string.navigation_info, Icons.Rounded.Info),
 }

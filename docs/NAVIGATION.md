@@ -12,7 +12,8 @@
 | `SeriesGraph` → `SeriesRoute` | なし | シリーズ一覧・詳細 |
 | `SeriesGraph` → `SeriesSuggestionRoute` | `workId: String?` | シリーズ候補の確認・確定（nullは一覧起点） |
 | `InsightsRoute` | なし | 読書傾向 |
-| `DataRoute` | なし | データ管理 |
+| `DataGraph` → `DataRoute` | なし | データ管理タブの開始画面 |
+| `DataGraph` → `ConsentRoute` | なし | プライバシーと同意（目的別同意の確認・付与・撤回） |
 | `InfoRoute` | なし | アプリ情報 |
 
 ## 規則
