@@ -60,45 +60,60 @@ fun AppInfoScreen(
     buildType: String,
     onOpenUrl: (String) -> Unit,
     contentPadding: PaddingValues,
+    onReplayOnboarding: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val libraries = remember(context) {
-        runCatching { Libs.Builder().withContext(context).build() }.getOrNull()
-    }
+    val libraries =
+        remember(context) {
+            runCatching { Libs.Builder().withContext(context).build() }.getOrNull()
+        }
     var page by rememberSaveable { mutableStateOf(InfoPage.OVERVIEW) }
     var selectedLibraryId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val selectedLibrary = libraries?.libraries?.firstOrNull {
-        it.uniqueId == selectedLibraryId
-    }
+    val selectedLibrary =
+        libraries?.libraries?.firstOrNull {
+            it.uniqueId == selectedLibraryId
+        }
     when {
-        selectedLibrary != null -> LibraryLicenseDetail(
-            library = selectedLibrary,
-            onBack = { selectedLibraryId = null },
-            onOpenUrl = onOpenUrl,
-            contentPadding = contentPadding,
-        )
-        page == InfoPage.LIBRARIES -> LibraryLicenseList(
-            libraries = libraries,
-            onBack = { page = InfoPage.OVERVIEW },
-            onSelect = { selectedLibraryId = it.uniqueId },
-            contentPadding = contentPadding,
-        )
-        page == InfoPage.APP_LICENSE -> AppLicenseDetail(
-            license = libraries?.licenses?.firstOrNull { it.spdxId == "Apache-2.0" },
-            onBack = { page = InfoPage.OVERVIEW },
-            contentPadding = contentPadding,
-        )
-        else -> InfoOverview(
-            versionName = versionName,
-            versionCode = versionCode,
-            buildType = buildType,
-            libraryCount = libraries?.libraries?.size,
-            onShowAppLicense = { page = InfoPage.APP_LICENSE },
-            onShowLibraries = { page = InfoPage.LIBRARIES },
-            onOpenUrl = onOpenUrl,
-            contentPadding = contentPadding,
-        )
+        selectedLibrary != null -> {
+            LibraryLicenseDetail(
+                library = selectedLibrary,
+                onBack = { selectedLibraryId = null },
+                onOpenUrl = onOpenUrl,
+                contentPadding = contentPadding,
+            )
+        }
+
+        page == InfoPage.LIBRARIES -> {
+            LibraryLicenseList(
+                libraries = libraries,
+                onBack = { page = InfoPage.OVERVIEW },
+                onSelect = { selectedLibraryId = it.uniqueId },
+                contentPadding = contentPadding,
+            )
+        }
+
+        page == InfoPage.APP_LICENSE -> {
+            AppLicenseDetail(
+                license = libraries?.licenses?.firstOrNull { it.spdxId == "Apache-2.0" },
+                onBack = { page = InfoPage.OVERVIEW },
+                contentPadding = contentPadding,
+            )
+        }
+
+        else -> {
+            InfoOverview(
+                versionName = versionName,
+                versionCode = versionCode,
+                buildType = buildType,
+                libraryCount = libraries?.libraries?.size,
+                onShowAppLicense = { page = InfoPage.APP_LICENSE },
+                onShowLibraries = { page = InfoPage.LIBRARIES },
+                onOpenUrl = onOpenUrl,
+                onReplayOnboarding = onReplayOnboarding,
+                contentPadding = contentPadding,
+            )
+        }
     }
 }
 
@@ -111,12 +126,14 @@ private fun InfoOverview(
     onShowAppLicense: () -> Unit,
     onShowLibraries: () -> Unit,
     onOpenUrl: (String) -> Unit,
+    onReplayOnboarding: (() -> Unit)?,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(INFO_OVERVIEW_TAG),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .testTag(INFO_OVERVIEW_TAG),
         contentPadding = screenPadding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -132,6 +149,16 @@ private fun InfoOverview(
                     stringResource(R.string.info_version_value, versionName, versionCode, buildType),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+        }
+        if (onReplayOnboarding != null) {
+            item {
+                OutlinedButton(
+                    onClick = onReplayOnboarding,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.info_replay_onboarding))
+                }
             }
         }
         item { SectionTitle(stringResource(R.string.info_privacy_title)) }
@@ -193,11 +220,12 @@ private fun InfoOverview(
         item {
             NavigationCard(
                 title = stringResource(R.string.info_oss_title),
-                description = if (libraryCount == null) {
-                    stringResource(R.string.info_oss_unavailable)
-                } else {
-                    stringResource(R.string.info_oss_summary, libraryCount)
-                },
+                description =
+                    if (libraryCount == null) {
+                        stringResource(R.string.info_oss_unavailable)
+                    } else {
+                        stringResource(R.string.info_oss_summary, libraryCount)
+                    },
                 testTag = OSS_LICENSE_BUTTON_TAG,
                 enabled = libraryCount != null,
                 onClick = onShowLibraries,
@@ -220,10 +248,11 @@ private fun InfoOverview(
         item {
             InfoCard(
                 title = stringResource(R.string.info_security_title),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                ),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
             ) {
                 Text(stringResource(R.string.info_security_body))
                 ExternalButton(
@@ -243,20 +272,23 @@ private fun LibraryLicenseList(
     contentPadding: PaddingValues,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    val filtered = remember(libraries, query) {
-        libraries?.libraries.orEmpty().filter { library ->
-            query.isBlank() || listOf(
-                library.name,
-                library.uniqueId,
-                library.artifactVersion.orEmpty(),
-                libraryAttribution(library),
-            ).any { it.contains(query, ignoreCase = true) }
+    val filtered =
+        remember(libraries, query) {
+            libraries?.libraries.orEmpty().filter { library ->
+                query.isBlank() ||
+                    listOf(
+                        library.name,
+                        library.uniqueId,
+                        library.artifactVersion.orEmpty(),
+                        libraryAttribution(library),
+                    ).any { it.contains(query, ignoreCase = true) }
+            }
         }
-    }
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(OSS_LICENSE_LIST_TAG),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .testTag(OSS_LICENSE_LIST_TAG),
         contentPadding = screenPadding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -270,18 +302,20 @@ private fun LibraryLicenseList(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
                 label = { Text(stringResource(R.string.info_oss_search)) },
                 singleLine = true,
             )
         }
         items(filtered, key = { it.uniqueId }) { library ->
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelect(library) },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(library) },
                 shape = RoundedCornerShape(18.dp),
             ) {
                 Row(
@@ -296,17 +330,19 @@ private fun LibraryLicenseList(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = stringResource(
-                                R.string.info_oss_license_names,
-                                library.licenses.joinToString { it.name },
-                            ),
+                            text =
+                                stringResource(
+                                    R.string.info_oss_license_names,
+                                    library.licenses.joinToString { it.name },
+                                ),
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            text = stringResource(
-                                R.string.info_oss_attribution,
-                                libraryAttribution(library),
-                            ),
+                            text =
+                                stringResource(
+                                    R.string.info_oss_attribution,
+                                    libraryAttribution(library),
+                                ),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -359,9 +395,10 @@ private fun AppLicenseDetail(
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(APP_LICENSE_DETAIL_TAG),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .testTag(APP_LICENSE_DETAIL_TAG),
         contentPadding = screenPadding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -375,8 +412,9 @@ private fun AppLicenseDetail(
         }
         item {
             Text(
-                text = license?.licenseContent
-                    ?: stringResource(R.string.info_license_content_unavailable),
+                text =
+                    license?.licenseContent
+                        ?: stringResource(R.string.info_license_content_unavailable),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -384,7 +422,10 @@ private fun AppLicenseDetail(
 }
 
 @Composable
-private fun LicenseCard(license: License, onOpenUrl: (String) -> Unit) {
+private fun LicenseCard(
+    license: License,
+    onOpenUrl: (String) -> Unit,
+) {
     InfoCard(title = license.name) {
         val content = license.licenseContent
         if (content.isNullOrBlank()) {
@@ -402,7 +443,10 @@ private fun LicenseCard(license: License, onOpenUrl: (String) -> Unit) {
 }
 
 @Composable
-private fun ScreenHeading(title: String, description: String) {
+private fun ScreenHeading(
+    title: String,
+    description: String,
+) {
     Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
     Text(
         text = description,
@@ -413,7 +457,10 @@ private fun ScreenHeading(title: String, description: String) {
 }
 
 @Composable
-private fun DetailHeading(title: String, onBack: () -> Unit) {
+private fun DetailHeading(
+    title: String,
+    onBack: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(
@@ -466,10 +513,11 @@ private fun NavigationCard(
     enabled: Boolean = true,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(testTag)
-            .clickable(enabled = enabled, onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(testTag)
+                .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(20.dp),
     ) {
         Row(
@@ -486,7 +534,10 @@ private fun NavigationCard(
 }
 
 @Composable
-private fun ExternalButton(label: String, onClick: () -> Unit) {
+private fun ExternalButton(
+    label: String,
+    onClick: () -> Unit,
+) {
     OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Text(label)
         Spacer(Modifier.width(8.dp))
@@ -494,19 +545,22 @@ private fun ExternalButton(label: String, onClick: () -> Unit) {
     }
 }
 
-internal fun libraryAttribution(library: Library): String {
-    return buildList {
+internal fun libraryAttribution(library: Library): String =
+    buildList {
         addAll(library.developers.mapNotNull { it.name?.takeIf(String::isNotBlank) })
-        library.organization?.name?.takeIf { it.isNotBlank() }?.let(::add)
+        library.organization
+            ?.name
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::add)
     }.distinct().ifEmpty { listOf(library.uniqueId) }.joinToString()
-}
 
-private fun screenPadding(contentPadding: PaddingValues) = PaddingValues(
-    start = 16.dp,
-    top = contentPadding.calculateTopPadding() + 20.dp,
-    end = 16.dp,
-    bottom = contentPadding.calculateBottomPadding() + 24.dp,
-)
+private fun screenPadding(contentPadding: PaddingValues) =
+    PaddingValues(
+        start = 16.dp,
+        top = contentPadding.calculateTopPadding() + 20.dp,
+        end = 16.dp,
+        bottom = contentPadding.calculateBottomPadding() + 24.dp,
+    )
 
 private enum class InfoPage { OVERVIEW, APP_LICENSE, LIBRARIES }
 

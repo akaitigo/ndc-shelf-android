@@ -15,6 +15,7 @@
 | `DataGraph` → `DataRoute` | なし | データ管理タブの開始画面 |
 | `DataGraph` → `ConsentRoute` | なし | プライバシーと同意（目的別同意の確認・付与・撤回） |
 | `InfoRoute` | なし | アプリ情報 |
+| `OnboardingRoute` | なし | 初回オンボーディング（未完了時に自動表示、情報画面から再表示可） |
 
 ## 規則
 

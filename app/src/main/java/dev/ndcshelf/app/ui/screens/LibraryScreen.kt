@@ -20,12 +20,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
-import androidx.compose.material.icons.rounded.Clear
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
@@ -65,21 +66,21 @@ import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
 import dev.ndcshelf.app.ManualReconciliationUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.ReconciliationFailure
 import dev.ndcshelf.app.ShelfMoveUiState
-import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.model.BibliographicSource
+import dev.ndcshelf.app.domain.model.BookEditDraft
+import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
 import dev.ndcshelf.app.domain.model.LibrarySort
 import dev.ndcshelf.app.domain.model.LibraryStats
-import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.MoveDirection
-import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
-import dev.ndcshelf.app.domain.model.BookEditDraft
-import dev.ndcshelf.app.domain.model.BookEditField
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.ui.components.BookCover
 import java.text.DateFormat
 import java.util.Date
@@ -126,16 +127,19 @@ fun LibraryScreen(
     var editingCopyId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLocationManager by rememberSaveable { mutableStateOf(false) }
     val query = searchCriteria?.query ?: localQuery
-    val visibleBooks = remember(books, query, searchCriteria) {
-        if (searchCriteria == null) books.filter { it.matches(query) } else books
-    }
+    val visibleBooks =
+        remember(books, query, searchCriteria) {
+            if (searchCriteria == null) books.filter { it.matches(query) } else books
+        }
     val editionCounts = remember(books) { books.groupingBy { it.editionId }.eachCount() }
-    val editingBook = remember(books, editingCopyId) {
-        books.firstOrNull { it.copyId == editingCopyId }
-    }
-    val selectedCopies = remember(books, selectedEditionId) {
-        books.filter { it.editionId == selectedEditionId }
-    }
+    val editingBook =
+        remember(books, editingCopyId) {
+            books.firstOrNull { it.copyId == editingCopyId }
+        }
+    val selectedCopies =
+        remember(books, selectedEditionId) {
+            books.filter { it.editionId == selectedEditionId }
+        }
 
     fun openEditor(copyId: String) {
         onClearBookEditState()
@@ -208,18 +212,32 @@ fun LibraryScreen(
         )
     } else {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = contentPadding.calculateTopPadding()),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(top = contentPadding.calculateTopPadding()),
         ) {
+            var showHelp by rememberSaveable { mutableStateOf(false) }
+            if (showHelp) {
+                LibraryHelpDialog(onDismiss = { showHelp = false })
+            }
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
             ) {
-                Text(
-                    text = "My Library",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "My Library",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { showHelp = true }) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.HelpOutline,
+                            contentDescription = stringResource(R.string.library_help_button),
+                        )
+                    }
+                }
                 Text(
                     text = "${libraryStats?.totalCount ?: books.size}冊の本を、ちゃんと見つけられる場所。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -281,19 +299,21 @@ fun LibraryScreen(
             } else if (visibleBooks.isEmpty()) {
                 EmptyLibrary(
                     isSearching = query.isNotBlank(),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = contentPadding.calculateBottomPadding()),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(bottom = contentPadding.calculateBottomPadding()),
                 )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        top = 8.dp,
-                        end = 16.dp,
-                        bottom = contentPadding.calculateBottomPadding() + 16.dp,
-                    ),
+                    contentPadding =
+                        PaddingValues(
+                            start = 16.dp,
+                            top = 8.dp,
+                            end = 16.dp,
+                            bottom = contentPadding.calculateBottomPadding() + 16.dp,
+                        ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(
@@ -359,7 +379,6 @@ fun LibraryScreen(
             onClearState = onClearLocationState,
         )
     }
-
 }
 
 internal const val LIBRARY_SEARCH_PROGRESS_TAG = "library-search-progress"
@@ -371,9 +390,10 @@ private fun LibrarySummary(stats: LibraryStats) {
         color = MaterialTheme.colorScheme.primaryContainer,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             SummaryValue(value = stats.totalCount.toString(), label = "蔵書")
@@ -383,11 +403,12 @@ private fun LibrarySummary(stats: LibraryStats) {
     }
 }
 
-private fun List<LibraryBook>.toStats() = LibraryStats(
-    totalCount = size,
-    classifiedCount = count { it.ndcCode != null },
-    readingCount = count { it.readingStatus == ReadingStatus.READING },
-)
+private fun List<LibraryBook>.toStats() =
+    LibraryStats(
+        totalCount = size,
+        classifiedCount = count { it.ndcCode != null },
+        readingCount = count { it.readingStatus == ReadingStatus.READING },
+    )
 
 @Composable
 private fun LibrarySearchControls(
@@ -440,18 +461,22 @@ private fun LibrarySearchControls(
 }
 
 @Composable
-private fun LibrarySort.label(): String = stringResource(
-    when (this) {
-        LibrarySort.ADDED_NEWEST -> R.string.library_sort_added
-        LibrarySort.TITLE -> R.string.library_sort_title
-        LibrarySort.AUTHOR -> R.string.library_sort_author
-        LibrarySort.NDC -> R.string.library_sort_ndc
-        LibrarySort.SHELF -> R.string.library_sort_shelf
-    },
-)
+private fun LibrarySort.label(): String =
+    stringResource(
+        when (this) {
+            LibrarySort.ADDED_NEWEST -> R.string.library_sort_added
+            LibrarySort.TITLE -> R.string.library_sort_title
+            LibrarySort.AUTHOR -> R.string.library_sort_author
+            LibrarySort.NDC -> R.string.library_sort_ndc
+            LibrarySort.SHELF -> R.string.library_sort_shelf
+        },
+    )
 
 @Composable
-private fun SummaryValue(value: String, label: String) {
+private fun SummaryValue(
+    value: String,
+    label: String,
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
@@ -470,15 +495,17 @@ private fun BookCard(
 ) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BookCover(
@@ -505,8 +532,9 @@ private fun BookCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${book.copyLabel} ・ " +
-                        stringResource(R.string.book_copy_count, editionCopyCount),
+                    text =
+                        "${book.copyLabel} ・ " +
+                            stringResource(R.string.book_copy_count, editionCopyCount),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -549,7 +577,10 @@ private fun BookCard(
 }
 
 @Composable
-private fun NdcBadge(code: String, category: String?) {
+private fun NdcBadge(
+    code: String,
+    category: String?,
+) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -592,11 +623,12 @@ private fun EmptyLibrary(
             modifier = Modifier.padding(32.dp),
         ) {
             Icon(
-                imageVector = if (isSearching) {
-                    Icons.Rounded.Search
-                } else {
-                    Icons.AutoMirrored.Rounded.LibraryBooks
-                },
+                imageVector =
+                    if (isSearching) {
+                        Icons.Rounded.Search
+                    } else {
+                        Icons.AutoMirrored.Rounded.LibraryBooks
+                    },
                 contentDescription = null,
                 modifier = Modifier.size(56.dp),
                 tint = MaterialTheme.colorScheme.primary,
@@ -608,11 +640,12 @@ private fun EmptyLibrary(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = if (isSearching) {
-                    "検索条件を変えてみてください"
-                } else {
-                    "下の「スキャン」から本のバーコードを読み取れます"
-                },
+                text =
+                    if (isSearching) {
+                        "検索条件を変えてみてください"
+                    } else {
+                        "下の「スキャン」から本のバーコードを読み取れます"
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -659,46 +692,55 @@ private fun EditBookSheet(
     var showDeleteConfirmation by rememberSaveable(book.copyId) { mutableStateOf(false) }
     var reconciliationIsbn by rememberSaveable(book.copyId) { mutableStateOf(book.isbn13.orEmpty()) }
     val saving = editState is BookEditUiState.Saving && editState.copyId == book.copyId
-    val deleting = deleteState is BookDeleteUiState.Deleting &&
-        deleteState.copyId == book.copyId
-    val reconciling = reconciliationState === ManualReconciliationUiState.Loading ||
-        reconciliationState is ManualReconciliationUiState.Applying
+    val deleting =
+        deleteState is BookDeleteUiState.Deleting &&
+            deleteState.copyId == book.copyId
+    val reconciling =
+        reconciliationState === ManualReconciliationUiState.Loading ||
+            reconciliationState is ManualReconciliationUiState.Applying
     val busy = saving || deleting || reconciling
     val moving = shelfMoveState is ShelfMoveUiState.Moving && shelfMoveState.copyId == book.copyId
-    val errors = (editState as? BookEditUiState.Invalid)
-        ?.takeIf { it.copyId == book.copyId }
-        ?.errors
-        .orEmpty()
-    val formattedAddedAt = remember(book.addedAt) {
-        DateFormat.getDateTimeInstance().format(Date(book.addedAt))
-    }
+    val errors =
+        (editState as? BookEditUiState.Invalid)
+            ?.takeIf { it.copyId == book.copyId }
+            ?.errors
+            .orEmpty()
+    val formattedAddedAt =
+        remember(book.addedAt) {
+            DateFormat.getDateTimeInstance().format(Date(book.addedAt))
+        }
     val unsetLocation = stringResource(R.string.location_unset_value)
-    val orderedTierBooks = remember(allBooks, book.locationTierId) {
-        allBooks.filter { it.locationTierId == book.locationTierId && it.locationTierId != null }
-            .sortedWith(
-                compareBy<LibraryBook> { it.shelfOrderKey == null }
-                    .thenBy { it.shelfOrderKey }
-                    .thenBy { it.addedAt }
-                    .thenBy { it.copyId },
-            )
-    }
-    val currentShelfIndex = orderedTierBooks.indexOfFirst { it.copyId == book.copyId }
-    val leftNeighbor = orderedTierBooks.getOrNull(currentShelfIndex - 1)
-    val rightNeighbor = orderedTierBooks.getOrNull(currentShelfIndex + 1)
-    val candidateBooksByTier = remember(allBooks, book.copyId) {
-        allBooks.asSequence()
-            .filter { it.locationTierId != null && it.copyId != book.copyId }
-            .groupBy { requireNotNull(it.locationTierId) }
-            .mapValues { (_, candidates) ->
-                candidates.sortedWith(
+    val orderedTierBooks =
+        remember(allBooks, book.locationTierId) {
+            allBooks
+                .filter { it.locationTierId == book.locationTierId && it.locationTierId != null }
+                .sortedWith(
                     compareBy<LibraryBook> { it.shelfOrderKey == null }
                         .thenBy { it.shelfOrderKey }
                         .thenBy { it.addedAt }
                         .thenBy { it.copyId },
                 )
-            }
-    }
+        }
+    val currentShelfIndex = orderedTierBooks.indexOfFirst { it.copyId == book.copyId }
+    val leftNeighbor = orderedTierBooks.getOrNull(currentShelfIndex - 1)
+    val rightNeighbor = orderedTierBooks.getOrNull(currentShelfIndex + 1)
+    val candidateBooksByTier =
+        remember(allBooks, book.copyId) {
+            allBooks
+                .asSequence()
+                .filter { it.locationTierId != null && it.copyId != book.copyId }
+                .groupBy { requireNotNull(it.locationTierId) }
+                .mapValues { (_, candidates) ->
+                    candidates.sortedWith(
+                        compareBy<LibraryBook> { it.shelfOrderKey == null }
+                            .thenBy { it.shelfOrderKey }
+                            .thenBy { it.addedAt }
+                            .thenBy { it.copyId },
+                    )
+                }
+        }
     val targetTierBooks = locationTierId?.let(candidateBooksByTier::get).orEmpty()
+
     fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
 
     fun reset() {
@@ -720,10 +762,11 @@ private fun EditBookSheet(
 
     ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -768,15 +811,16 @@ private fun EditBookSheet(
                         }
                         (reconciliationState as? ManualReconciliationUiState.Error)?.let { state ->
                             Text(
-                                text = stringResource(
-                                    when (state.failure) {
-                                        ReconciliationFailure.INVALID_ISBN -> R.string.reconciliation_invalid
-                                        ReconciliationFailure.NOT_FOUND -> R.string.reconciliation_not_found
-                                        ReconciliationFailure.LOOKUP -> R.string.reconciliation_lookup_error
-                                        ReconciliationFailure.CONFLICT -> R.string.reconciliation_conflict
-                                        ReconciliationFailure.SAVE -> R.string.reconciliation_save_error
-                                    },
-                                ),
+                                text =
+                                    stringResource(
+                                        when (state.failure) {
+                                            ReconciliationFailure.INVALID_ISBN -> R.string.reconciliation_invalid
+                                            ReconciliationFailure.NOT_FOUND -> R.string.reconciliation_not_found
+                                            ReconciliationFailure.LOOKUP -> R.string.reconciliation_lookup_error
+                                            ReconciliationFailure.CONFLICT -> R.string.reconciliation_conflict
+                                            ReconciliationFailure.SAVE -> R.string.reconciliation_save_error
+                                        },
+                                    ),
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
@@ -832,9 +876,10 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_author)) },
                 isError = error(BookEditField.PRIMARY_AUTHOR) != null,
-                supportingText = error(BookEditField.PRIMARY_AUTHOR)?.let { message ->
-                    { Text(message) }
-                },
+                supportingText =
+                    error(BookEditField.PRIMARY_AUTHOR)?.let { message ->
+                        { Text(message) }
+                    },
                 enabled = !busy,
                 singleLine = true,
             )
@@ -854,9 +899,10 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_published_year)) },
                 isError = error(BookEditField.PUBLISHED_YEAR) != null,
-                supportingText = error(BookEditField.PUBLISHED_YEAR)?.let { message ->
-                    { Text(message) }
-                },
+                supportingText =
+                    error(BookEditField.PUBLISHED_YEAR)?.let { message ->
+                        { Text(message) }
+                    },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 enabled = !busy,
                 singleLine = true,
@@ -877,17 +923,19 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_ndc_edition)) },
                 isError = error(BookEditField.NDC_EDITION) != null,
-                supportingText = error(BookEditField.NDC_EDITION)?.let { message ->
-                    { Text(message) }
-                },
+                supportingText =
+                    error(BookEditField.NDC_EDITION)?.let { message ->
+                        { Text(message) }
+                    },
                 enabled = !busy,
                 singleLine = true,
             )
             Text(
-                text = stringResource(
-                    R.string.book_edit_classification_source,
-                    book.classificationSource.name,
-                ),
+                text =
+                    stringResource(
+                        R.string.book_edit_classification_source,
+                        book.classificationSource.name,
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1065,10 +1113,11 @@ private fun EditBookSheet(
                 onClick = { showDeleteConfirmation = true },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !busy,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
             ) {
                 if (deleting) {
                     CircularProgressIndicator(
@@ -1104,10 +1153,11 @@ private fun EditBookSheet(
                         showDeleteConfirmation = false
                         onDelete()
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
                 ) {
                     Text(stringResource(R.string.book_delete_confirm))
                 }
@@ -1120,11 +1170,12 @@ private fun EditBookSheet(
         )
     }
 
-    val preview = when (reconciliationState) {
-        is ManualReconciliationUiState.Preview -> reconciliationState.preview
-        is ManualReconciliationUiState.Applying -> reconciliationState.preview
-        else -> null
-    }
+    val preview =
+        when (reconciliationState) {
+            is ManualReconciliationUiState.Preview -> reconciliationState.preview
+            is ManualReconciliationUiState.Applying -> reconciliationState.preview
+            else -> null
+        }
     if (preview != null && preview.current.copyId == book.copyId) {
         AlertDialog(
             onDismissRequest = { if (!reconciling) onClearReconciliation() },
@@ -1204,13 +1255,18 @@ private fun LocationManagerSheet(
 
     ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, end = 20.dp, bottom = 36.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 20.dp, end = 20.dp, bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(stringResource(R.string.location_manager_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.location_manager_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 stringResource(R.string.location_manager_description),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1289,8 +1345,11 @@ private fun LocationManagerSheet(
             target = target,
             onDismiss = { editor = null },
             onConfirm = { name ->
-                if (target.id == null) onAdd(target.level, target.parentId, name)
-                else onRename(target.level, target.id, name)
+                if (target.id == null) {
+                    onAdd(target.level, target.parentId, name)
+                } else {
+                    onRename(target.level, target.id, name)
+                }
                 editor = null
             },
         )
@@ -1307,10 +1366,11 @@ private fun LocationManagerSheet(
                         onDelete(target.level, target.id, null, false)
                         deleteTarget = null
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
                 ) { Text(stringResource(R.string.location_delete_confirm)) }
             },
             dismissButton = {
@@ -1323,13 +1383,32 @@ private fun LocationManagerSheet(
 
     (mutationState as? LocationMutationUiState.InUse)?.let { state ->
         var replacementTierId by remember(state.id) { mutableStateOf<String?>(null) }
-        val excludedTierIds = when (state.level) {
-            LocationLevel.ROOM -> tree.rooms.firstOrNull { it.id == state.id }
-                ?.shelves.orEmpty().flatMap { it.tiers }.map { it.id }.toSet()
-            LocationLevel.SHELF -> tree.rooms.flatMap { it.shelves }
-                .firstOrNull { it.id == state.id }?.tiers.orEmpty().map { it.id }.toSet()
-            LocationLevel.TIER -> setOf(state.id)
-        }
+        val excludedTierIds =
+            when (state.level) {
+                LocationLevel.ROOM -> {
+                    tree.rooms
+                        .firstOrNull { it.id == state.id }
+                        ?.shelves
+                        .orEmpty()
+                        .flatMap { it.tiers }
+                        .map { it.id }
+                        .toSet()
+                }
+
+                LocationLevel.SHELF -> {
+                    tree.rooms
+                        .flatMap { it.shelves }
+                        .firstOrNull { it.id == state.id }
+                        ?.tiers
+                        .orEmpty()
+                        .map { it.id }
+                        .toSet()
+                }
+
+                LocationLevel.TIER -> {
+                    setOf(state.id)
+                }
+            }
         AlertDialog(
             onDismissRequest = onClearState,
             title = { Text(stringResource(R.string.location_in_use_title)) },
@@ -1398,11 +1477,12 @@ private fun LocationNameDialog(
     onConfirm: (String) -> Unit,
 ) {
     var name by remember(target) { mutableStateOf(target.initialName) }
-    val levelName = when (target.level) {
-        LocationLevel.ROOM -> stringResource(R.string.location_level_room)
-        LocationLevel.SHELF -> stringResource(R.string.location_level_shelf)
-        LocationLevel.TIER -> stringResource(R.string.location_level_tier)
-    }
+    val levelName =
+        when (target.level) {
+            LocationLevel.ROOM -> stringResource(R.string.location_level_room)
+            LocationLevel.SHELF -> stringResource(R.string.location_level_shelf)
+            LocationLevel.TIER -> stringResource(R.string.location_level_tier)
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1420,5 +1500,23 @@ private fun LocationNameDialog(
             Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.location_save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.location_cancel)) } },
+    )
+}
+
+@Composable
+private fun LibraryHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.library_help_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.library_help_ndc))
+                Text(stringResource(R.string.library_help_location))
+                Text(stringResource(R.string.library_help_reading_status))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.help_close)) }
+        },
     )
 }
