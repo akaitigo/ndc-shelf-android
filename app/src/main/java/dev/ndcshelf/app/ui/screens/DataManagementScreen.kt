@@ -31,6 +31,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -74,26 +75,31 @@ fun DataManagementScreen(
     onConfirmDatabaseRestore: () -> Unit,
     onDismissDatabaseBackup: () -> Unit,
     contentPadding: PaddingValues,
+    onOpenConsent: (() -> Unit)? = null,
 ) {
-    val importBusy = importState === LibraryImportUiState.Loading ||
-        importState === LibraryImportUiState.Applying
-    val backupBusy = databaseBackupState === DatabaseBackupUiState.Creating ||
-        databaseBackupState === DatabaseBackupUiState.Inspecting ||
-        databaseBackupState === DatabaseBackupUiState.Restoring
+    val importBusy =
+        importState === LibraryImportUiState.Loading ||
+            importState === LibraryImportUiState.Applying
+    val backupBusy =
+        databaseBackupState === DatabaseBackupUiState.Creating ||
+            databaseBackupState === DatabaseBackupUiState.Inspecting ||
+            databaseBackupState === DatabaseBackupUiState.Restoring
     val anyBusy = exportInProgress || importBusy || backupBusy
     val busyReason = stringResource(R.string.data_management_busy_reason)
     val emptyReason = stringResource(R.string.data_management_empty_reason)
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(DATA_LIST_TAG),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = contentPadding.calculateTopPadding() + 20.dp,
-            end = 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 24.dp,
-        ),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .testTag(DATA_LIST_TAG),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                top = contentPadding.calculateTopPadding() + 20.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -122,6 +128,16 @@ fun DataManagementScreen(
                 )
             }
         }
+        if (onOpenConsent != null) {
+            item {
+                OutlinedButton(
+                    onClick = onOpenConsent,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.data_privacy_consent_button))
+                }
+            }
+        }
         item { SectionTitle(stringResource(R.string.data_management_sync_section)) }
         item { SyncStatusCard(syncStatus) }
         item { SectionTitle(stringResource(R.string.data_management_transfer_section)) }
@@ -132,11 +148,12 @@ fun DataManagementScreen(
                 description = stringResource(R.string.data_management_export_json_description),
                 actionLabel = stringResource(R.string.export_json),
                 enabled = !anyBusy && bookCount > 0,
-                disabledReason = when {
-                    anyBusy -> busyReason
-                    bookCount == 0 -> emptyReason
-                    else -> null
-                },
+                disabledReason =
+                    when {
+                        anyBusy -> busyReason
+                        bookCount == 0 -> emptyReason
+                        else -> null
+                    },
                 testTag = EXPORT_JSON_TAG,
                 onClick = onExportJson,
             )
@@ -148,11 +165,12 @@ fun DataManagementScreen(
                 description = stringResource(R.string.data_management_export_csv_description),
                 actionLabel = stringResource(R.string.export_csv),
                 enabled = !anyBusy && bookCount > 0,
-                disabledReason = when {
-                    anyBusy -> busyReason
-                    bookCount == 0 -> emptyReason
-                    else -> null
-                },
+                disabledReason =
+                    when {
+                        anyBusy -> busyReason
+                        bookCount == 0 -> emptyReason
+                        else -> null
+                    },
                 testTag = EXPORT_CSV_TAG,
                 onClick = onExportCsv,
             )
@@ -189,11 +207,12 @@ fun DataManagementScreen(
                 description = stringResource(R.string.data_management_backup_description),
                 actionLabel = stringResource(R.string.database_backup_create),
                 enabled = !anyBusy && bookCount > 0,
-                disabledReason = when {
-                    anyBusy -> busyReason
-                    bookCount == 0 -> emptyReason
-                    else -> null
-                },
+                disabledReason =
+                    when {
+                        anyBusy -> busyReason
+                        bookCount == 0 -> emptyReason
+                        else -> null
+                    },
                 testTag = BACKUP_TAG,
                 onClick = onCreateDatabaseBackup,
             )
@@ -229,78 +248,124 @@ fun DataManagementScreen(
         DatabaseBackupUiState.Idle,
         is DatabaseBackupUiState.Created,
         is DatabaseBackupUiState.Restored,
-        -> Unit
-        DatabaseBackupUiState.Creating -> DataProgressDialog(
-            stringResource(R.string.database_backup_creating),
-        )
-        DatabaseBackupUiState.Inspecting -> DataProgressDialog(
-            stringResource(R.string.database_backup_inspecting),
-        )
-        DatabaseBackupUiState.Restoring -> DataProgressDialog(
-            stringResource(R.string.database_backup_restoring),
-        )
-        is DatabaseBackupUiState.Preview -> DatabaseRestorePreviewDialog(
-            state = databaseBackupState,
-            onConfirm = onConfirmDatabaseRestore,
-            onDismiss = onDismissDatabaseBackup,
-        )
-        is DatabaseBackupUiState.Error -> DatabaseBackupErrorDialog(
-            state = databaseBackupState,
-            onDismiss = onDismissDatabaseBackup,
-        )
+        -> {
+            Unit
+        }
+
+        DatabaseBackupUiState.Creating -> {
+            DataProgressDialog(
+                stringResource(R.string.database_backup_creating),
+            )
+        }
+
+        DatabaseBackupUiState.Inspecting -> {
+            DataProgressDialog(
+                stringResource(R.string.database_backup_inspecting),
+            )
+        }
+
+        DatabaseBackupUiState.Restoring -> {
+            DataProgressDialog(
+                stringResource(R.string.database_backup_restoring),
+            )
+        }
+
+        is DatabaseBackupUiState.Preview -> {
+            DatabaseRestorePreviewDialog(
+                state = databaseBackupState,
+                onConfirm = onConfirmDatabaseRestore,
+                onDismiss = onDismissDatabaseBackup,
+            )
+        }
+
+        is DatabaseBackupUiState.Error -> {
+            DatabaseBackupErrorDialog(
+                state = databaseBackupState,
+                onDismiss = onDismissDatabaseBackup,
+            )
+        }
     }
     when (importState) {
         LibraryImportUiState.Idle,
         is LibraryImportUiState.Success,
-        -> Unit
-        LibraryImportUiState.Loading -> ImportProgressDialog(
-            message = stringResource(R.string.import_loading),
-            onCancel = onDismissImport,
-        )
-        LibraryImportUiState.Applying -> ImportProgressDialog(
-            message = stringResource(R.string.import_applying),
-            onCancel = onDismissImport,
-        )
-        is LibraryImportUiState.Invalid -> ImportErrorDialog(
-            errors = importState.errors,
-            onDismiss = onDismissImport,
-        )
-        is LibraryImportUiState.Error -> ImportErrorDialog(
-            errors = listOf(
-                ImportValidationError(null, null, importFailureMessage(importState.failure)),
-            ),
-            onDismiss = onDismissImport,
-        )
-        is LibraryImportUiState.Preview -> ImportPreviewDialog(
-            state = importState,
-            onSelectPolicy = onSelectImportPolicy,
-            onConfirm = onConfirmImport,
-            onDismiss = onDismissImport,
-        )
+        -> {
+            Unit
+        }
+
+        LibraryImportUiState.Loading -> {
+            ImportProgressDialog(
+                message = stringResource(R.string.import_loading),
+                onCancel = onDismissImport,
+            )
+        }
+
+        LibraryImportUiState.Applying -> {
+            ImportProgressDialog(
+                message = stringResource(R.string.import_applying),
+                onCancel = onDismissImport,
+            )
+        }
+
+        is LibraryImportUiState.Invalid -> {
+            ImportErrorDialog(
+                errors = importState.errors,
+                onDismiss = onDismissImport,
+            )
+        }
+
+        is LibraryImportUiState.Error -> {
+            ImportErrorDialog(
+                errors =
+                    listOf(
+                        ImportValidationError(null, null, importFailureMessage(importState.failure)),
+                    ),
+                onDismiss = onDismissImport,
+            )
+        }
+
+        is LibraryImportUiState.Preview -> {
+            ImportPreviewDialog(
+                state = importState,
+                onSelectPolicy = onSelectImportPolicy,
+                onConfirm = onConfirmImport,
+                onDismiss = onDismissImport,
+            )
+        }
     }
 }
 
 @Composable
 private fun SyncStatusCard(status: SyncEngineStatus) {
-    val lastSuccessful = remember(status.lastSuccessfulAt) {
-        status.lastSuccessfulAt?.let { timestamp ->
-            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(timestamp))
+    val lastSuccessful =
+        remember(status.lastSuccessfulAt) {
+            status.lastSuccessfulAt?.let { timestamp ->
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(timestamp))
+            }
         }
-    }
-    val detail = when {
-        status.requiresReregistration -> stringResource(R.string.sync_status_requires_reregistration)
-        !status.enabled -> stringResource(R.string.sync_status_off)
-        else -> stringResource(
-            R.string.sync_status_on,
-            status.pendingOperationCount,
-            status.unresolvedConflictCount,
-            lastSuccessful ?: stringResource(R.string.sync_status_never),
-        )
-    }
+    val detail =
+        when {
+            status.requiresReregistration -> {
+                stringResource(R.string.sync_status_requires_reregistration)
+            }
+
+            !status.enabled -> {
+                stringResource(R.string.sync_status_off)
+            }
+
+            else -> {
+                stringResource(
+                    R.string.sync_status_on,
+                    status.pendingOperationCount,
+                    status.unresolvedConflictCount,
+                    lastSuccessful ?: stringResource(R.string.sync_status_never),
+                )
+            }
+        }
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(SYNC_STATUS_TAG),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(SYNC_STATUS_TAG),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
         shape = RoundedCornerShape(22.dp),
     ) {
@@ -344,14 +409,15 @@ private fun DataOperationCard(
     onClick: () -> Unit,
     destructive: Boolean = false,
 ) {
-    val colors = if (destructive) {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        )
-    } else {
-        CardDefaults.cardColors()
-    }
+    val colors =
+        if (destructive) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            )
+        } else {
+            CardDefaults.cardColors()
+        }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = colors,
@@ -372,18 +438,20 @@ private fun DataOperationCard(
                     text = disabledReason,
                     modifier = Modifier.testTag("${testTag}_reason"),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (destructive) {
-                        MaterialTheme.colorScheme.onErrorContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color =
+                        if (destructive) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
             }
             Button(
                 onClick = onClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(testTag),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag(testTag),
                 enabled = enabled,
             ) {
                 Text(actionLabel)
@@ -408,9 +476,12 @@ private fun DatabaseRestorePreviewDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val date = remember(state.metadata.createdAt) {
-        java.text.DateFormat.getDateTimeInstance().format(java.util.Date(state.metadata.createdAt))
-    }
+    val date =
+        remember(state.metadata.createdAt) {
+            java.text.DateFormat
+                .getDateTimeInstance()
+                .format(java.util.Date(state.metadata.createdAt))
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null) },
@@ -444,18 +515,19 @@ private fun DatabaseBackupErrorDialog(
     state: DatabaseBackupUiState.Error,
     onDismiss: () -> Unit,
 ) {
-    val message = when (state.failure) {
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.READ_FAILED -> R.string.database_backup_error_read
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.WRITE_FAILED -> R.string.database_backup_error_write
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.TOO_LARGE -> R.string.database_backup_error_too_large
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INVALID_ARCHIVE -> R.string.database_backup_error_archive
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.CHECKSUM_MISMATCH -> R.string.database_backup_error_checksum
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.UNSUPPORTED_FORMAT -> R.string.database_backup_error_format
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.NEWER_DATABASE -> R.string.database_backup_error_newer
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INTEGRITY_FAILED -> R.string.database_backup_error_integrity
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INSUFFICIENT_SPACE -> R.string.database_backup_error_space
-        dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.RESTORE_FAILED -> R.string.database_backup_error_restore
-    }
+    val message =
+        when (state.failure) {
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.READ_FAILED -> R.string.database_backup_error_read
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.WRITE_FAILED -> R.string.database_backup_error_write
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.TOO_LARGE -> R.string.database_backup_error_too_large
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INVALID_ARCHIVE -> R.string.database_backup_error_archive
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.CHECKSUM_MISMATCH -> R.string.database_backup_error_checksum
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.UNSUPPORTED_FORMAT -> R.string.database_backup_error_format
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.NEWER_DATABASE -> R.string.database_backup_error_newer
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INTEGRITY_FAILED -> R.string.database_backup_error_integrity
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.INSUFFICIENT_SPACE -> R.string.database_backup_error_space
+            dev.ndcshelf.app.domain.backup.DatabaseBackupFailure.RESTORE_FAILED -> R.string.database_backup_error_restore
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.database_backup_error_title)) },
@@ -467,7 +539,10 @@ private fun DatabaseBackupErrorDialog(
 }
 
 @Composable
-private fun ImportProgressDialog(message: String, onCancel: () -> Unit) {
+private fun ImportProgressDialog(
+    message: String,
+    onCancel: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onCancel,
         icon = { CircularProgressIndicator() },
@@ -479,32 +554,45 @@ private fun ImportProgressDialog(message: String, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun ImportErrorDialog(errors: List<ImportValidationError>, onDismiss: () -> Unit) {
+private fun ImportErrorDialog(
+    errors: List<ImportValidationError>,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.import_error_title)) },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 errors.forEach { error ->
-                    val text = when {
-                        error.recordNumber != null && error.field != null -> stringResource(
-                            R.string.import_error_location,
-                            error.recordNumber,
-                            error.field,
-                            error.reason,
-                        )
-                        error.field != null -> stringResource(
-                            R.string.import_error_root,
-                            error.field,
-                            error.reason,
-                        )
-                        else -> stringResource(R.string.import_error_general, error.reason)
-                    }
+                    val text =
+                        when {
+                            error.recordNumber != null && error.field != null -> {
+                                stringResource(
+                                    R.string.import_error_location,
+                                    error.recordNumber,
+                                    error.field,
+                                    error.reason,
+                                )
+                            }
+
+                            error.field != null -> {
+                                stringResource(
+                                    R.string.import_error_root,
+                                    error.field,
+                                    error.reason,
+                                )
+                            }
+
+                            else -> {
+                                stringResource(R.string.import_error_general, error.reason)
+                            }
+                        }
                     Text(text, style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -528,9 +616,10 @@ private fun ImportPreviewDialog(
         title = { Text(stringResource(R.string.import_preview_title)) },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (state.staleRecalculated) {
@@ -557,11 +646,15 @@ private fun ImportPreviewDialog(
                     )
                     state.warnings.forEach { warning ->
                         Text(
-                            if (warning.field == null) warning.reason else stringResource(
-                                R.string.import_error_root,
-                                warning.field,
-                                warning.reason,
-                            ),
+                            if (warning.field == null) {
+                                warning.reason
+                            } else {
+                                stringResource(
+                                    R.string.import_error_root,
+                                    warning.field,
+                                    warning.reason,
+                                )
+                            },
                         )
                     }
                 }
@@ -591,12 +684,17 @@ private fun ImportPreviewDialog(
 }
 
 @Composable
-private fun ImportPolicyOption(selected: Boolean, label: String, onClick: () -> Unit) {
+private fun ImportPolicyOption(
+    selected: Boolean,
+    label: String,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-            .padding(vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
+                .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = null)
@@ -606,13 +704,14 @@ private fun ImportPolicyOption(selected: Boolean, label: String, onClick: () -> 
 }
 
 @Composable
-private fun importFailureMessage(failure: ImportFailure): String = when (failure) {
-    ImportFailure.JSON_READ -> stringResource(R.string.import_read_failure)
-    ImportFailure.CSV_READ -> stringResource(R.string.import_csv_read_failure)
-    ImportFailure.PREVIEW -> stringResource(R.string.import_preview_failure)
-    ImportFailure.APPLY -> stringResource(R.string.import_apply_failure)
-    ImportFailure.STALE_RESELECT -> stringResource(R.string.import_stale_reselect)
-}
+private fun importFailureMessage(failure: ImportFailure): String =
+    when (failure) {
+        ImportFailure.JSON_READ -> stringResource(R.string.import_read_failure)
+        ImportFailure.CSV_READ -> stringResource(R.string.import_csv_read_failure)
+        ImportFailure.PREVIEW -> stringResource(R.string.import_preview_failure)
+        ImportFailure.APPLY -> stringResource(R.string.import_apply_failure)
+        ImportFailure.STALE_RESELECT -> stringResource(R.string.import_stale_reselect)
+    }
 
 internal const val EXPORT_JSON_TAG = "data_export_json"
 internal const val EXPORT_CSV_TAG = "data_export_csv"

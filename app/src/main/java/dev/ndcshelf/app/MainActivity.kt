@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
             seriesRepository = application.container.seriesRepository,
             seriesWatchRepository = application.container.seriesWatchRepository,
             seriesWatchScheduler = application.container.seriesWatchScheduler,
+            consentRepository = application.container.consentRepository,
             syncStatusRepository = application.container.syncStatusRepository,
         )
     }

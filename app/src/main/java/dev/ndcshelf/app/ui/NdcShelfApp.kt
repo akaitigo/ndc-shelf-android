@@ -59,7 +59,10 @@ import dev.ndcshelf.app.R
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.SeriesWatchMutationUiState
 import dev.ndcshelf.app.WorkVariantViewModel
+import dev.ndcshelf.app.domain.consent.ConsentPurpose
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
+import dev.ndcshelf.app.ui.navigation.ConsentRoute
+import dev.ndcshelf.app.ui.navigation.DataGraph
 import dev.ndcshelf.app.ui.navigation.DataRoute
 import dev.ndcshelf.app.ui.navigation.InfoRoute
 import dev.ndcshelf.app.ui.navigation.InsightsRoute
@@ -72,6 +75,8 @@ import dev.ndcshelf.app.ui.navigation.SeriesSuggestionRoute
 import dev.ndcshelf.app.ui.navigation.TopLevelDestination
 import dev.ndcshelf.app.ui.navigation.WorkVariantRoute
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
+import dev.ndcshelf.app.ui.screens.ConsentPayloadDialog
+import dev.ndcshelf.app.ui.screens.ConsentScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
 import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
@@ -157,6 +162,30 @@ fun NdcShelfApp(
             pendingSeriesWatchId = seriesId
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    val seriesWatchConsentRequest by viewModel.seriesWatchConsentRequest.collectAsStateWithLifecycle()
+    seriesWatchConsentRequest?.let { pendingSeriesId ->
+        val seriesCatalogForConsent by viewModel.seriesCatalog.collectAsStateWithLifecycle()
+        val seriesWatchesForConsent by viewModel.seriesWatches.collectAsStateWithLifecycle()
+        val pendingTitle =
+            seriesCatalogForConsent
+                .firstOrNull { it.series.id == pendingSeriesId }
+                ?.series
+                ?.name
+        val payloadItems =
+            buildList {
+                pendingTitle?.let(::add)
+                seriesWatchesForConsent
+                    .filter { it.watch.enabled && it.watch.seriesId != pendingSeriesId }
+                    .forEach { add(it.watch.queryTitle) }
+            }
+        ConsentPayloadDialog(
+            purpose = ConsentPurpose.SERIES_RELEASE_WATCH,
+            payloadItems = payloadItems,
+            onAccept = viewModel::grantSeriesWatchConsent,
+            onDismiss = viewModel::declineSeriesWatchConsent,
+        )
     }
 
     LaunchedEffect(seriesEditorState) {
@@ -692,34 +721,54 @@ fun NdcShelfApp(
                 InsightsScreen(books = books, contentPadding = contentPadding)
             }
 
-            composable<DataRoute> {
-                DataManagementScreen(
-                    bookCount = libraryStats.totalCount,
-                    exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
-                    importState = importState,
-                    databaseBackupState = databaseBackupState,
-                    syncStatus = syncStatus,
-                    onExportJson = { requestExport(LibraryExportFormat.JSON) },
-                    onExportCsv = { requestExport(LibraryExportFormat.CSV) },
-                    onImportJson = {
-                        jsonImporter.launch(arrayOf("application/json", "text/json"))
-                    },
-                    onImportCsv = {
-                        csvImporter.launch(arrayOf("text/csv", "text/comma-separated-values"))
-                    },
-                    onCreateDatabaseBackup = ::requestDatabaseBackup,
-                    onSelectDatabaseBackup = {
-                        databaseBackupRestorer.launch(
-                            arrayOf("application/zip", "application/octet-stream"),
-                        )
-                    },
-                    onSelectImportPolicy = viewModel::selectImportConflictPolicy,
-                    onConfirmImport = viewModel::confirmImport,
-                    onDismissImport = viewModel::dismissImport,
-                    onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
-                    onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
-                    contentPadding = contentPadding,
-                )
+            navigation<DataGraph>(startDestination = DataRoute) {
+                composable<DataRoute> {
+                    DataManagementScreen(
+                        bookCount = libraryStats.totalCount,
+                        exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
+                        importState = importState,
+                        databaseBackupState = databaseBackupState,
+                        syncStatus = syncStatus,
+                        onExportJson = { requestExport(LibraryExportFormat.JSON) },
+                        onExportCsv = { requestExport(LibraryExportFormat.CSV) },
+                        onImportJson = {
+                            jsonImporter.launch(arrayOf("application/json", "text/json"))
+                        },
+                        onImportCsv = {
+                            csvImporter.launch(arrayOf("text/csv", "text/comma-separated-values"))
+                        },
+                        onCreateDatabaseBackup = ::requestDatabaseBackup,
+                        onSelectDatabaseBackup = {
+                            databaseBackupRestorer.launch(
+                                arrayOf("application/zip", "application/octet-stream"),
+                            )
+                        },
+                        onSelectImportPolicy = viewModel::selectImportConflictPolicy,
+                        onConfirmImport = viewModel::confirmImport,
+                        onDismissImport = viewModel::dismissImport,
+                        onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
+                        onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
+                        onOpenConsent = {
+                            navController.navigate(ConsentRoute) { launchSingleTop = true }
+                        },
+                        contentPadding = contentPadding,
+                    )
+                }
+
+                composable<ConsentRoute> {
+                    val consents by viewModel.consents.collectAsStateWithLifecycle()
+                    val seriesWatches by viewModel.seriesWatches.collectAsStateWithLifecycle()
+                    ConsentScreen(
+                        consents = consents,
+                        payloadPreviewItems =
+                            seriesWatches
+                                .filter { it.watch.enabled }
+                                .map { it.watch.queryTitle },
+                        onGrant = viewModel::grantConsent,
+                        onRevoke = viewModel::revokeConsent,
+                        contentPadding = contentPadding,
+                    )
+                }
             }
 
             composable<InfoRoute> {

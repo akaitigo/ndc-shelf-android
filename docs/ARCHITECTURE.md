@@ -69,6 +69,10 @@ sequenceDiagram
 形式パーサーとUIは必ず共通インポート基盤を経由します。詳細な上限、競合方針、ロールバック条件は[IMPORT_SAFETY.md](IMPORT_SAFETY.md)を参照してください。
 通常のJSON / CSVインポートは作品グループを推測せず、新規Workを未所属のまま保存します。内部IDと確定済み作品グループを含む移行は、完全バックアップ形式v11以降だけを使用します。
 
+## 目的別同意（consent）
+
+外部通信する任意機能は`domain/consent`の`ConsentPurpose`で目的を宣言し、既定OFFとします。同意はRoomの`consent_records`（v13）へ目的・説明版・日時で記録し、完全バックアップへ含めず復元でも変更しません。ネットワーク境界の直前（例: `SeriesWatchRunner`）で`ConsentRepository.isGranted`を確認するfail-closed構成とし、UIの状態だけに依存しません。説明文を意味変更する場合は該当`ConsentPurpose.policyVersion`を上げ、再同意されるまで通信を停止します。同意UIは「データ」タブの`ConsentRoute`と、各機能の初回有効化時の`ConsentPayloadDialog`（実ペイロード項目の提示）だけです。
+
 ## データ管理UI
 
 エクスポート、インポート、完全バックアップ、復元の入口は下部ナビゲーションの「データ」画面へ集約します。本棚画面へ個別のデータ操作を追加してはいけません。非破壊操作と現在DBを置き換える復元を別セクションに分け、個人データ、暗号化範囲、上書き有無を実行前から表示します。

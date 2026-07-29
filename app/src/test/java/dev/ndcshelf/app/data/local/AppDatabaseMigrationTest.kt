@@ -20,10 +20,11 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class AppDatabaseMigrationTest {
     @get:Rule
-    val migrationHelper = MigrationTestHelper(
-        InstrumentationRegistry.getInstrumentation(),
-        AppDatabase::class.java,
-    )
+    val migrationHelper =
+        MigrationTestHelper(
+            InstrumentationRegistry.getInstrumentation(),
+            AppDatabase::class.java,
+        )
 
     @Test
     fun version1Fixture_definesConstraintsAndPreservesValuesWhenOpenedByRoom() {
@@ -77,15 +78,18 @@ class AppDatabaseMigrationTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val database = Room.databaseBuilder(context, AppDatabase::class.java, V1_DATABASE)
-            .addMigrations(*AppDatabase.MIGRATIONS.toTypedArray())
-            .allowMainThreadQueries()
-            .build()
+        val database =
+            Room
+                .databaseBuilder(context, AppDatabase::class.java, V1_DATABASE)
+                .addMigrations(*AppDatabase.MIGRATIONS.toTypedArray())
+                .allowMainThreadQueries()
+                .build()
         migrationHelper.closeWhenFinished(database)
 
-        val row = runBlocking {
-            requireNotNull(database.libraryDao().findOwnedByCopyId("copy-1"))
-        }
+        val row =
+            runBlocking {
+                requireNotNull(database.libraryDao().findOwnedByCopyId("copy-1"))
+            }
         assertEquals("題名", row.title)
         assertEquals("出版社", row.publisher)
         assertEquals(2024, row.publishedYear)
@@ -100,9 +104,10 @@ class AppDatabaseMigrationTest {
     @Test
     fun everyExportedSchemaHasARegisteredPathToCurrentVersion() {
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
-        val versions = requireNotNull(assets.list(SCHEMA_ASSET_FOLDER))
-            .mapNotNull { it.removeSuffix(".json").toIntOrNull() }
-            .sorted()
+        val versions =
+            requireNotNull(assets.list(SCHEMA_ASSET_FOLDER))
+                .mapNotNull { it.removeSuffix(".json").toIntOrNull() }
+                .sorted()
 
         assertEquals((1..APP_DATABASE_VERSION).toList(), versions)
         assertEquals(
@@ -116,12 +121,13 @@ class AppDatabaseMigrationTest {
         versions.filter { it < APP_DATABASE_VERSION }.forEach { startVersion ->
             val name = "migration-$startVersion-to-$APP_DATABASE_VERSION"
             migrationHelper.createDatabase(name, startVersion).close()
-            migrationHelper.runMigrationsAndValidate(
-                name,
-                APP_DATABASE_VERSION,
-                true,
-                *AppDatabase.MIGRATIONS.toTypedArray(),
-            ).close()
+            migrationHelper
+                .runMigrationsAndValidate(
+                    name,
+                    APP_DATABASE_VERSION,
+                    true,
+                    *AppDatabase.MIGRATIONS.toTypedArray(),
+                ).close()
         }
     }
 
@@ -143,20 +149,22 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V2_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
-        migrated.query(
-            "SELECT location, tierId, shelfOrderKey FROM owned_copies WHERE id = 'copy-b'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("旧位置", cursor.getString(0))
-            assertEquals("tier-1", cursor.getString(1))
-            assertEquals("0000000000000002636f70792d62", cursor.getString(2))
-        }
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V2_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+        migrated
+            .query(
+                "SELECT location, tierId, shelfOrderKey FROM owned_copies WHERE id = 'copy-b'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("旧位置", cursor.getString(0))
+                assertEquals("tier-1", cursor.getString(1))
+                assertEquals("0000000000000002636f70792d62", cursor.getString(2))
+            }
         migrated.close()
     }
 
@@ -175,21 +183,23 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V3_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
-        migrated.query(
-            "SELECT location, readingStatus, addedAt, copyLabel FROM owned_copies WHERE id = 'copy-1'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("旧位置", cursor.getString(0))
-            assertEquals("READING", cursor.getString(1))
-            assertEquals(42L, cursor.getLong(2))
-            assertEquals("所蔵本", cursor.getString(3))
-        }
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V3_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+        migrated
+            .query(
+                "SELECT location, readingStatus, addedAt, copyLabel FROM owned_copies WHERE id = 'copy-1'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("旧位置", cursor.getString(0))
+                assertEquals("READING", cursor.getString(1))
+                assertEquals(42L, cursor.getLong(2))
+                assertEquals("所蔵本", cursor.getString(3))
+            }
         migrated.close()
     }
 
@@ -208,12 +218,13 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V4_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V4_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
         migrated.query("SELECT copyLabel FROM owned_copies WHERE id = 'copy-1'").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals("保存用", cursor.getString(0))
@@ -237,12 +248,13 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V5_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V5_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
         migrated.execSQL("INSERT INTO scan_sessions VALUES ('session-1', 10, NULL)")
         migrated.execSQL(
             "INSERT INTO scan_attempts VALUES " +
@@ -271,19 +283,21 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V6_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
-        migrated.query(
-            "SELECT isbn13, bibliographicSource FROM book_editions WHERE id = 'edition-1'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("9784101010014", cursor.getString(0))
-            assertEquals("NDL", cursor.getString(1))
-        }
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V6_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+        migrated
+            .query(
+                "SELECT isbn13, bibliographicSource FROM book_editions WHERE id = 'edition-1'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("9784101010014", cursor.getString(0))
+                assertEquals("NDL", cursor.getString(1))
+            }
         migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
         migrated.execSQL("INSERT INTO book_works VALUES ('work-2', '手動A', '著者不明')")
         migrated.execSQL("INSERT INTO book_works VALUES ('work-3', '手動B', '著者不明')")
@@ -305,12 +319,13 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V7_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V7_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
         migrated.query("SELECT title FROM book_works WHERE id = 'work-1'").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals("本編 上", cursor.getString(0))
@@ -361,21 +376,23 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V8_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
-        migrated.query(
-            "SELECT origin, confirmedBy, sourceTitle FROM series_memberships " +
-                "WHERE id = 'membership-1'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("MANUAL", cursor.getString(0))
-            assertEquals("USER", cursor.getString(1))
-            assertEquals("", cursor.getString(2))
-        }
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V8_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+        migrated
+            .query(
+                "SELECT origin, confirmedBy, sourceTitle FROM series_memberships " +
+                    "WHERE id = 'membership-1'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("MANUAL", cursor.getString(0))
+                assertEquals("USER", cursor.getString(1))
+                assertEquals("", cursor.getString(2))
+            }
         migrated.execSQL(
             "UPDATE series_memberships SET origin = 'TITLE_SUGGESTION', " +
                 "sourceTitle = '作品 第1巻' WHERE id = 'membership-1'",
@@ -392,12 +409,13 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V9_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V9_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
         migrated.query("SELECT id, title FROM book_works ORDER BY id").use { cursor ->
             assertEquals(2, cursor.count)
             assertTrue(cursor.moveToFirst())
@@ -427,10 +445,12 @@ class AppDatabaseMigrationTest {
             sqlite.execSQL("CREATE TABLE book_works (id TEXT PRIMARY KEY NOT NULL)")
             sqlite.version = APP_DATABASE_VERSION
         }
-        val database = Room.databaseBuilder(context, AppDatabase::class.java, CORRUPT_DATABASE)
-            .addMigrations(*AppDatabase.MIGRATIONS.toTypedArray())
-            .allowMainThreadQueries()
-            .build()
+        val database =
+            Room
+                .databaseBuilder(context, AppDatabase::class.java, CORRUPT_DATABASE)
+                .addMigrations(*AppDatabase.MIGRATIONS.toTypedArray())
+                .allowMainThreadQueries()
+                .build()
 
         try {
             assertThrows(IllegalStateException::class.java) {
@@ -449,12 +469,13 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V10_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V10_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
 
         migrated.execSQL(
             "INSERT INTO series_watches " +
@@ -491,31 +512,33 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V7_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V7_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
 
-        migrated.query(
-            "SELECT works.title, editions.isbn13, editions.publisher, copies.location, " +
-                "copies.readingStatus, copies.addedAt, copies.tierId, copies.shelfOrderKey, " +
-                "copies.copyLabel FROM book_works works " +
-                "JOIN book_editions editions ON editions.workId = works.id " +
-                "JOIN owned_copies copies ON copies.editionId = editions.id",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("匿名年代記 1巻", cursor.getString(0))
-            assertEquals("9784820418078", cursor.getString(1))
-            assertEquals("匿名出版社", cursor.getString(2))
-            assertEquals("旧位置", cursor.getString(3))
-            assertEquals("READING", cursor.getString(4))
-            assertEquals(1_700_000_000_000L, cursor.getLong(5))
-            assertEquals("tier", cursor.getString(6))
-            assertEquals("80", cursor.getString(7))
-            assertEquals("閲覧用", cursor.getString(8))
-        }
+        migrated
+            .query(
+                "SELECT works.title, editions.isbn13, editions.publisher, copies.location, " +
+                    "copies.readingStatus, copies.addedAt, copies.tierId, copies.shelfOrderKey, " +
+                    "copies.copyLabel FROM book_works works " +
+                    "JOIN book_editions editions ON editions.workId = works.id " +
+                    "JOIN owned_copies copies ON copies.editionId = editions.id",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("匿名年代記 1巻", cursor.getString(0))
+                assertEquals("9784820418078", cursor.getString(1))
+                assertEquals("匿名出版社", cursor.getString(2))
+                assertEquals("旧位置", cursor.getString(3))
+                assertEquals("READING", cursor.getString(4))
+                assertEquals(1_700_000_000_000L, cursor.getLong(5))
+                assertEquals("tier", cursor.getString(6))
+                assertEquals("80", cursor.getString(7))
+                assertEquals("閲覧用", cursor.getString(8))
+            }
         listOf("series", "work_groups", "series_watches", "series_release_candidates").forEach { table ->
             migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
                 assertTrue(cursor.moveToFirst())
@@ -533,28 +556,30 @@ class AppDatabaseMigrationTest {
             close()
         }
 
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            V11_DATABASE,
-            APP_DATABASE_VERSION,
-            true,
-            *AppDatabase.MIGRATIONS.toTypedArray(),
-        )
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V11_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
 
         migrated.query("SELECT title FROM book_works WHERE id = 'work'").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals("同期前の本", cursor.getString(0))
         }
-        migrated.query(
-            "SELECT enabled, deviceId, nextCounter, lastSuccessfulAt, requiresReregistration " +
-                "FROM sync_settings WHERE id = 1",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals(0, cursor.getInt(0))
-            assertTrue(cursor.isNull(1))
-            assertEquals(0L, cursor.getLong(2))
-            assertTrue(cursor.isNull(3))
-            assertEquals(0, cursor.getInt(4))
-        }
+        migrated
+            .query(
+                "SELECT enabled, deviceId, nextCounter, lastSuccessfulAt, requiresReregistration " +
+                    "FROM sync_settings WHERE id = 1",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+                assertTrue(cursor.isNull(1))
+                assertEquals(0L, cursor.getLong(2))
+                assertTrue(cursor.isNull(3))
+                assertEquals(0, cursor.getInt(4))
+            }
         listOf(
             "sync_operations",
             "sync_field_states",
@@ -572,15 +597,42 @@ class AppDatabaseMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun version12To13AddsEmptyConsentTableWithoutChangingDomainData() {
+        migrationHelper.createDatabase(V12_DATABASE, 12).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', '同意前の本', '匿名著者')")
+            close()
+        }
+
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V12_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+
+        migrated.query("SELECT title FROM book_works WHERE id = 'work'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("同意前の本", cursor.getString(0))
+        }
+        migrated.query("SELECT COUNT(*) FROM consent_records").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.close()
+    }
+
     private fun androidx.sqlite.db.SupportSQLiteDatabase.queryNames(
         sql: String,
         column: String,
-    ): Set<String> = query(sql).use { cursor ->
-        buildSet {
-            val index = cursor.getColumnIndexOrThrow(column)
-            while (cursor.moveToNext()) add(cursor.getString(index))
+    ): Set<String> =
+        query(sql).use { cursor ->
+            buildSet {
+                val index = cursor.getColumnIndexOrThrow(column)
+                while (cursor.moveToNext()) add(cursor.getString(index))
+            }
         }
-    }
 
     private fun androidx.sqlite.db.SupportSQLiteDatabase.assertForeignKey(
         table: String,
@@ -633,28 +685,31 @@ class AppDatabaseMigrationTest {
         const val V9_DATABASE = "migration-v9"
         const val V10_DATABASE = "migration-v10"
         const val V11_DATABASE = "migration-v11"
+        const val V12_DATABASE = "migration-v12"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 
         val EXPECTED_WORK_COLUMNS = setOf("id", "title", "primaryAuthor")
-        val EXPECTED_EDITION_COLUMNS = setOf(
-            "id",
-            "workId",
-            "isbn13",
-            "publisher",
-            "publishedYear",
-            "coverUrl",
-            "ndcCode",
-            "ndcEdition",
-            "classificationSource",
-        )
-        val EXPECTED_COPY_COLUMNS = setOf(
-            "id",
-            "editionId",
-            "mediaType",
-            "location",
-            "readingStatus",
-            "addedAt",
-        )
+        val EXPECTED_EDITION_COLUMNS =
+            setOf(
+                "id",
+                "workId",
+                "isbn13",
+                "publisher",
+                "publishedYear",
+                "coverUrl",
+                "ndcCode",
+                "ndcEdition",
+                "classificationSource",
+            )
+        val EXPECTED_COPY_COLUMNS =
+            setOf(
+                "id",
+                "editionId",
+                "mediaType",
+                "location",
+                "readingStatus",
+                "addedAt",
+            )
     }
 }
