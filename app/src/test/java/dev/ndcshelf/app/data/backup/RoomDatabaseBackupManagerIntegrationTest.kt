@@ -8,11 +8,14 @@ import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ReadingSessionEntity
+import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
 import dev.ndcshelf.app.data.local.SeriesWatchEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
@@ -195,6 +198,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
         dao.upsertEditions(snapshot.editions)
         dao.upsertCopies(snapshot.copies)
         database.readingSessionDao().upsertAll(snapshot.readingSessions)
+        database.tagDao().upsertTags(snapshot.tags)
+        database.tagDao().upsertAssignments(snapshot.tagAssignments)
+        database.tagDao().upsertSavedSearches(snapshot.savedSearches)
         dao.upsertScanSessions(snapshot.scanSessions)
         dao.upsertScanAttempts(snapshot.scanAttempts)
     }
@@ -204,6 +210,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
         dao.deleteAllScanAttempts()
         dao.deleteAllScanSessions()
         database.readingSessionDao().deleteAll()
+        database.tagDao().deleteAllSavedSearches()
+        database.tagDao().deleteAllAssignments()
+        database.tagDao().deleteAllTags()
         dao.deleteAllCopies()
         database.seriesWatchDao().deleteAllCandidates()
         database.seriesWatchDao().deleteAllWatches()
@@ -228,6 +237,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
             seriesWatches = database.seriesWatchDao().getAllWatches(),
             seriesReleaseCandidates = database.seriesWatchDao().getAllCandidates(),
             readingSessions = database.readingSessionDao().getAll(),
+            tags = database.tagDao().getAllTags(),
+            tagAssignments = database.tagDao().getAllAssignments(),
+            savedSearches = database.tagDao().getAllSavedSearches(),
         )
     }
 
@@ -334,6 +346,22 @@ class RoomDatabaseBackupManagerIntegrationTest {
                     note = "$prefix-note",
                     createdAt = 5,
                     updatedAt = 6,
+                ),
+            ),
+        tags = listOf(TagEntity("$prefix-tag", "$prefix-タグ", "BLUE", 1, 2)),
+        tagAssignments =
+            listOf(
+                TagAssignmentEntity("$prefix-assignment", "$prefix-tag", "$prefix-work", 3),
+            ),
+        savedSearches =
+            listOf(
+                SavedSearchEntity(
+                    id = "$prefix-saved-search",
+                    name = "$prefix-検索",
+                    criteriaJson =
+                        """{"query":"$prefix","readingStatus":null,"sort":"TITLE","tagIds":[]}""",
+                    createdAt = 1,
+                    updatedAt = 2,
                 ),
             ),
     )
