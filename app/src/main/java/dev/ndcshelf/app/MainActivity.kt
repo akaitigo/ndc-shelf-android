@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
             repository = application.container.libraryRepository,
             databaseBackupManager = application.container.databaseBackupManager,
             locationRepository = application.container.locationRepository,
+            readingHistoryRepository = application.container.readingHistoryRepository,
             librarySearchSettings = application.container.librarySearchSettings,
             seriesRepository = application.container.seriesRepository,
             seriesWatchRepository = application.container.seriesWatchRepository,

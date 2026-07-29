@@ -22,18 +22,21 @@ data class SyncVersionVector(
 ) {
     init {
         require(counters.size <= MAX_SYNC_DEVICES)
-        require(counters.all { (deviceId, counter) ->
-            deviceId.isNotBlank() && deviceId.length <= MAX_DEVICE_ID_LENGTH && counter >= 0
-        })
+        require(
+            counters.all { (deviceId, counter) ->
+                deviceId.isNotBlank() && deviceId.length <= MAX_DEVICE_ID_LENGTH && counter >= 0
+            },
+        )
     }
 
     operator fun get(deviceId: String): Long = counters[deviceId] ?: 0
 
     fun observes(dot: SyncDot): Boolean = this[dot.deviceId] >= dot.counter
 
-    fun advanced(dot: SyncDot): SyncVersionVector = SyncVersionVector(
-        counters + (dot.deviceId to maxOf(this[dot.deviceId], dot.counter)),
-    )
+    fun advanced(dot: SyncDot): SyncVersionVector =
+        SyncVersionVector(
+            counters + (dot.deviceId to maxOf(this[dot.deviceId], dot.counter)),
+        )
 }
 
 sealed interface SyncMutation {
@@ -105,21 +108,31 @@ interface SyncDomainStore {
 interface SyncMutationJournal {
     suspend fun record(mutations: List<SyncMutation>)
 
-    suspend fun hasTombstone(entityType: String, entityId: String): Boolean = false
+    suspend fun hasTombstone(
+        entityType: String,
+        entityId: String,
+    ): Boolean = false
 
     companion object {
-        val Disabled = object : SyncMutationJournal {
-            override suspend fun record(mutations: List<SyncMutation>) = Unit
-        }
+        val Disabled =
+            object : SyncMutationJournal {
+                override suspend fun record(mutations: List<SyncMutation>) = Unit
+            }
     }
 }
 
 interface SyncTransport {
     suspend fun upload(operations: List<SyncOperation>): Set<String>
 
-    suspend fun download(after: SyncVersionVector, limit: Int): List<SyncOperation>
+    suspend fun download(
+        after: SyncVersionVector,
+        limit: Int,
+    ): List<SyncOperation>
 
-    suspend fun publishAcknowledgement(deviceId: String, vector: SyncVersionVector)
+    suspend fun publishAcknowledgement(
+        deviceId: String,
+        vector: SyncVersionVector,
+    )
 }
 
 data class SyncEngineStatus(
@@ -142,27 +155,33 @@ const val MAX_TRANSACTION_ID_LENGTH = 128
 const val MAX_ENTITY_ID_LENGTH = 200
 const val MAX_FIELD_NAME_LENGTH = 100
 
-val SYNC_ENTITY_TYPES = setOf(
-    "work",
-    "edition",
-    "ownedCopy",
-    "wishlistItem",
-    "locationRoom",
-    "locationShelf",
-    "locationTier",
-    "series",
-    "seriesMembership",
-    "workGroup",
-    "workGroupMembership",
-)
+val SYNC_ENTITY_TYPES =
+    setOf(
+        "work",
+        "edition",
+        "ownedCopy",
+        "wishlistItem",
+        "locationRoom",
+        "locationShelf",
+        "locationTier",
+        "series",
+        "seriesMembership",
+        "workGroup",
+        "workGroupMembership",
+        "readingSession",
+    )
 
-private fun compareBytewise(first: String, second: String): Int {
+private fun compareBytewise(
+    first: String,
+    second: String,
+): Int {
     val firstBytes = first.toByteArray(Charsets.UTF_8)
     val secondBytes = second.toByteArray(Charsets.UTF_8)
     val length = minOf(firstBytes.size, secondBytes.size)
     for (index in 0 until length) {
-        val comparison = (firstBytes[index].toInt() and 0xff)
-            .compareTo(secondBytes[index].toInt() and 0xff)
+        val comparison =
+            (firstBytes[index].toInt() and 0xff)
+                .compareTo(secondBytes[index].toInt() and 0xff)
         if (comparison != 0) return comparison
     }
     return firstBytes.size.compareTo(secondBytes.size)
