@@ -65,6 +65,7 @@ jobs:
           testDebugUnitTest
           lintDebug
           :app:bundleRelease
+          :app:verifyReleaseBundleSize
           --stacktrace
 
       - name: Verify the AAB is signed with the expected key
