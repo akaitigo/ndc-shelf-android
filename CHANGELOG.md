@@ -27,6 +27,8 @@
 
 ### Changed
 
+- リリースビルドでR8によるコード縮小・リソース縮小を有効化し、署名鍵をGitHub release environment secretsから供給する再現可能な署名付きAAB生成（タグ整合検証・mapping/SBOM/checksums添付・承認ゲート付き）を自動化。
+
 - 画面遷移をNavigation Composeの型安全routeへ移行し、版違い編集の対象を回転・プロセス再生成後も復元。無効・削除済みIDへのディープリンクは選択を残さず安全に処理。
 - Androidクラウドbackupから全アプリデータを除外し、Android 9以降の端末間転送だけRoom DBを対象化。
 - NDL Search通信の失敗分類、上限付きretry、明示的な再試行UIを追加。
