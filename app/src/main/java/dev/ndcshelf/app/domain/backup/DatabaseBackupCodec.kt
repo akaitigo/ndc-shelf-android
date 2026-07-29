@@ -7,12 +7,15 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ReadingSessionEntity
+import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
 import dev.ndcshelf.app.data.local.SeriesWatchEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
@@ -68,6 +71,9 @@ internal class DatabaseBackupCodec(
                 seriesWatchCount = snapshot.seriesWatches.size,
                 seriesReleaseCandidateCount = snapshot.seriesReleaseCandidates.size,
                 readingSessionCount = snapshot.readingSessions.size,
+                tagCount = snapshot.tags.size,
+                tagAssignmentCount = snapshot.tagAssignments.size,
+                savedSearchCount = snapshot.savedSearches.size,
             )
         val manifest = encodeManifest(metadata, payload.sha256()).toString().encodeToByteArray()
         val archive =
@@ -145,6 +151,19 @@ internal class DatabaseBackupCodec(
                     } else {
                         manifest.requiredInt("readingSessionCount")
                     },
+                tagCount = if (formatVersion < 14) 0 else manifest.requiredInt("tagCount"),
+                tagAssignmentCount =
+                    if (formatVersion < 14) {
+                        0
+                    } else {
+                        manifest.requiredInt("tagAssignmentCount")
+                    },
+                savedSearchCount =
+                    if (formatVersion < 14) {
+                        0
+                    } else {
+                        manifest.requiredInt("savedSearchCount")
+                    },
             )
         val snapshot = decodePayload(parseObject(payloadBytes), formatVersion)
         if (metadata.workCount != snapshot.works.size ||
@@ -159,7 +178,10 @@ internal class DatabaseBackupCodec(
             metadata.workGroupMembershipCount != snapshot.workGroupMemberships.size ||
             metadata.seriesWatchCount != snapshot.seriesWatches.size ||
             metadata.seriesReleaseCandidateCount != snapshot.seriesReleaseCandidates.size ||
-            metadata.readingSessionCount != snapshot.readingSessions.size
+            metadata.readingSessionCount != snapshot.readingSessions.size ||
+            metadata.tagCount != snapshot.tags.size ||
+            metadata.tagAssignmentCount != snapshot.tagAssignments.size ||
+            metadata.savedSearchCount != snapshot.savedSearches.size
         ) {
             invalid("Manifest counts do not match payload")
         }
@@ -212,6 +234,9 @@ internal class DatabaseBackupCodec(
         put("seriesWatchCount", JsonPrimitive(metadata.seriesWatchCount))
         put("seriesReleaseCandidateCount", JsonPrimitive(metadata.seriesReleaseCandidateCount))
         put("readingSessionCount", JsonPrimitive(metadata.readingSessionCount))
+        put("tagCount", JsonPrimitive(metadata.tagCount))
+        put("tagAssignmentCount", JsonPrimitive(metadata.tagAssignmentCount))
+        put("savedSearchCount", JsonPrimitive(metadata.savedSearchCount))
     }
 
     private fun encodePayload(snapshot: DatabaseSnapshot) =
@@ -526,6 +551,53 @@ internal class DatabaseBackupCodec(
                     }
                 },
             )
+            put(
+                "tags",
+                buildJsonArray {
+                    snapshot.tags.forEach { tag ->
+                        add(
+                            buildJsonObject {
+                                put("id", JsonPrimitive(tag.id))
+                                put("name", JsonPrimitive(tag.name))
+                                put("colorRole", JsonPrimitive(tag.colorRole))
+                                put("createdAt", JsonPrimitive(tag.createdAt))
+                                put("updatedAt", JsonPrimitive(tag.updatedAt))
+                            },
+                        )
+                    }
+                },
+            )
+            put(
+                "tagAssignments",
+                buildJsonArray {
+                    snapshot.tagAssignments.forEach { assignment ->
+                        add(
+                            buildJsonObject {
+                                put("id", JsonPrimitive(assignment.id))
+                                put("tagId", JsonPrimitive(assignment.tagId))
+                                put("workId", JsonPrimitive(assignment.workId))
+                                put("createdAt", JsonPrimitive(assignment.createdAt))
+                            },
+                        )
+                    }
+                },
+            )
+            put(
+                "savedSearches",
+                buildJsonArray {
+                    snapshot.savedSearches.forEach { savedSearch ->
+                        add(
+                            buildJsonObject {
+                                put("id", JsonPrimitive(savedSearch.id))
+                                put("name", JsonPrimitive(savedSearch.name))
+                                put("criteriaJson", JsonPrimitive(savedSearch.criteriaJson))
+                                put("createdAt", JsonPrimitive(savedSearch.createdAt))
+                                put("updatedAt", JsonPrimitive(savedSearch.updatedAt))
+                            },
+                        )
+                    }
+                },
+            )
         }
 
     private fun decodePayload(
@@ -767,6 +839,38 @@ internal class DatabaseBackupCodec(
                     updatedAt = value.requiredLong("updatedAt"),
                 )
             }
+        val tags =
+            payload.versionedArray("tags", schemaVersion, 14).map { element ->
+                val value = element.jsonObject
+                TagEntity(
+                    id = value.requiredString("id"),
+                    name = value.requiredString("name"),
+                    colorRole = value.requiredString("colorRole"),
+                    createdAt = value.requiredLong("createdAt"),
+                    updatedAt = value.requiredLong("updatedAt"),
+                )
+            }
+        val tagAssignments =
+            payload.versionedArray("tagAssignments", schemaVersion, 14).map { element ->
+                val value = element.jsonObject
+                TagAssignmentEntity(
+                    id = value.requiredString("id"),
+                    tagId = value.requiredString("tagId"),
+                    workId = value.requiredString("workId"),
+                    createdAt = value.requiredLong("createdAt"),
+                )
+            }
+        val savedSearches =
+            payload.versionedArray("savedSearches", schemaVersion, 14).map { element ->
+                val value = element.jsonObject
+                SavedSearchEntity(
+                    id = value.requiredString("id"),
+                    name = value.requiredString("name"),
+                    criteriaJson = value.requiredString("criteriaJson"),
+                    createdAt = value.requiredLong("createdAt"),
+                    updatedAt = value.requiredLong("updatedAt"),
+                )
+            }
         return DatabaseSnapshot(
             works = works,
             editions = editions,
@@ -784,6 +888,9 @@ internal class DatabaseBackupCodec(
             seriesWatches = seriesWatches,
             seriesReleaseCandidates = seriesReleaseCandidates,
             readingSessions = readingSessions,
+            tags = tags,
+            tagAssignments = tagAssignments,
+            savedSearches = savedSearches,
         )
     }
 
@@ -803,7 +910,10 @@ internal class DatabaseBackupCodec(
             snapshot.workGroupMemberships.size > limits.maxRecords ||
             snapshot.seriesWatches.size > limits.maxRecords ||
             snapshot.seriesReleaseCandidates.size > limits.maxRecords ||
-            snapshot.readingSessions.size > limits.maxRecords
+            snapshot.readingSessions.size > limits.maxRecords ||
+            snapshot.tags.size > limits.maxRecords ||
+            snapshot.tagAssignments.size > limits.maxRecords ||
+            snapshot.savedSearches.size > limits.maxRecords
         ) {
             tooLarge("Too many records")
         }
@@ -831,6 +941,12 @@ internal class DatabaseBackupCodec(
         snapshot.seriesReleaseCandidates.ensureUnique(SeriesReleaseCandidateEntity::id)
         snapshot.seriesReleaseCandidates.ensureUnique { it.seriesId to it.sourceRecordId }
         snapshot.readingSessions.ensureUnique(ReadingSessionEntity::id)
+        snapshot.tags.ensureUnique(TagEntity::id)
+        snapshot.tags.ensureUnique(TagEntity::name)
+        snapshot.tagAssignments.ensureUnique(TagAssignmentEntity::id)
+        snapshot.tagAssignments.ensureUnique { it.tagId to it.workId }
+        snapshot.savedSearches.ensureUnique(SavedSearchEntity::id)
+        snapshot.savedSearches.ensureUnique(SavedSearchEntity::name)
         snapshot.tiers.ensureUnique { it.shelfId to it.name }
         val workIds = snapshot.works.mapTo(hashSetOf(), BookWorkEntity::id)
         val editionIds = snapshot.editions.mapTo(hashSetOf(), BookEditionEntity::id)
@@ -842,6 +958,7 @@ internal class DatabaseBackupCodec(
         val scanSessionIds = snapshot.scanSessions.mapTo(hashSetOf(), ScanSessionEntity::id)
         val workGroupIds = snapshot.workGroups.mapTo(hashSetOf(), WorkGroupEntity::id)
         val copyIds = snapshot.copies.mapTo(hashSetOf(), OwnedCopyEntity::id)
+        val tagIds = snapshot.tags.mapTo(hashSetOf(), TagEntity::id)
         if (snapshot.editions.any { it.workId !in workIds } ||
             snapshot.copies.any {
                 it.editionId !in editionIds || it.tierId != null && it.tierId !in tierIds
@@ -859,9 +976,38 @@ internal class DatabaseBackupCodec(
             snapshot.seriesReleaseCandidates.any {
                 it.seriesId !in seriesIds || it.seriesId !in seriesWatchIds
             } ||
-            snapshot.readingSessions.any { session -> session.copyId !in copyIds }
+            snapshot.readingSessions.any { session -> session.copyId !in copyIds } ||
+            snapshot.tagAssignments.any { assignment ->
+                assignment.tagId !in tagIds || assignment.workId !in workIds
+            }
         ) {
             invalid("Foreign key reference is missing")
+        }
+        if (snapshot.tags.any { tag ->
+                tag.id.isBlank() ||
+                    tag.name.isBlank() ||
+                    tag.name.length > MAX_TAG_NAME_LENGTH ||
+                    tag.name != tag.name.trim() ||
+                    tag.name.any { it.isISOControl() } ||
+                    tag.colorRole !in TAG_COLOR_ROLES ||
+                    tag.createdAt < 0 ||
+                    tag.updatedAt < tag.createdAt
+            } ||
+            snapshot.tagAssignments.any { assignment ->
+                assignment.id.isBlank() || assignment.createdAt < 0
+            } ||
+            snapshot.savedSearches.any { savedSearch ->
+                savedSearch.id.isBlank() ||
+                    savedSearch.name.isBlank() ||
+                    savedSearch.name.length > MAX_TAG_NAME_LENGTH ||
+                    savedSearch.name.any { it.isISOControl() } ||
+                    savedSearch.criteriaJson.isBlank() ||
+                    savedSearch.criteriaJson.length > MAX_CRITERIA_JSON_LENGTH ||
+                    savedSearch.createdAt < 0 ||
+                    savedSearch.updatedAt < savedSearch.createdAt
+            }
+        ) {
+            invalid("Invalid tag or saved search")
         }
         if (snapshot.readingSessions.any { session ->
                 session.id.isBlank() ||
@@ -1063,6 +1209,21 @@ internal class DatabaseBackupCodec(
                     add(it.finishedDay.orEmpty())
                     add(it.note.orEmpty())
                 }
+                snapshot.tags.forEach {
+                    add(it.id)
+                    add(it.name)
+                    add(it.colorRole)
+                }
+                snapshot.tagAssignments.forEach {
+                    add(it.id)
+                    add(it.tagId)
+                    add(it.workId)
+                }
+                snapshot.savedSearches.forEach {
+                    add(it.id)
+                    add(it.name)
+                    add(it.criteriaJson)
+                }
                 snapshot.workGroupMemberships.forEach {
                     add(it.id)
                     add(it.groupId)
@@ -1198,8 +1359,8 @@ internal class DatabaseBackupCodec(
     private fun tooLarge(message: String): Nothing = throw BackupCodecException(DatabaseBackupFailure.TOO_LARGE, message)
 
     companion object {
-        const val CURRENT_FORMAT_VERSION = 13
-        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 13
+        const val CURRENT_FORMAT_VERSION = 14
+        private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 14
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val MAX_READING_NOTE_LENGTH = 2_000
         private const val MAX_RECORDED_ISBN_LENGTH = 32
@@ -1223,6 +1384,21 @@ internal class DatabaseBackupCodec(
         private val SERIES_MEMBERSHIP_ORIGINS = setOf("TITLE_SUGGESTION", "MANUAL")
         private val SERIES_RELEASE_DATE = Regex("\\d{4}(?:-\\d{2}(?:-\\d{2})?)?")
         private val READING_SESSION_STATUSES = setOf("READING", "PAUSED", "FINISHED")
+        private const val MAX_TAG_NAME_LENGTH = 50
+        private const val MAX_CRITERIA_JSON_LENGTH = 4_096
+        private val TAG_COLOR_ROLES =
+            setOf(
+                "GRAY",
+                "RED",
+                "ORANGE",
+                "YELLOW",
+                "GREEN",
+                "TEAL",
+                "BLUE",
+                "PURPLE",
+                "PINK",
+                "BROWN",
+            )
         private val PARTIAL_DATE = Regex("\\d{4}(?:-\\d{2}(?:-\\d{2})?)?")
     }
 }

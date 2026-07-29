@@ -28,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -67,6 +68,7 @@ import dev.ndcshelf.app.domain.model.ReadingSessionDraft
 import dev.ndcshelf.app.domain.model.ReadingSessionStatus
 import dev.ndcshelf.app.domain.model.ReadingSessionValidator
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.ui.components.BookCover
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import java.text.DateFormat
@@ -87,6 +89,9 @@ internal fun BookDetailScreen(
     onUpdateReadingSession: (String, ReadingSessionDraft) -> Unit = { _, _ -> },
     onDeleteReadingSession: (String) -> Unit = {},
     onClearReadingSessionState: () -> Unit = {},
+    tags: List<TagWithUsage> = emptyList(),
+    tagIdsByWork: Map<String, Set<String>> = emptyMap(),
+    onSetTagOnWorks: (String, Set<String>, Boolean) -> Unit = { _, _, _ -> },
     contentPadding: PaddingValues,
 ) {
     require(copies.isNotEmpty())
@@ -103,6 +108,41 @@ internal fun BookDetailScreen(
 
     var sessionEditorVisible by rememberSaveable { mutableStateOf(false) }
     var editingSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var tagAssignVisible by rememberSaveable { mutableStateOf(false) }
+
+    if (tagAssignVisible) {
+        val workId = copies.first().workId
+        AlertDialog(
+            onDismissRequest = { tagAssignVisible = false },
+            title = { Text(stringResource(R.string.tag_detail_edit)) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    tags.forEach { tagWithUsage ->
+                        val assigned = tagWithUsage.tag.id in tagIdsByWork[workId].orEmpty()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = assigned,
+                                onCheckedChange = { checked ->
+                                    onSetTagOnWorks(tagWithUsage.tag.id, setOf(workId), checked)
+                                },
+                            )
+                            TagColorSwatch(tagWithUsage.tag.colorRole)
+                            Spacer(Modifier.width(6.dp))
+                            Text(tagWithUsage.tag.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { tagAssignVisible = false }) {
+                    Text(stringResource(R.string.tag_bulk_close))
+                }
+            },
+        )
+    }
 
     LaunchedEffect(readingSessionState) {
         if (readingSessionState === ReadingSessionUiState.Saved) {
@@ -242,6 +282,42 @@ internal fun BookDetailScreen(
             key = LibraryBook::copyId,
         ) { copy ->
             CopyDetailCard(copy = copy, onClick = { onEditCopy(copy.copyId) })
+        }
+
+        item {
+            DetailSection(stringResource(R.string.book_detail_tags_section)) {
+                Text(
+                    stringResource(R.string.tag_privacy_notice),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val workTagIds = tagIdsByWork[edition.workId].orEmpty()
+                val assignedTags = tags.filter { it.tag.id in workTagIds }
+                if (assignedTags.isEmpty()) {
+                    Text(
+                        stringResource(R.string.tag_detail_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        assignedTags.forEach { tagWithUsage ->
+                            FilterChip(
+                                selected = true,
+                                onClick = {},
+                                enabled = false,
+                                leadingIcon = { TagColorSwatch(tagWithUsage.tag.colorRole) },
+                                label = { Text(tagWithUsage.tag.name) },
+                            )
+                        }
+                    }
+                }
+                if (tags.isNotEmpty()) {
+                    TextButton(onClick = { tagAssignVisible = true }) {
+                        Text(stringResource(R.string.tag_detail_edit))
+                    }
+                }
+            }
         }
 
         item {

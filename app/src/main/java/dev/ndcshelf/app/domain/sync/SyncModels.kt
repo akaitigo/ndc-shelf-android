@@ -169,6 +169,9 @@ val SYNC_ENTITY_TYPES =
         "workGroup",
         "workGroupMembership",
         "readingSession",
+        "tag",
+        "tagAssignment",
+        "savedSearch",
     )
 
 private fun compareBytewise(

@@ -164,6 +164,8 @@ interface LibraryDao {
             LocationRoomEntity::class,
             LocationShelfEntity::class,
             LocationTierEntity::class,
+            TagEntity::class,
+            TagAssignmentEntity::class,
         ],
     )
     fun observeLibrarySearch(query: SupportSQLiteQuery): Flow<List<LibraryBookRow>>
@@ -378,7 +380,11 @@ interface LibraryDao {
     )
 
     @Query("UPDATE book_works SET title = :title, primaryAuthor = :primaryAuthor WHERE id = :workId")
-    suspend fun updateWork(workId: String, title: String, primaryAuthor: String)
+    suspend fun updateWork(
+        workId: String,
+        title: String,
+        primaryAuthor: String,
+    )
 
     @Query(
         """
@@ -426,7 +432,10 @@ interface LibraryDao {
     ): Int
 
     @Query("UPDATE owned_copies SET editionId = :targetEditionId WHERE editionId = :sourceEditionId")
-    suspend fun moveCopiesToEdition(sourceEditionId: String, targetEditionId: String): Int
+    suspend fun moveCopiesToEdition(
+        sourceEditionId: String,
+        targetEditionId: String,
+    ): Int
 
     @Query("DELETE FROM owned_copies WHERE id = :copyId")
     suspend fun deleteCopyById(copyId: String): Int
@@ -450,10 +459,16 @@ interface LibraryDao {
     suspend fun finishActiveScanSessions(endedAt: Long): Int
 
     @Query("UPDATE scan_sessions SET endedAt = :endedAt WHERE id = :sessionId AND endedAt IS NULL")
-    suspend fun finishScanSession(sessionId: String, endedAt: Long): Int
+    suspend fun finishScanSession(
+        sessionId: String,
+        endedAt: Long,
+    ): Int
 
     @Query("UPDATE scan_attempts SET undoneAt = :undoneAt WHERE id = :attemptId AND undoneAt IS NULL")
-    suspend fun markScanAttemptUndone(attemptId: String, undoneAt: Long): Int
+    suspend fun markScanAttemptUndone(
+        attemptId: String,
+        undoneAt: Long,
+    ): Int
 
     @Query(
         """

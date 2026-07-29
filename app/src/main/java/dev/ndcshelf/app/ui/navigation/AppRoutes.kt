@@ -57,6 +57,9 @@ data class SeriesSuggestionRoute(
 data object ConsentRoute
 
 @Serializable
+data object TagManagementRoute
+
+@Serializable
 data object OnboardingRoute
 
 enum class TopLevelDestination(
