@@ -24,7 +24,7 @@ Robolectric層はGitHub Actionsの `testDebugUnitTest` で毎回実行する。�
 
 ## Schemaの正本
 
-`app/schemas/dev.ndcshelf.app.data.local.AppDatabase/<version>.json` を履歴の正本としてGit管理する。現在はv12で、必須列、主キー、外部キー、unique index、旧置き場所文字列、棚内順序、シリーズ所属、監視設定、同期journal・cursor・tombstone・競合証跡を `AppDatabaseMigrationTest` が検証する。
+`app/schemas/dev.ndcshelf.app.data.local.AppDatabase/<version>.json` を履歴の正本としてGit管理する。現在はv13で、必須列、主キー、外部キー、unique index、旧置き場所文字列、棚内順序、シリーズ所属、監視設定、同期journal・cursor・tombstone・競合証跡、目的別同意記録を `AppDatabaseMigrationTest` が検証する。
 
 CIはKSP実行後に `git diff --exit-code -- app/schemas` を実行する。DB版を上げず既存JSONが書き換わった場合や、新しいfixtureをコミットし忘れた場合は失敗する。
 

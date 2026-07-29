@@ -9,6 +9,9 @@ import dev.ndcshelf.app.domain.backup.DatabaseBackupManager
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
 import dev.ndcshelf.app.domain.backup.DatabaseBackupPreview
 import dev.ndcshelf.app.domain.backup.DatabaseRestoreResult
+import dev.ndcshelf.app.domain.consent.ConsentPurpose
+import dev.ndcshelf.app.domain.consent.ConsentRecord
+import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
@@ -102,12 +105,15 @@ class MainViewModel(
     private val seriesWatchRepository: SeriesWatchRepository? = null,
     private val seriesWatchScheduler: SeriesWatchScheduler? = null,
     syncStatusRepository: SyncStatusRepository? = null,
+    private val consentRepository: ConsentRepository? = null,
 ) : ViewModel() {
     init {
         if (seriesWatchRepository != null && seriesWatchScheduler != null) {
             viewModelScope.launch {
                 runCatching {
-                    seriesWatchScheduler.reconcile(seriesWatchRepository.hasEnabledWatches())
+                    seriesWatchScheduler.reconcile(
+                        seriesWatchRepository.hasEnabledWatches() && seriesWatchConsentGranted(),
+                    )
                 }
             }
         }
@@ -174,6 +180,13 @@ class MainViewModel(
     private val _seriesWatchMutationState =
         MutableStateFlow<SeriesWatchMutationUiState>(SeriesWatchMutationUiState.Idle)
     val seriesWatchMutationState = _seriesWatchMutationState.asStateFlow()
+
+    /** 同意が必要な有効化操作の保留中シリーズID。nullなら要求なし。 */
+    private val _seriesWatchConsentRequest = MutableStateFlow<String?>(null)
+    val seriesWatchConsentRequest: StateFlow<String?> = _seriesWatchConsentRequest.asStateFlow()
+    val consents: StateFlow<Map<ConsentPurpose, ConsentRecord>> =
+        (consentRepository?.observeConsents() ?: flowOf(emptyMap()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
     private val _seriesEditorState = MutableStateFlow<SeriesEditorUiState>(SeriesEditorUiState.Idle)
     val seriesEditorState: StateFlow<SeriesEditorUiState> = _seriesEditorState.asStateFlow()
 
@@ -293,12 +306,18 @@ class MainViewModel(
         val source = seriesWatchRepository ?: return
         if (_seriesWatchMutationState.value === SeriesWatchMutationUiState.Working) return
         viewModelScope.launch {
+            if (enabled && !seriesWatchConsentGranted()) {
+                _seriesWatchConsentRequest.value = seriesId
+                return@launch
+            }
             _seriesWatchMutationState.value = SeriesWatchMutationUiState.Working
             _seriesWatchMutationState.value =
                 when (source.setEnabled(seriesId, enabled)) {
                     SeriesWatchMutationResult.Updated -> {
                         runCatching {
-                            seriesWatchScheduler?.reconcile(source.hasEnabledWatches())
+                            seriesWatchScheduler?.reconcile(
+                                source.hasEnabledWatches() && seriesWatchConsentGranted(),
+                            )
                         }.fold(
                             onSuccess = { SeriesWatchMutationUiState.Updated },
                             onFailure = { SeriesWatchMutationUiState.Error },
@@ -318,6 +337,57 @@ class MainViewModel(
 
     fun reportSeriesWatchPermissionDenied() {
         _seriesWatchMutationState.value = SeriesWatchMutationUiState.PermissionDenied
+    }
+
+    /** 同意ダイアログで承諾した場合だけ呼ばれ、保留中のシリーズを有効化する。 */
+    fun grantSeriesWatchConsent() {
+        val source = consentRepository ?: return
+        val pendingSeriesId = _seriesWatchConsentRequest.value ?: return
+        viewModelScope.launch {
+            runCatching { source.grant(ConsentPurpose.SERIES_RELEASE_WATCH) }
+                .onSuccess {
+                    _seriesWatchConsentRequest.value = null
+                    setSeriesWatchEnabled(pendingSeriesId, true)
+                }.onFailure {
+                    _seriesWatchConsentRequest.value = null
+                    _seriesWatchMutationState.value = SeriesWatchMutationUiState.Error
+                }
+        }
+    }
+
+    fun declineSeriesWatchConsent() {
+        _seriesWatchConsentRequest.value = null
+    }
+
+    fun revokeConsent(purpose: ConsentPurpose) {
+        val source = consentRepository ?: return
+        viewModelScope.launch {
+            runCatching {
+                source.revoke(purpose)
+                if (purpose == ConsentPurpose.SERIES_RELEASE_WATCH) {
+                    seriesWatchScheduler?.reconcile(false)
+                }
+            }
+        }
+    }
+
+    fun grantConsent(purpose: ConsentPurpose) {
+        val source = consentRepository ?: return
+        viewModelScope.launch {
+            runCatching {
+                source.grant(purpose)
+                if (purpose == ConsentPurpose.SERIES_RELEASE_WATCH) {
+                    seriesWatchScheduler?.reconcile(
+                        seriesWatchRepository?.hasEnabledWatches() == true,
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun seriesWatchConsentGranted(): Boolean {
+        val source = consentRepository ?: return true
+        return source.isGranted(ConsentPurpose.SERIES_RELEASE_WATCH)
     }
 
     fun clearSeriesWatchMutationState() {
@@ -1274,6 +1344,7 @@ class MainViewModel(
             seriesWatchRepository: SeriesWatchRepository? = null,
             seriesWatchScheduler: SeriesWatchScheduler? = null,
             syncStatusRepository: SyncStatusRepository? = null,
+            consentRepository: ConsentRepository? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

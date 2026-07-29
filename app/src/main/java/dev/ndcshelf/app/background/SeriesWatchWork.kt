@@ -23,13 +23,17 @@ import androidx.work.WorkerParameters
 import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.NdcShelfApplication
 import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.consent.ConsentPurpose
+import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.repository.SeriesReleaseNotification
 import dev.ndcshelf.app.domain.repository.SeriesWatchCheckResult
 import dev.ndcshelf.app.domain.repository.SeriesWatchRepository
 import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
 import java.util.concurrent.TimeUnit
 
-class AndroidSeriesWatchScheduler(context: Context) : SeriesWatchScheduler {
+class AndroidSeriesWatchScheduler(
+    context: Context,
+) : SeriesWatchScheduler {
     private val workManager = WorkManager.getInstance(context)
 
     override fun reconcile(enabled: Boolean) {
@@ -48,12 +52,12 @@ class AndroidSeriesWatchScheduler(context: Context) : SeriesWatchScheduler {
 internal fun buildSeriesWatchWorkRequest(): PeriodicWorkRequest =
     PeriodicWorkRequestBuilder<SeriesReleaseWatchWorker>(7, TimeUnit.DAYS, 1, TimeUnit.DAYS)
         .setConstraints(
-            Constraints.Builder()
+            Constraints
+                .Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .setRequiresBatteryNotLow(true)
                 .build(),
-        )
-        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.HOURS)
+        ).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.HOURS)
         .addTag(SERIES_WATCH_WORK_TAG)
         .build()
 
@@ -63,7 +67,13 @@ class SeriesReleaseWatchWorker(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as NdcShelfApplication).container
-        return when (SeriesWatchRunner(container.seriesWatchRepository, container.seriesReleaseNotifier).run()) {
+        val runner =
+            SeriesWatchRunner(
+                container.seriesWatchRepository,
+                container.seriesReleaseNotifier,
+                container.consentRepository,
+            )
+        return when (runner.run()) {
             SeriesWatchRunResult.SUCCESS -> Result.success()
             SeriesWatchRunResult.RETRY -> Result.retry()
         }
@@ -73,13 +83,19 @@ class SeriesReleaseWatchWorker(
 internal class SeriesWatchRunner(
     private val repository: SeriesWatchRepository,
     private val notifier: SeriesReleaseNotifier,
+    private val consentRepository: ConsentRepository,
 ) {
     suspend fun run(): SeriesWatchRunResult {
-        val check = repository.checkEnabledWatches()
-        val notifications = when (check) {
-            is SeriesWatchCheckResult.Success -> check.notifications
-            is SeriesWatchCheckResult.PartialFailure -> check.notifications
+        // 同意なし・撤回後は外部通信を一切行わない（fail-closed）
+        if (!consentRepository.isGranted(ConsentPurpose.SERIES_RELEASE_WATCH)) {
+            return SeriesWatchRunResult.SUCCESS
         }
+        val check = repository.checkEnabledWatches()
+        val notifications =
+            when (check) {
+                is SeriesWatchCheckResult.Success -> check.notifications
+                is SeriesWatchCheckResult.PartialFailure -> check.notifications
+            }
         repository.markNotified(notifier.post(notifications).toList())
         return if (check is SeriesWatchCheckResult.PartialFailure && check.retryable) {
             SeriesWatchRunResult.RETRY
@@ -95,7 +111,9 @@ fun interface SeriesReleaseNotifier {
     fun post(notifications: List<SeriesReleaseNotification>): Set<String>
 }
 
-class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesReleaseNotifier {
+class AndroidSeriesReleaseNotifier(
+    private val context: Context,
+) : SeriesReleaseNotifier {
     override fun post(notifications: List<SeriesReleaseNotification>): Set<String> {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -106,8 +124,10 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return emptySet()
         createChannel()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            context.getSystemService(NotificationManager::class.java)
-                .getNotificationChannel(SERIES_RELEASE_CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE
+            context
+                .getSystemService(NotificationManager::class.java)
+                .getNotificationChannel(SERIES_RELEASE_CHANNEL_ID)
+                ?.importance == NotificationManager.IMPORTANCE_NONE
         ) {
             return emptySet()
         }
@@ -115,31 +135,34 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
         val delivered = linkedSetOf<String>()
         notifications.forEach { item ->
             if (item.candidateIds.isEmpty()) return@forEach
-            val openApp = PendingIntent.getActivity(
-                context,
-                item.seriesId.hashCode(),
-                Intent(context, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
+            val openApp =
+                PendingIntent.getActivity(
+                    context,
+                    item.seriesId.hashCode(),
+                    Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
             val style = NotificationCompat.InboxStyle()
             item.candidateTitles.take(MAX_NOTIFICATION_TITLES).forEach(style::addLine)
-            val notification = NotificationCompat.Builder(context, SERIES_RELEASE_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher)
-                .setContentTitle("${item.seriesTitle}の新しい候補")
-                .setContentText("${item.candidateIds.size}件を国立国会図書館サーチで確認しました")
-                .setStyle(style)
-                .setContentIntent(openApp)
-                .setAutoCancel(true)
-                .setOnlyAlertOnce(true)
-                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-                .setPublicVersion(
-                    NotificationCompat.Builder(context, SERIES_RELEASE_CHANNEL_ID)
-                        .setSmallIcon(R.drawable.ic_launcher)
-                        .setContentTitle("シリーズの新刊候補")
-                        .setContentText("アプリを開いて確認してください")
-                        .build(),
-                )
-                .build()
+            val notification =
+                NotificationCompat
+                    .Builder(context, SERIES_RELEASE_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_launcher)
+                    .setContentTitle("${item.seriesTitle}の新しい候補")
+                    .setContentText("${item.candidateIds.size}件を国立国会図書館サーチで確認しました")
+                    .setStyle(style)
+                    .setContentIntent(openApp)
+                    .setAutoCancel(true)
+                    .setOnlyAlertOnce(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                    .setPublicVersion(
+                        NotificationCompat
+                            .Builder(context, SERIES_RELEASE_CHANNEL_ID)
+                            .setSmallIcon(R.drawable.ic_launcher)
+                            .setContentTitle("シリーズの新刊候補")
+                            .setContentText("アプリを開いて確認してください")
+                            .build(),
+                    ).build()
             runCatching { manager.notify(item.seriesId.hashCode(), notification) }
                 .onSuccess { delivered += item.candidateIds }
         }
@@ -148,16 +171,16 @@ class AndroidSeriesReleaseNotifier(private val context: Context) : SeriesRelease
 
     fun createChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
-            SERIES_RELEASE_CHANNEL_ID,
-            "シリーズの新刊候補",
-            NotificationManager.IMPORTANCE_DEFAULT,
-        ).apply {
-            description = "明示的に確認を有効にしたシリーズの新しい書誌候補"
-        }
+        val channel =
+            NotificationChannel(
+                SERIES_RELEASE_CHANNEL_ID,
+                "シリーズの新刊候補",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = "明示的に確認を有効にしたシリーズの新しい書誌候補"
+            }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
-
 }
 
 internal const val UNIQUE_WORK_NAME = "series-release-watch"
