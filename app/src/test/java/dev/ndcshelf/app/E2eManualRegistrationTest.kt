@@ -4,31 +4,34 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
-import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.rule.GrantPermissionRule
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import dev.ndcshelf.app.ui.screens.MANUAL_REGISTRATION_TITLE_TAG
+import dev.ndcshelf.app.ui.screens.SCAN_LIST_TAG
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 実機・エミュレーター向けE2E: 手動登録 → 本棚表示 → Activity再生成後の
- * 状態維持を、実DB・実ナビゲーションで検証する。匿名データのみ使用。
+ * JVM(Robolectric)でのCI層E2E: 実Application・実Room・実ナビゲーションで
+ * 手動登録 → 本棚表示 → Activity再生成後の状態維持を検証する。
+ * カメラ権限は未付与のままとし、権限カード表示下でも手動登録経路が
+ * 使えること（権限任意の受け入れ条件）を同時に確認する。匿名データのみ使用。
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class E2eManualRegistrationTest {
-    // スキャンタブ初回表示の権限システムダイアログでテストが停止しないよう事前付与する。
-    // 権限拒否時の代替経路（手入力）はCameraPermissionCardTestで検証済み。
-    @get:Rule
-    val grantCamera: GrantPermissionRule = GrantPermissionRule.grant(android.Manifest.permission.CAMERA)
-
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
@@ -50,8 +53,10 @@ class E2eManualRegistrationTest {
         composeRule.onNodeWithText(text(R.string.navigation_scan)).performClick()
         composeRule.waitForIdle()
         composeRule
+            .onNodeWithTag(SCAN_LIST_TAG)
+            .performScrollToNode(hasText(text(R.string.manual_registration_open)))
+        composeRule
             .onNodeWithText(text(R.string.manual_registration_open))
-            .performScrollTo()
             .performClick()
         try {
             composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -69,7 +74,11 @@ class E2eManualRegistrationTest {
         composeRule
             .onNodeWithTag(MANUAL_REGISTRATION_TITLE_TAG)
             .performTextInput(bookTitle)
-        composeRule.onNodeWithText(text(R.string.manual_registration_save)).performClick()
+        composeRule
+            .onNode(
+                hasText(text(R.string.manual_registration_save))
+                    .and(hasAnyAncestor(isDialog())),
+            ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule
                 .onAllNodesWithText(text(R.string.import_close))

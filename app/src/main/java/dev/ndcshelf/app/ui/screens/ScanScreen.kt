@@ -206,7 +206,9 @@ fun ScanScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(SCAN_LIST_TAG),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = contentPadding.calculateTopPadding(),
@@ -1322,3 +1324,4 @@ private fun ManualIsbnEntry(
 
 
 internal const val MANUAL_REGISTRATION_TITLE_TAG = "manual-registration-title"
+internal const val SCAN_LIST_TAG = "scan-list"
