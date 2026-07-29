@@ -98,6 +98,7 @@ fun NdcShelfApp(
     val seriesEditorState by viewModel.seriesEditorState.collectAsStateWithLifecycle()
     val seriesWatchMutationState by viewModel.seriesWatchMutationState.collectAsStateWithLifecycle()
     val workVariantState by viewModel.workVariantState.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
     var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
@@ -590,6 +591,7 @@ fun NdcShelfApp(
                 exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
                 importState = importState,
                 databaseBackupState = databaseBackupState,
+                syncStatus = syncStatus,
                 onExportJson = { requestExport(LibraryExportFormat.JSON) },
                 onExportCsv = { requestExport(LibraryExportFormat.CSV) },
                 onImportJson = {

@@ -14,6 +14,10 @@ import dev.ndcshelf.app.domain.model.LocationTier
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.repository.LocationRepository
+import dev.ndcshelf.app.domain.sync.SyncMutation
+import dev.ndcshelf.app.domain.sync.SyncMutationJournal
+import dev.ndcshelf.app.data.sync.syncDelete
+import dev.ndcshelf.app.data.sync.toSyncUpsert
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -21,6 +25,7 @@ import java.util.UUID
 
 class RoomLocationRepository(
     private val database: AppDatabase,
+    private val syncJournal: SyncMutationJournal = SyncMutationJournal.Disabled,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
 ) : LocationRepository {
     private val dao = database.locationDao()
@@ -63,20 +68,26 @@ class RoomLocationRepository(
     }
 
     override suspend fun addRoom(name: String): LocationMutationResult = mutate(name) { value ->
-        dao.insertRoom(LocationRoomEntity(idFactory(), value, dao.getRooms().size))
+        val room = LocationRoomEntity(idFactory(), value, dao.getRooms().size)
+        dao.insertRoom(room)
+        syncJournal.record(listOf(room.toSyncUpsert()))
     }
 
     override suspend fun addShelf(roomId: String, name: String): LocationMutationResult =
         mutate(name) { value ->
             if (dao.findRoom(roomId) == null) return@mutate LocationMutationResult.NotFound
-            dao.insertShelf(LocationShelfEntity(idFactory(), roomId, value, dao.getShelves(roomId).size))
+            val shelf = LocationShelfEntity(idFactory(), roomId, value, dao.getShelves(roomId).size)
+            dao.insertShelf(shelf)
+            syncJournal.record(listOf(shelf.toSyncUpsert()))
             LocationMutationResult.Success
         }
 
     override suspend fun addTier(shelfId: String, name: String): LocationMutationResult =
         mutate(name) { value ->
             if (dao.findShelf(shelfId) == null) return@mutate LocationMutationResult.NotFound
-            dao.insertTier(LocationTierEntity(idFactory(), shelfId, value, dao.getTiers(shelfId).size))
+            val tier = LocationTierEntity(idFactory(), shelfId, value, dao.getTiers(shelfId).size)
+            dao.insertTier(tier)
+            syncJournal.record(listOf(tier.toSyncUpsert()))
             LocationMutationResult.Success
         }
 
@@ -90,7 +101,10 @@ class RoomLocationRepository(
             LocationLevel.SHELF -> dao.renameShelf(id, value)
             LocationLevel.TIER -> dao.renameTier(id, value)
         }
-        if (updated == 1) LocationMutationResult.Success else LocationMutationResult.NotFound
+        if (updated == 1) {
+            syncJournal.record(listOf(requireNotNull(syncUpsert(level, id))))
+            LocationMutationResult.Success
+        } else LocationMutationResult.NotFound
     }
 
     override suspend fun move(
@@ -99,7 +113,7 @@ class RoomLocationRepository(
         direction: MoveDirection,
     ): LocationMutationResult = try {
         database.withTransaction {
-            when (level) {
+            val result = when (level) {
                 LocationLevel.ROOM -> moveAmong(dao.getRooms(), id, direction) { item, order ->
                     dao.updateRoomOrder(item.id, order)
                 }
@@ -116,6 +130,10 @@ class RoomLocationRepository(
                     }
                 }
             }
+            if (result == LocationMutationResult.Success) {
+                syncJournal.record(currentLevelMutations(level, id))
+            }
+            result
         }
     } catch (cancellation: CancellationException) {
         throw cancellation
@@ -132,6 +150,11 @@ class RoomLocationRepository(
         database.withTransaction {
             val tierIds = descendantTierIds(level, id)
                 ?: return@withTransaction LocationMutationResult.NotFound
+            val deletedLocations = locationDeleteMutations(level, id)
+            val affectedCopies = buildList {
+                if (tierIds.isNotEmpty()) addAll(dao.getCopiesInTiers(tierIds))
+                if (replacementTierId != null) addAll(dao.getOrderedCopies(replacementTierId))
+            }.distinctBy { it.id }
             val count = if (tierIds.isEmpty()) 0 else dao.countCopiesInTiers(tierIds)
             if (count > 0 && replacementTierId == null && !confirmUnset) {
                 return@withTransaction LocationMutationResult.InUse(count)
@@ -153,7 +176,13 @@ class RoomLocationRepository(
                 LocationLevel.SHELF -> dao.deleteShelf(id)
                 LocationLevel.TIER -> dao.deleteTier(id)
             }
-            if (deleted == 1) LocationMutationResult.Success else LocationMutationResult.NotFound
+            if (deleted == 1) {
+                val copyMutations = affectedCopies.mapNotNull { copy ->
+                    database.libraryDao().findCopyById(copy.id)?.toSyncUpsert()
+                }
+                syncJournal.record(copyMutations + deletedLocations)
+                LocationMutationResult.Success
+            } else LocationMutationResult.NotFound
         }
     } catch (cancellation: CancellationException) {
         throw cancellation
@@ -230,9 +259,11 @@ class RoomLocationRepository(
             return LocationMutationResult.InvalidName("NUL文字と / は使用できません")
         }
         return try {
-            when (val result = block(name)) {
-                is LocationMutationResult -> result
-                else -> LocationMutationResult.Success
+            database.withTransaction {
+                when (val result = block(name)) {
+                    is LocationMutationResult -> result
+                    else -> LocationMutationResult.Success
+                }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -241,6 +272,36 @@ class RoomLocationRepository(
         } catch (_: Exception) {
             LocationMutationResult.Failure
         }
+    }
+
+    private suspend fun syncUpsert(level: LocationLevel, id: String): SyncMutation? = when (level) {
+        LocationLevel.ROOM -> dao.findRoom(id)?.toSyncUpsert()
+        LocationLevel.SHELF -> dao.findShelf(id)?.toSyncUpsert()
+        LocationLevel.TIER -> dao.findTier(id)?.toSyncUpsert()
+    }
+
+    private suspend fun currentLevelMutations(level: LocationLevel, id: String): List<SyncMutation> = when (level) {
+        LocationLevel.ROOM -> dao.getRooms().map { it.toSyncUpsert() }
+        LocationLevel.SHELF -> dao.findShelf(id)?.let { shelf ->
+            dao.getShelves(shelf.roomId).map { it.toSyncUpsert() }
+        }.orEmpty()
+        LocationLevel.TIER -> dao.findTier(id)?.let { tier ->
+            dao.getTiers(tier.shelfId).map { it.toSyncUpsert() }
+        }.orEmpty()
+    }
+
+    private suspend fun locationDeleteMutations(level: LocationLevel, id: String): List<SyncMutation> = when (level) {
+        LocationLevel.ROOM -> {
+            val shelves = dao.getShelves(id)
+            val shelfIds = shelves.mapTo(hashSetOf(), LocationShelfEntity::id)
+            dao.getAllTiers().filter { it.shelfId in shelfIds }
+                .map { syncDelete("locationTier", it.id) } +
+                shelves.map { syncDelete("locationShelf", it.id) } +
+                syncDelete("locationRoom", id)
+        }
+        LocationLevel.SHELF -> dao.getTiers(id).map { syncDelete("locationTier", it.id) } +
+            syncDelete("locationShelf", id)
+        LocationLevel.TIER -> listOf(syncDelete("locationTier", id))
     }
 
     companion object {

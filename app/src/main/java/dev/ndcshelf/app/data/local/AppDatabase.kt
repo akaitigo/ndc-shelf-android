@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 11
+const val APP_DATABASE_VERSION = 12
 
 @Database(
     entities = [
@@ -24,6 +24,14 @@ const val APP_DATABASE_VERSION = 11
         WishlistItemEntity::class,
         ScanSessionEntity::class,
         ScanAttemptEntity::class,
+        SyncSettingsEntity::class,
+        SyncOperationEntity::class,
+        SyncFieldStateEntity::class,
+        SyncTombstoneEntity::class,
+        SyncCursorEntity::class,
+        SyncAcknowledgementEntity::class,
+        SyncConflictEntity::class,
+        SyncUnresolvedDependencyEntity::class,
     ],
     version = APP_DATABASE_VERSION,
     exportSchema = true,
@@ -44,6 +52,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
+            MIGRATION_11_12,
         )
     }
 
@@ -56,6 +65,162 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workGroupDao(): WorkGroupDao
 
     abstract fun seriesWatchDao(): SeriesWatchDao
+
+    abstract fun syncDao(): SyncDao
+}
+
+private val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_settings (
+                id INTEGER NOT NULL PRIMARY KEY,
+                enabled INTEGER NOT NULL,
+                deviceId TEXT,
+                nextCounter INTEGER NOT NULL,
+                lastSuccessfulAt INTEGER,
+                requiresReregistration INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "INSERT OR IGNORE INTO sync_settings " +
+                "(id, enabled, deviceId, nextCounter, lastSuccessfulAt, requiresReregistration) " +
+                "VALUES (1, 0, NULL, 0, NULL, 0)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_operations (
+                operationId TEXT NOT NULL PRIMARY KEY,
+                deviceId TEXT NOT NULL,
+                counter INTEGER NOT NULL,
+                transactionId TEXT NOT NULL,
+                transactionIndex INTEGER NOT NULL,
+                transactionSize INTEGER NOT NULL,
+                entityType TEXT NOT NULL,
+                entityId TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                fieldValuesJson TEXT NOT NULL,
+                causalContextJson TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                state TEXT NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_sync_operations_deviceId_counter " +
+                "ON sync_operations(deviceId, counter)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_operations_transactionId " +
+                "ON sync_operations(transactionId)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_operations_state_deviceId_counter " +
+                "ON sync_operations(state, deviceId, counter)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_field_states (
+                entityType TEXT NOT NULL,
+                entityId TEXT NOT NULL,
+                fieldName TEXT NOT NULL,
+                valueJson TEXT NOT NULL,
+                winnerDeviceId TEXT NOT NULL,
+                winnerCounter INTEGER NOT NULL,
+                causalContextJson TEXT NOT NULL,
+                PRIMARY KEY(entityType, entityId, fieldName)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_field_states_winnerDeviceId_winnerCounter " +
+                "ON sync_field_states(winnerDeviceId, winnerCounter)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_tombstones (
+                entityType TEXT NOT NULL,
+                entityId TEXT NOT NULL,
+                deletingDeviceId TEXT NOT NULL,
+                deletingCounter INTEGER NOT NULL,
+                deletedAt INTEGER NOT NULL,
+                retainUntil INTEGER NOT NULL,
+                PRIMARY KEY(entityType, entityId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_tombstones_retainUntil " +
+                "ON sync_tombstones(retainUntil)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_cursors (
+                deviceId TEXT NOT NULL PRIMARY KEY,
+                receivedCounter INTEGER NOT NULL,
+                processedCounter INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_acknowledgements (
+                acknowledgingDeviceId TEXT NOT NULL,
+                observedDeviceId TEXT NOT NULL,
+                counter INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                PRIMARY KEY(acknowledgingDeviceId, observedDeviceId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_acknowledgements_observedDeviceId_counter " +
+                "ON sync_acknowledgements(observedDeviceId, counter)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_conflicts (
+                id TEXT NOT NULL PRIMARY KEY,
+                transactionId TEXT NOT NULL,
+                entityType TEXT NOT NULL,
+                entityId TEXT NOT NULL,
+                fieldName TEXT NOT NULL,
+                winnerValueJson TEXT NOT NULL,
+                loserValueJson TEXT NOT NULL,
+                winnerDeviceId TEXT NOT NULL,
+                winnerCounter INTEGER NOT NULL,
+                loserDeviceId TEXT NOT NULL,
+                loserCounter INTEGER NOT NULL,
+                detectedAt INTEGER NOT NULL,
+                resolvedOperationId TEXT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_conflicts_resolvedOperationId_detectedAt " +
+                "ON sync_conflicts(resolvedOperationId, detectedAt)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_conflicts_entityType_entityId " +
+                "ON sync_conflicts(entityType, entityId)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_unresolved_dependencies (
+                operationId TEXT NOT NULL,
+                entityType TEXT NOT NULL,
+                entityId TEXT NOT NULL,
+                PRIMARY KEY(operationId, entityType, entityId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sync_unresolved_dependencies_entityType_entityId " +
+                "ON sync_unresolved_dependencies(entityType, entityId)",
+        )
+    }
 }
 
 private val MIGRATION_10_11 = object : Migration(10, 11) {

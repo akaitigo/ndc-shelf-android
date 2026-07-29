@@ -17,6 +17,9 @@ import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
 import dev.ndcshelf.app.domain.repository.SeriesRepository
+import dev.ndcshelf.app.domain.sync.SyncMutationJournal
+import dev.ndcshelf.app.data.sync.syncDelete
+import dev.ndcshelf.app.data.sync.toSyncUpsert
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -27,6 +30,7 @@ class RoomSeriesRepository(
     private val database: AppDatabase,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val syncJournal: SyncMutationJournal = SyncMutationJournal.Disabled,
 ) : SeriesRepository {
     private val dao = database.seriesDao()
 
@@ -94,11 +98,10 @@ class RoomSeriesRepository(
                     updatedAt = now,
                 ).also { dao.upsertSeries(it) }
                 var left = dao.getMembershipsForSeries(series.id).lastOrNull()?.sortOrderKey
-                val membershipIds = drafts.map { draft ->
+                val memberships = drafts.map { draft ->
                     val id = idFactory()
                     val orderKey = FractionalOrderKey.between(left, null, id)
-                    dao.insertMembership(
-                        SeriesMembershipEntity(
+                    val membership = SeriesMembershipEntity(
                             id = id,
                             seriesId = series.id,
                             workId = draft.workId,
@@ -110,13 +113,15 @@ class RoomSeriesRepository(
                             origin = draft.origin.name,
                             confirmedBy = SeriesMembershipConfirmer.USER.name,
                             sourceTitle = draft.sourceTitle,
-                        ),
-                    )
+                        )
+                    dao.insertMembership(membership)
                     left = orderKey
-                    id
+                    membership
                 }
-                dao.upsertSeries(series.copy(updatedAt = now))
-                SeriesConfirmationResult.Confirmed(series.id, membershipIds)
+                val updatedSeries = series.copy(updatedAt = now)
+                dao.upsertSeries(updatedSeries)
+                syncJournal.record(listOf(updatedSeries.toSyncUpsert()) + memberships.map { it.toSyncUpsert() })
+                SeriesConfirmationResult.Confirmed(series.id, memberships.map(SeriesMembershipEntity::id))
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -131,9 +136,12 @@ class RoomSeriesRepository(
         database.withTransaction {
             val membership = dao.findMembershipById(membershipId) ?: return@withTransaction false
             if (dao.deleteMembership(membershipId) != 1) return@withTransaction false
-            dao.findSeriesById(membership.seriesId)?.let { series ->
-                dao.upsertSeries(series.copy(updatedAt = nowMillis()))
-            }
+            val updated = dao.findSeriesById(membership.seriesId)?.copy(updatedAt = nowMillis())
+            if (updated != null) dao.upsertSeries(updated)
+            syncJournal.record(
+                listOf(syncDelete("seriesMembership", membershipId)) +
+                    listOfNotNull(updated?.toSyncUpsert()),
+            )
             true
         }
     } catch (cancellation: CancellationException) {

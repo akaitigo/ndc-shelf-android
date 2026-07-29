@@ -19,6 +19,9 @@ import dev.ndcshelf.app.data.repository.RoomLocationRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesWatchRepository
 import dev.ndcshelf.app.data.repository.RoomWorkGroupRepository
+import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
+import dev.ndcshelf.app.data.sync.RoomSyncEngine
+import dev.ndcshelf.app.data.sync.RoomSyncStatusRepository
 import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
 import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
@@ -98,16 +101,24 @@ class AppContainer(application: Application) {
         AppDatabase.DATABASE_NAME,
     ).addMigrations(*AppDatabase.MIGRATIONS.toTypedArray()).build()
 
+    val syncEngine = RoomSyncEngine(
+        database,
+        RoomSyncDomainStore(database),
+    )
+
+    val syncStatusRepository = RoomSyncStatusRepository(database)
+
     val libraryRepository: LibraryRepository = DefaultLibraryRepository(
         database = database,
         metadataService = NdlBookMetadataService(),
+        syncJournal = syncEngine,
     )
 
-    val locationRepository: LocationRepository = RoomLocationRepository(database)
+    val locationRepository: LocationRepository = RoomLocationRepository(database, syncJournal = syncEngine)
 
-    val seriesRepository: SeriesRepository = RoomSeriesRepository(database)
+    val seriesRepository: SeriesRepository = RoomSeriesRepository(database, syncJournal = syncEngine)
 
-    val workGroupRepository: WorkGroupRepository = RoomWorkGroupRepository(database)
+    val workGroupRepository: WorkGroupRepository = RoomWorkGroupRepository(database, syncJournal = syncEngine)
 
     val seriesWatchRepository: SeriesWatchRepository = RoomSeriesWatchRepository(
         database = database,

@@ -233,4 +233,6 @@ NDCコードまたはNDC版を変更した場合、`classificationSource`を`MAN
 
 任意同期はRoomを正本とするE2EE operation logとして設計し、backendへdomain payloadの平文を渡しません。同期対象、除外data、公開wire format、因果順序、remove-wins削除、端末追加・失効、鍵紛失、backend交換の規則は[ADR 0005](adr/0005-optional-e2ee-sync.md)と[同期protocol](SYNC_PROTOCOL.md)を正本とします。信頼境界、STRIDE分析、復旧と残存riskは[同期脅威モデル](SYNC_THREAT_MODEL.md)を参照してください。
 
-後続実装は、local mutationとoutboxを同一transactionで記録し、受信batchを署名・AEAD・schema・因果関係・DB制約の順に検証してから単一transactionで適用します。同期OFF、同意撤回、sign-out後は同期先へrequestを作成しません。wall clock、backend固有timestamp、全量last-writer-winsを競合解決へ使用してはいけません。
+Room v12はlocal mutationと平文journalを同一transactionで記録し、device counter、received / processed cursor、field winner、remove-wins tombstone、ack、domain conflictをapp-private DBへ保持します。重複・順不同操作はoperation IDとversion vectorで冪等に処理し、同時field更新はdotで決定的に収束させつつloserを競合証跡へ残します。完全バックアップ復元では同期内部状態を消去し、新device IDでの再登録を要求します。
+
+暗号envelope、署名・AEAD・schema検証、backend adapter、認証、同期ON操作は後続Issueの境界です。同期OFF、同意撤回、sign-out後は同期先へrequestを作成しません。wall clock、backend固有timestamp、全量last-writer-winsを競合解決へ使用してはいけません。
