@@ -63,11 +63,14 @@ import dev.ndcshelf.app.SeriesWatchMutationUiState
 import dev.ndcshelf.app.WorkVariantViewModel
 import dev.ndcshelf.app.data.local.SharedPreferencesOnboardingStore
 import dev.ndcshelf.app.domain.consent.ConsentPurpose
+import dev.ndcshelf.app.domain.diagnostics.DiagnosticsSnapshot
+import dev.ndcshelf.app.domain.diagnostics.buildDiagnosticsReport
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.model.OnboardingStore
 import dev.ndcshelf.app.ui.navigation.ConsentRoute
 import dev.ndcshelf.app.ui.navigation.DataGraph
 import dev.ndcshelf.app.ui.navigation.DataRoute
+import dev.ndcshelf.app.ui.navigation.DiagnosticsRoute
 import dev.ndcshelf.app.ui.navigation.InfoRoute
 import dev.ndcshelf.app.ui.navigation.InsightsRoute
 import dev.ndcshelf.app.ui.navigation.LibraryGraph
@@ -83,6 +86,7 @@ import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.ConsentPayloadDialog
 import dev.ndcshelf.app.ui.screens.ConsentScreen
 import dev.ndcshelf.app.ui.screens.DataManagementScreen
+import dev.ndcshelf.app.ui.screens.DiagnosticsScreen
 import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.OnboardingScreen
@@ -368,6 +372,33 @@ fun NdcShelfApp(
                     }
                 } else {
                     viewModel.loadDatabaseBackup(input)
+                }
+            }
+        }
+    var pendingDiagnosticsReport by rememberSaveable { mutableStateOf<String?>(null) }
+    val diagnosticsReportSaver =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/json"),
+        ) { uri ->
+            val report = pendingDiagnosticsReport
+            pendingDiagnosticsReport = null
+            if (uri == null || report == null) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
+                }
+            } else {
+                val saved =
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                            output.write(report.toByteArray(Charsets.UTF_8))
+                        } != null
+                    }.getOrDefault(false)
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        resources.getString(
+                            if (saved) R.string.diagnostics_saved else R.string.diagnostics_save_failure,
+                        ),
+                    )
                 }
             }
         }
@@ -837,6 +868,39 @@ fun NdcShelfApp(
                         onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
                         onOpenConsent = {
                             navController.navigate(ConsentRoute) { launchSingleTop = true }
+                        },
+                        onOpenDiagnostics = {
+                            navController.navigate(DiagnosticsRoute) { launchSingleTop = true }
+                        },
+                        contentPadding = contentPadding,
+                    )
+                }
+
+                composable<DiagnosticsRoute> {
+                    val application = context.applicationContext as NdcShelfApplication
+                    var snapshot by remember { mutableStateOf<DiagnosticsSnapshot?>(null) }
+                    var refreshKey by remember { mutableIntStateOf(0) }
+                    LaunchedEffect(refreshKey) {
+                        snapshot = application.container.diagnosticsSnapshotCollector.collect()
+                    }
+                    DiagnosticsScreen(
+                        snapshot = snapshot,
+                        onClearEvents = {
+                            application.container.diagnosticsLogger.clearAll()
+                            refreshKey += 1
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    resources.getString(R.string.diagnostics_cleared),
+                                )
+                            }
+                        },
+                        onGenerate = { sections ->
+                            snapshot?.let { current ->
+                                pendingDiagnosticsReport =
+                                    buildDiagnosticsReport(current, sections).toString()
+                                val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+                                diagnosticsReportSaver.launch("ndc-shelf-diagnostics-$date.json")
+                            }
                         },
                         contentPadding = contentPadding,
                     )
