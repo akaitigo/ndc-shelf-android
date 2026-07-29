@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.Flow
 interface ReadingHistoryRepository {
     fun observeSessionsForEdition(editionId: String): Flow<List<ReadingSession>>
 
+    /** 全コピーの読書セッション。分析画面の端末内集計だけに使う。 */
+    fun observeAllSessions(): Flow<List<ReadingSession>>
+
     suspend fun addSession(
         copyId: String,
         draft: ReadingSessionDraft,

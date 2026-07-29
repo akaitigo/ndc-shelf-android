@@ -90,6 +90,26 @@ interface ReadingSessionDao {
     )
     fun observeSessionsForEdition(editionId: String): Flow<List<ReadingSessionRow>>
 
+    @Query(
+        """
+        SELECT
+            sessions.id AS id,
+            sessions.copyId AS copyId,
+            copies.copyLabel AS copyLabel,
+            sessions.status AS status,
+            sessions.startedDay AS startedDay,
+            sessions.finishedDay AS finishedDay,
+            sessions.rating AS rating,
+            sessions.note AS note,
+            sessions.createdAt AS createdAt,
+            sessions.updatedAt AS updatedAt
+        FROM reading_sessions AS sessions
+        INNER JOIN owned_copies AS copies ON copies.id = sessions.copyId
+        ORDER BY sessions.createdAt DESC, sessions.id ASC
+        """,
+    )
+    fun observeAllSessions(): Flow<List<ReadingSessionRow>>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(session: ReadingSessionEntity)
 

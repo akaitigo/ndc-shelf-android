@@ -111,6 +111,12 @@ WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻
 
 評価（1〜5）とメモ（最大2,000文字）は端末内にだけ保存します。完全バックアップ（形式v13）の対象で、JSON / CSVエクスポート・インポートと蔵書検索の対象外、外部送信は行いません。分析画面の傾向表示には読了状況と読了日だけを使い、その方針を詳細画面の履歴セクションに明示します。
 
+## 分析（Insights）
+
+分析タブの読書傾向（積読期間、NDC類、読了推移）とランダム再発見は、`domain/insights`の`LibraryInsightsCalculator`が蔵書・読書セッション・除外リスト・現在時刻・乱数seedを引数に取る純粋関数として集計します。集計は端末内だけで行い外部送信せず、候補には保存済みの事実だけから導いた「選ばれた理由」を必ず添えます。読了日つきの履歴が閾値未満の指標はグラフを表示せず、必要なデータを説明します（fail-safeな断定回避）。
+
+画面は`InsightsViewModel`（画面スコープ）が`LibraryRepository.observeLibrary()`、`ReadingHistoryRepository.observeAllSessions()`、`InsightsExclusionStore`を`combine`して状態を導出します。候補の「対象外にする」と「分析リセット」はSharedPreferences（`insights-exclusions`）ベースの除外ストアで永続化し、Room schemaを変更しません。除外は候補の提示だけに影響し、集計値・蔵書・履歴・同期・バックアップへは影響しません。指標の定義・限界・表現ガイドライン・TalkBack対応は[INSIGHTS.md](INSIGHTS.md)を正本とします。
+
 ## 蔵書検索
 
 本棚の検索・読書状態・並び順は`LibrarySearchCriteria`で表し、250msの入力待機後に`flatMapLatest`でRoomのObservable Queryを切り替えます。UIへは適用済み条件と結果を同じ`LibrarySearchResult`として渡し、入力中の条件と一致しない古い結果を表示しません。検索語は100文字に制限し、SQL `LIKE`の`%`、`_`、エスケープ文字はリテラルとして扱います。
