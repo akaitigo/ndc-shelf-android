@@ -623,6 +623,54 @@ class AppDatabaseMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun version13To14AddsEmptyReadingSessionsWithoutChangingDomainData() {
+        migrationHelper.createDatabase(V13_DATABASE, 13).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', '履歴前の本', '匿名著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition', 'work', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN', 'NDL')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy', 'edition', 'PHYSICAL', '棚', 'READING', 42, NULL, NULL, '保存用')",
+            )
+            close()
+        }
+
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V13_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+
+        // 既存のreadingStatusからセッションを自動生成しない（履歴は空のまま）。
+        migrated.query("SELECT COUNT(*) FROM reading_sessions").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.query("SELECT readingStatus FROM owned_copies WHERE id = 'copy'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("READING", cursor.getString(0))
+        }
+        migrated.assertForeignKey("reading_sessions", "owned_copies", "copyId", "id")
+        migrated.assertIndex("reading_sessions", "index_reading_sessions_copyId", unique = false)
+        migrated.execSQL("PRAGMA foreign_keys=ON")
+        migrated.execSQL(
+            "INSERT INTO reading_sessions VALUES " +
+                "('session', 'copy', 'FINISHED', '2026-07', '2026-07-29', 5, 'メモ', 1, 2)",
+        )
+        migrated.execSQL("DELETE FROM owned_copies WHERE id = 'copy'")
+        migrated.query("SELECT COUNT(*) FROM reading_sessions").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
     private fun androidx.sqlite.db.SupportSQLiteDatabase.queryNames(
         sql: String,
         column: String,
@@ -686,6 +734,7 @@ class AppDatabaseMigrationTest {
         const val V10_DATABASE = "migration-v10"
         const val V11_DATABASE = "migration-v11"
         const val V12_DATABASE = "migration-v12"
+        const val V13_DATABASE = "migration-v13"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

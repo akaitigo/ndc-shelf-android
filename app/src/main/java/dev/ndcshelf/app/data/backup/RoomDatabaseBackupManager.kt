@@ -6,8 +6,8 @@ import android.os.Build
 import android.os.storage.StorageManager
 import android.util.Log
 import androidx.room.withTransaction
-import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.APP_DATABASE_VERSION
+import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.sync.resetSyncStateAfterDomainRestore
 import dev.ndcshelf.app.domain.backup.BackupCodecException
 import dev.ndcshelf.app.domain.backup.DatabaseBackupCodec
@@ -40,38 +40,39 @@ class RoomDatabaseBackupManager(
     private val seriesDao = database.seriesDao()
     private val workGroupDao = database.workGroupDao()
     private val seriesWatchDao = database.seriesWatchDao()
+    private val readingSessionDao = database.readingSessionDao()
     private val codec = DatabaseBackupCodec(APP_DATABASE_VERSION)
 
-    override suspend fun createBackup(output: OutputStream): DatabaseBackupCreateResult = try {
-        val snapshot = database.withTransaction { readSnapshot() }
-        val (archive, metadata) = codec.encode(snapshot, appVersion, nowMillis())
-        output.use {
-            it.write(archive)
-            it.flush()
+    override suspend fun createBackup(output: OutputStream): DatabaseBackupCreateResult =
+        try {
+            val snapshot = database.withTransaction { readSnapshot() }
+            val (archive, metadata) = codec.encode(snapshot, appVersion, nowMillis())
+            output.use {
+                it.write(archive)
+                it.flush()
+            }
+            DatabaseBackupCreateResult.Success(metadata)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: BackupCodecException) {
+            DatabaseBackupCreateResult.Failure(error.failure)
+        } catch (_: Exception) {
+            DatabaseBackupCreateResult.Failure(DatabaseBackupFailure.WRITE_FAILED)
         }
-        DatabaseBackupCreateResult.Success(metadata)
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: BackupCodecException) {
-        DatabaseBackupCreateResult.Failure(error.failure)
-    } catch (_: Exception) {
-        DatabaseBackupCreateResult.Failure(DatabaseBackupFailure.WRITE_FAILED)
-    }
 
-    override suspend fun inspectBackup(input: InputStream): DatabaseBackupInspectResult = try {
-        val preview = input.use(codec::decode)
-        DatabaseBackupInspectResult.Valid(preview)
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: BackupCodecException) {
-        DatabaseBackupInspectResult.Invalid(error.failure)
-    } catch (_: Exception) {
-        DatabaseBackupInspectResult.Invalid(DatabaseBackupFailure.INVALID_ARCHIVE)
-    }
+    override suspend fun inspectBackup(input: InputStream): DatabaseBackupInspectResult =
+        try {
+            val preview = input.use(codec::decode)
+            DatabaseBackupInspectResult.Valid(preview)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: BackupCodecException) {
+            DatabaseBackupInspectResult.Invalid(error.failure)
+        } catch (_: Exception) {
+            DatabaseBackupInspectResult.Invalid(DatabaseBackupFailure.INVALID_ARCHIVE)
+        }
 
-    override suspend fun restoreBackup(
-        preview: DatabaseBackupPreview,
-    ): DatabaseRestoreResult {
+    override suspend fun restoreBackup(preview: DatabaseBackupPreview): DatabaseRestoreResult {
         var automaticBackupName: String? = null
         var automaticBackupVerified = false
         return try {
@@ -97,6 +98,7 @@ class RoomDatabaseBackupManager(
 
                 dao.deleteAllScanAttempts()
                 dao.deleteAllScanSessions()
+                readingSessionDao.deleteAll()
                 dao.deleteAllCopies()
                 dao.deleteAllWishlistItems()
                 seriesWatchDao.deleteAllCandidates()
@@ -123,6 +125,7 @@ class RoomDatabaseBackupManager(
                 locationDao.upsertShelves(preview.snapshot.shelves)
                 locationDao.upsertTiers(preview.snapshot.tiers)
                 dao.upsertCopies(preview.snapshot.copies)
+                readingSessionDao.upsertAll(preview.snapshot.readingSessions)
                 dao.upsertScanSessions(preview.snapshot.scanSessions)
                 dao.upsertScanAttempts(preview.snapshot.scanAttempts)
                 resetSyncStateAfterDomainRestore(database.syncDao())
@@ -144,23 +147,25 @@ class RoomDatabaseBackupManager(
         }
     }
 
-    private suspend fun readSnapshot() = DatabaseSnapshot(
-        works = dao.getAllWorks(),
-        editions = dao.getAllEditions(),
-        copies = dao.getAllCopies(),
-        rooms = locationDao.getRooms(),
-        shelves = locationDao.getAllShelves(),
-        tiers = locationDao.getAllTiers(),
-        wishlistItems = dao.getAllWishlistItems(),
-        series = seriesDao.getAllSeries(),
-        seriesMemberships = seriesDao.getAllMemberships(),
-        scanSessions = dao.getAllScanSessions(),
-        scanAttempts = dao.getAllScanAttempts(),
-        workGroups = workGroupDao.getAllGroups(),
-        workGroupMemberships = workGroupDao.getAllMemberships(),
-        seriesWatches = seriesWatchDao.getAllWatches(),
-        seriesReleaseCandidates = seriesWatchDao.getAllCandidates(),
-    )
+    private suspend fun readSnapshot() =
+        DatabaseSnapshot(
+            works = dao.getAllWorks(),
+            editions = dao.getAllEditions(),
+            copies = dao.getAllCopies(),
+            rooms = locationDao.getRooms(),
+            shelves = locationDao.getAllShelves(),
+            tiers = locationDao.getAllTiers(),
+            wishlistItems = dao.getAllWishlistItems(),
+            series = seriesDao.getAllSeries(),
+            seriesMemberships = seriesDao.getAllMemberships(),
+            scanSessions = dao.getAllScanSessions(),
+            scanAttempts = dao.getAllScanAttempts(),
+            workGroups = workGroupDao.getAllGroups(),
+            workGroupMemberships = workGroupDao.getAllMemberships(),
+            seriesWatches = seriesWatchDao.getAllWatches(),
+            seriesReleaseCandidates = seriesWatchDao.getAllCandidates(),
+            readingSessions = readingSessionDao.getAll(),
+        )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {
         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date(nowMillis()))
@@ -196,25 +201,30 @@ class RoomDatabaseBackupManager(
     }
 
     @SuppressLint("UsableSpace")
-    private fun hasLegacyFreeSpace(requiredBytes: Long): Boolean =
-        automaticBackupDirectory.usableSpace >= requiredBytes
+    private fun hasLegacyFreeSpace(requiredBytes: Long): Boolean = automaticBackupDirectory.usableSpace >= requiredBytes
 
     private fun pruneAutomaticBackups(keepName: String?) {
-        val olderBackupLimit = if (keepName == null) {
-            MAX_AUTOMATIC_BACKUPS
-        } else {
-            MAX_AUTOMATIC_BACKUPS - 1
-        }
-        val deletionFailed = automaticBackupDirectory.listFiles()
-            ?.filter { it.isFile && it.name.endsWith(".ndcshelfbackup") && it.name != keepName }
-            ?.sortedByDescending(File::lastModified)
-            ?.drop(olderBackupLimit)
-            ?.fold(false) { failed, file -> !file.delete() || failed }
-            ?: false
+        val olderBackupLimit =
+            if (keepName == null) {
+                MAX_AUTOMATIC_BACKUPS
+            } else {
+                MAX_AUTOMATIC_BACKUPS - 1
+            }
+        val deletionFailed =
+            automaticBackupDirectory
+                .listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".ndcshelfbackup") && it.name != keepName }
+                ?.sortedByDescending(File::lastModified)
+                ?.drop(olderBackupLimit)
+                ?.fold(false) { failed, file -> !file.delete() || failed }
+                ?: false
         if (deletionFailed) Log.w(TAG, "Could not delete an older automatic backup")
     }
 
-    private fun cleanAutomaticBackups(backupName: String?, verified: Boolean) {
+    private fun cleanAutomaticBackups(
+        backupName: String?,
+        verified: Boolean,
+    ) {
         try {
             if (backupName != null && !verified &&
                 !File(automaticBackupDirectory, backupName).delete()

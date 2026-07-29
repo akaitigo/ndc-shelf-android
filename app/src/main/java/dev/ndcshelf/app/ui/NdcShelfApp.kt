@@ -56,6 +56,8 @@ import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.MainViewModel
 import dev.ndcshelf.app.NdcShelfApplication
 import dev.ndcshelf.app.R
+import dev.ndcshelf.app.ReadingSessionFailure
+import dev.ndcshelf.app.ReadingSessionUiState
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.SeriesWatchMutationUiState
 import dev.ndcshelf.app.WorkVariantViewModel
@@ -120,6 +122,8 @@ fun NdcShelfApp(
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val bookEditState by viewModel.bookEditState.collectAsStateWithLifecycle()
     val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
+    val readingSessions by viewModel.readingSessions.collectAsStateWithLifecycle()
+    val readingSessionState by viewModel.readingSessionState.collectAsStateWithLifecycle()
     val databaseBackupState by viewModel.databaseBackupState.collectAsStateWithLifecycle()
     val libraryExportState by viewModel.libraryExportState.collectAsStateWithLifecycle()
     val locations by viewModel.locations.collectAsStateWithLifecycle()
@@ -481,6 +485,74 @@ fun NdcShelfApp(
         }
     }
 
+    LaunchedEffect(readingSessionState) {
+        when (val state = readingSessionState) {
+            ReadingSessionUiState.Saved -> {
+                snackbarHostState.showSnackbar(resources.getString(R.string.reading_history_saved))
+                viewModel.clearReadingSessionState()
+            }
+
+            is ReadingSessionUiState.Deleted -> {
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = resources.getString(R.string.reading_history_deleted),
+                        actionLabel = resources.getString(R.string.reading_history_delete_undo),
+                        withDismissAction = true,
+                        duration = SnackbarDuration.Long,
+                    )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.undoReadingSessionDeletion()
+                } else {
+                    viewModel.clearReadingSessionState()
+                }
+            }
+
+            ReadingSessionUiState.Restored -> {
+                snackbarHostState.showSnackbar(resources.getString(R.string.reading_history_restored))
+                viewModel.clearReadingSessionState()
+            }
+
+            is ReadingSessionUiState.Error -> {
+                val message =
+                    when (state.failure) {
+                        ReadingSessionFailure.NOT_FOUND -> {
+                            R.string.reading_history_error_not_found
+                        }
+
+                        ReadingSessionFailure.DUPLICATE -> {
+                            R.string.reading_history_error_duplicate
+                        }
+
+                        ReadingSessionFailure.ACTIVE_SESSION_EXISTS -> {
+                            R.string.reading_history_error_active_exists
+                        }
+
+                        ReadingSessionFailure.SAVE -> {
+                            R.string.reading_history_error_save
+                        }
+
+                        ReadingSessionFailure.DELETE -> {
+                            R.string.reading_history_error_delete
+                        }
+
+                        ReadingSessionFailure.RESTORE_CONFLICT -> {
+                            R.string.reading_history_error_restore_conflict
+                        }
+
+                        ReadingSessionFailure.RESTORE -> {
+                            R.string.reading_history_error_restore
+                        }
+                    }
+                snackbarHostState.showSnackbar(resources.getString(message))
+                viewModel.clearReadingSessionState()
+            }
+
+            else -> {
+                Unit
+            }
+        }
+    }
+
     LaunchedEffect(databaseBackupState) {
         when (val state = databaseBackupState) {
             is DatabaseBackupUiState.Created -> {
@@ -613,6 +685,12 @@ fun NdcShelfApp(
                                 launchSingleTop = true
                             }
                         },
+                        readingSessions = readingSessions,
+                        readingSessionState = readingSessionState,
+                        onAddReadingSession = viewModel::addReadingSession,
+                        onUpdateReadingSession = viewModel::updateReadingSession,
+                        onDeleteReadingSession = viewModel::deleteReadingSession,
+                        onClearReadingSessionState = viewModel::clearReadingSessionState,
                         contentPadding = contentPadding,
                     )
                 }

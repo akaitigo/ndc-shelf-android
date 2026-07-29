@@ -67,6 +67,7 @@ import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
 import dev.ndcshelf.app.ManualReconciliationUiState
 import dev.ndcshelf.app.R
+import dev.ndcshelf.app.ReadingSessionUiState
 import dev.ndcshelf.app.ReconciliationFailure
 import dev.ndcshelf.app.ShelfMoveUiState
 import dev.ndcshelf.app.domain.model.BibliographicSource
@@ -79,6 +80,8 @@ import dev.ndcshelf.app.domain.model.LibraryStats
 import dev.ndcshelf.app.domain.model.LocationLevel
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.MoveDirection
+import dev.ndcshelf.app.domain.model.ReadingSession
+import dev.ndcshelf.app.domain.model.ReadingSessionDraft
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.ui.components.BookCover
@@ -120,6 +123,12 @@ fun LibraryScreen(
     onClearManualReconciliation: () -> Unit = {},
     onManageSeries: (String) -> Unit = {},
     onManageVariants: (String) -> Unit = {},
+    readingSessions: List<ReadingSession> = emptyList(),
+    readingSessionState: ReadingSessionUiState = ReadingSessionUiState.Idle,
+    onAddReadingSession: (String, ReadingSessionDraft) -> Unit = { _, _ -> },
+    onUpdateReadingSession: (String, ReadingSessionDraft) -> Unit = { _, _ -> },
+    onDeleteReadingSession: (String) -> Unit = {},
+    onClearReadingSessionState: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var localQuery by rememberSaveable { mutableStateOf("") }
@@ -208,6 +217,12 @@ fun LibraryScreen(
             onReconcile = { openEditor(selectedCopies.first().copyId) },
             onManageSeries = onManageSeries,
             onManageVariants = onManageVariants,
+            readingSessions = readingSessions,
+            readingSessionState = readingSessionState,
+            onAddReadingSession = onAddReadingSession,
+            onUpdateReadingSession = onUpdateReadingSession,
+            onDeleteReadingSession = onDeleteReadingSession,
+            onClearReadingSessionState = onClearReadingSessionState,
             contentPadding = contentPadding,
         )
     } else {
