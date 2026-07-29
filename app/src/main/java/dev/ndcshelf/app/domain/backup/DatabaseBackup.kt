@@ -2,16 +2,17 @@ package dev.ndcshelf.app.domain.backup
 
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
-import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
-import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
-import dev.ndcshelf.app.data.local.SeriesWatchEntity
+import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.ReadingSessionEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
+import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
+import dev.ndcshelf.app.data.local.SeriesWatchEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
@@ -32,6 +33,7 @@ data class DatabaseSnapshot(
     val workGroupMemberships: List<WorkGroupMembershipEntity> = emptyList(),
     val seriesWatches: List<SeriesWatchEntity> = emptyList(),
     val seriesReleaseCandidates: List<SeriesReleaseCandidateEntity> = emptyList(),
+    val readingSessions: List<ReadingSessionEntity> = emptyList(),
 )
 
 data class DatabaseBackupMetadata(
@@ -51,6 +53,7 @@ data class DatabaseBackupMetadata(
     val workGroupMembershipCount: Int = 0,
     val seriesWatchCount: Int = 0,
     val seriesReleaseCandidateCount: Int = 0,
+    val readingSessionCount: Int = 0,
 )
 
 class DatabaseBackupPreview internal constructor(
@@ -59,13 +62,23 @@ class DatabaseBackupPreview internal constructor(
 )
 
 sealed interface DatabaseBackupCreateResult {
-    data class Success(val metadata: DatabaseBackupMetadata) : DatabaseBackupCreateResult
-    data class Failure(val reason: DatabaseBackupFailure) : DatabaseBackupCreateResult
+    data class Success(
+        val metadata: DatabaseBackupMetadata,
+    ) : DatabaseBackupCreateResult
+
+    data class Failure(
+        val reason: DatabaseBackupFailure,
+    ) : DatabaseBackupCreateResult
 }
 
 sealed interface DatabaseBackupInspectResult {
-    data class Valid(val preview: DatabaseBackupPreview) : DatabaseBackupInspectResult
-    data class Invalid(val reason: DatabaseBackupFailure) : DatabaseBackupInspectResult
+    data class Valid(
+        val preview: DatabaseBackupPreview,
+    ) : DatabaseBackupInspectResult
+
+    data class Invalid(
+        val reason: DatabaseBackupFailure,
+    ) : DatabaseBackupInspectResult
 }
 
 sealed interface DatabaseRestoreResult {
@@ -74,7 +87,9 @@ sealed interface DatabaseRestoreResult {
         val automaticBackupName: String,
     ) : DatabaseRestoreResult
 
-    data class Failure(val reason: DatabaseBackupFailure) : DatabaseRestoreResult
+    data class Failure(
+        val reason: DatabaseBackupFailure,
+    ) : DatabaseRestoreResult
 }
 
 enum class DatabaseBackupFailure {

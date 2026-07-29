@@ -22,6 +22,7 @@ import dev.ndcshelf.app.data.remote.NdlBookMetadataService
 import dev.ndcshelf.app.data.remote.NdlSeriesReleaseService
 import dev.ndcshelf.app.data.repository.DefaultLibraryRepository
 import dev.ndcshelf.app.data.repository.RoomLocationRepository
+import dev.ndcshelf.app.data.repository.RoomReadingHistoryRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesWatchRepository
 import dev.ndcshelf.app.data.repository.RoomWorkGroupRepository
@@ -33,6 +34,7 @@ import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
+import dev.ndcshelf.app.domain.repository.ReadingHistoryRepository
 import dev.ndcshelf.app.domain.repository.SeriesRepository
 import dev.ndcshelf.app.domain.repository.SeriesWatchRepository
 import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
@@ -138,6 +140,9 @@ class AppContainer(
         )
 
     val locationRepository: LocationRepository = RoomLocationRepository(database, syncJournal = syncEngine)
+
+    val readingHistoryRepository: ReadingHistoryRepository =
+        RoomReadingHistoryRepository(database, syncJournal = syncEngine)
 
     val seriesRepository: SeriesRepository = RoomSeriesRepository(database, syncJournal = syncEngine)
 

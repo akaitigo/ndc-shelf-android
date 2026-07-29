@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 13
+const val APP_DATABASE_VERSION = 14
 
 @Database(
     entities = [
@@ -33,6 +33,7 @@ const val APP_DATABASE_VERSION = 13
         SyncConflictEntity::class,
         SyncUnresolvedDependencyEntity::class,
         ConsentRecordEntity::class,
+        ReadingSessionEntity::class,
     ],
     version = APP_DATABASE_VERSION,
     exportSchema = true,
@@ -56,6 +57,7 @@ abstract class AppDatabase : RoomDatabase() {
                 MIGRATION_10_11,
                 MIGRATION_11_12,
                 MIGRATION_12_13,
+                MIGRATION_13_14,
             )
     }
 
@@ -73,8 +75,39 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun consentDao(): ConsentDao
 
+    abstract fun readingSessionDao(): ReadingSessionDao
+
     abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
+
+// 既存の owned_copies.readingStatus からセッションを自動生成しない。
+// 開始日・読了日を推測できず、信頼できない履歴を作ることになるため、
+// v13→v14 は空の reading_sessions テーブルを追加するだけとする。
+private val MIGRATION_13_14 =
+    object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS reading_sessions (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    copyId TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    startedDay TEXT,
+                    finishedDay TEXT,
+                    rating INTEGER,
+                    note TEXT,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(copyId) REFERENCES owned_copies(id)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_reading_sessions_copyId ON reading_sessions(copyId)",
+            )
+        }
+    }
 
 private val MIGRATION_12_13 =
     object : Migration(12, 13) {

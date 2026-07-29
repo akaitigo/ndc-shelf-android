@@ -42,21 +42,28 @@ import dev.ndcshelf.app.domain.model.ManualBookValidationError
 import dev.ndcshelf.app.domain.model.ManualReconciliationPreview
 import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.model.PurchaseTransition
+import dev.ndcshelf.app.domain.model.ReadingSession
+import dev.ndcshelf.app.domain.model.ReadingSessionDraft
+import dev.ndcshelf.app.domain.model.ReadingSessionValidationError
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.SeriesOverview
 import dev.ndcshelf.app.domain.model.SeriesSuggestion
 import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.AddBookResult
+import dev.ndcshelf.app.domain.repository.AddReadingSessionResult
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
 import dev.ndcshelf.app.domain.repository.BookstoreLookupResult
 import dev.ndcshelf.app.domain.repository.DeleteBookResult
+import dev.ndcshelf.app.domain.repository.DeleteReadingSessionResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
 import dev.ndcshelf.app.domain.repository.ManualBookResult
 import dev.ndcshelf.app.domain.repository.ManualReconciliationApplyResult
 import dev.ndcshelf.app.domain.repository.ManualReconciliationLookupResult
+import dev.ndcshelf.app.domain.repository.ReadingHistoryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
+import dev.ndcshelf.app.domain.repository.RestoreReadingSessionResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
@@ -68,6 +75,7 @@ import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
+import dev.ndcshelf.app.domain.repository.UpdateReadingSessionResult
 import dev.ndcshelf.app.domain.sync.SyncEngineStatus
 import dev.ndcshelf.app.domain.sync.SyncStatusRepository
 import kotlinx.coroutines.CancellationException
@@ -99,6 +107,7 @@ class MainViewModel(
     private val importComputationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val databaseBackupManager: DatabaseBackupManager? = null,
     private val locationRepository: LocationRepository? = null,
+    private val readingHistoryRepository: ReadingHistoryRepository? = null,
     private val librarySearchSettings: LibrarySearchSettingsStore =
         InMemoryLibrarySearchSettingsStore,
     private val seriesRepository: SeriesRepository? = null,
@@ -210,6 +219,23 @@ class MainViewModel(
     val bookEditState: StateFlow<BookEditUiState> = _bookEditState.asStateFlow()
     private val _bookDeleteState = MutableStateFlow<BookDeleteUiState>(BookDeleteUiState.Idle)
     val bookDeleteState: StateFlow<BookDeleteUiState> = _bookDeleteState.asStateFlow()
+
+    /** 詳細表示中のEditionに属する全コピーの読書セッション履歴。 */
+    val readingSessions: StateFlow<List<ReadingSession>> =
+        _librarySearchCriteria
+            .map { criteria -> criteria.selectedEditionId }
+            .distinctUntilChanged()
+            .flatMapLatest { editionId ->
+                val source = readingHistoryRepository
+                if (editionId == null || source == null) {
+                    flowOf(emptyList())
+                } else {
+                    source.observeSessionsForEdition(editionId)
+                }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val _readingSessionState =
+        MutableStateFlow<ReadingSessionUiState>(ReadingSessionUiState.Idle)
+    val readingSessionState: StateFlow<ReadingSessionUiState> = _readingSessionState.asStateFlow()
     private val _databaseBackupState = MutableStateFlow<DatabaseBackupUiState>(DatabaseBackupUiState.Idle)
     val databaseBackupState: StateFlow<DatabaseBackupUiState> = _databaseBackupState.asStateFlow()
     private val _libraryExportState = MutableStateFlow<LibraryExportUiState>(LibraryExportUiState.Idle)
@@ -1158,6 +1184,130 @@ class MainViewModel(
         }
     }
 
+    fun addReadingSession(
+        copyId: String,
+        draft: ReadingSessionDraft,
+    ) {
+        val source = readingHistoryRepository ?: return
+        if (_readingSessionState.value.isBusy) return
+        viewModelScope.launch {
+            _readingSessionState.value = ReadingSessionUiState.Working
+            _readingSessionState.value =
+                when (val result = source.addSession(copyId, draft)) {
+                    is AddReadingSessionResult.Added -> {
+                        ReadingSessionUiState.Saved
+                    }
+
+                    is AddReadingSessionResult.Invalid -> {
+                        ReadingSessionUiState.Invalid(result.errors)
+                    }
+
+                    AddReadingSessionResult.Duplicate -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.DUPLICATE)
+                    }
+
+                    AddReadingSessionResult.ActiveSessionExists -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.ACTIVE_SESSION_EXISTS)
+                    }
+
+                    AddReadingSessionResult.CopyNotFound -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.NOT_FOUND)
+                    }
+
+                    AddReadingSessionResult.Failure -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.SAVE)
+                    }
+                }
+        }
+    }
+
+    fun updateReadingSession(
+        sessionId: String,
+        draft: ReadingSessionDraft,
+    ) {
+        val source = readingHistoryRepository ?: return
+        if (_readingSessionState.value.isBusy) return
+        viewModelScope.launch {
+            _readingSessionState.value = ReadingSessionUiState.Working
+            _readingSessionState.value =
+                when (val result = source.updateSession(sessionId, draft)) {
+                    is UpdateReadingSessionResult.Updated -> {
+                        ReadingSessionUiState.Saved
+                    }
+
+                    is UpdateReadingSessionResult.Invalid -> {
+                        ReadingSessionUiState.Invalid(result.errors)
+                    }
+
+                    UpdateReadingSessionResult.Duplicate -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.DUPLICATE)
+                    }
+
+                    UpdateReadingSessionResult.ActiveSessionExists -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.ACTIVE_SESSION_EXISTS)
+                    }
+
+                    UpdateReadingSessionResult.NotFound -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.NOT_FOUND)
+                    }
+
+                    UpdateReadingSessionResult.Failure -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.SAVE)
+                    }
+                }
+        }
+    }
+
+    fun deleteReadingSession(sessionId: String) {
+        val source = readingHistoryRepository ?: return
+        if (_readingSessionState.value.isBusy) return
+        viewModelScope.launch {
+            _readingSessionState.value = ReadingSessionUiState.Working
+            _readingSessionState.value =
+                when (val result = source.deleteSession(sessionId)) {
+                    is DeleteReadingSessionResult.Deleted -> {
+                        ReadingSessionUiState.Deleted(result.session)
+                    }
+
+                    DeleteReadingSessionResult.NotFound -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.NOT_FOUND)
+                    }
+
+                    DeleteReadingSessionResult.Failure -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.DELETE)
+                    }
+                }
+        }
+    }
+
+    fun undoReadingSessionDeletion() {
+        val source = readingHistoryRepository ?: return
+        val deleted = _readingSessionState.value as? ReadingSessionUiState.Deleted ?: return
+        viewModelScope.launch {
+            _readingSessionState.value = ReadingSessionUiState.Working
+            _readingSessionState.value =
+                when (source.restoreSession(deleted.session)) {
+                    RestoreReadingSessionResult.Restored -> {
+                        ReadingSessionUiState.Restored
+                    }
+
+                    RestoreReadingSessionResult.Conflict -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.RESTORE_CONFLICT)
+                    }
+
+                    RestoreReadingSessionResult.Failure -> {
+                        ReadingSessionUiState.Error(ReadingSessionFailure.RESTORE)
+                    }
+                }
+        }
+    }
+
+    fun clearReadingSessionState() {
+        if (!_readingSessionState.value.isBusy) {
+            _readingSessionState.value = ReadingSessionUiState.Idle
+        }
+    }
+
     fun loadJsonImport(input: InputStream) {
         importJob?.cancel()
         importBatch = null
@@ -1339,6 +1489,7 @@ class MainViewModel(
             repository: LibraryRepository,
             databaseBackupManager: DatabaseBackupManager,
             locationRepository: LocationRepository,
+            readingHistoryRepository: ReadingHistoryRepository? = null,
             librarySearchSettings: LibrarySearchSettingsStore = InMemoryLibrarySearchSettingsStore,
             seriesRepository: SeriesRepository? = null,
             seriesWatchRepository: SeriesWatchRepository? = null,
@@ -1354,11 +1505,13 @@ class MainViewModel(
                         repository = repository,
                         databaseBackupManager = databaseBackupManager,
                         locationRepository = locationRepository,
+                        readingHistoryRepository = readingHistoryRepository,
                         librarySearchSettings = librarySearchSettings,
                         seriesRepository = seriesRepository,
                         seriesWatchRepository = seriesWatchRepository,
                         seriesWatchScheduler = seriesWatchScheduler,
                         syncStatusRepository = syncStatusRepository,
+                        consentRepository = consentRepository,
                     ) as T
                 }
             }
@@ -1733,3 +1886,38 @@ enum class BookDeleteFailure {
     RESTORE_CONFLICT,
     RESTORE,
 }
+
+sealed interface ReadingSessionUiState {
+    data object Idle : ReadingSessionUiState
+
+    data object Working : ReadingSessionUiState
+
+    data object Saved : ReadingSessionUiState
+
+    data class Invalid(
+        val errors: List<ReadingSessionValidationError>,
+    ) : ReadingSessionUiState
+
+    data class Deleted(
+        val session: ReadingSession,
+    ) : ReadingSessionUiState
+
+    data object Restored : ReadingSessionUiState
+
+    data class Error(
+        val failure: ReadingSessionFailure,
+    ) : ReadingSessionUiState
+}
+
+enum class ReadingSessionFailure {
+    NOT_FOUND,
+    DUPLICATE,
+    ACTIVE_SESSION_EXISTS,
+    SAVE,
+    DELETE,
+    RESTORE_CONFLICT,
+    RESTORE,
+}
+
+internal val ReadingSessionUiState.isBusy: Boolean
+    get() = this === ReadingSessionUiState.Working

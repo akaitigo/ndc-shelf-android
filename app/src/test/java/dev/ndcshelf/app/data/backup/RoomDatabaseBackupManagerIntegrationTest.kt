@@ -7,6 +7,7 @@ import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
+import dev.ndcshelf.app.data.local.ReadingSessionEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
@@ -17,8 +18,8 @@ import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
 import dev.ndcshelf.app.data.sync.RoomSyncEngine
 import dev.ndcshelf.app.data.sync.toSyncUpsert
-import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupFailure
+import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
 import dev.ndcshelf.app.domain.backup.DatabaseBackupPreview
 import dev.ndcshelf.app.domain.backup.DatabaseRestoreResult
@@ -48,20 +49,23 @@ class RoomDatabaseBackupManagerIntegrationTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        database =
+            Room
+                .inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
         backupDirectory = File(context.cacheDir, "backup-unit-test-${System.nanoTime()}")
         now = 1_800_000_000_000
         spaceAvailable = true
-        manager = RoomDatabaseBackupManager(
-            context = context,
-            database = database,
-            automaticBackupDirectory = backupDirectory,
-            appVersion = "test",
-            nowMillis = { now++ },
-            spaceReservation = { spaceAvailable },
-        )
+        manager =
+            RoomDatabaseBackupManager(
+                context = context,
+                database = database,
+                automaticBackupDirectory = backupDirectory,
+                appVersion = "test",
+                nowMillis = { now++ },
+                spaceReservation = { spaceAvailable },
+            )
     }
 
     @After
@@ -71,103 +75,114 @@ class RoomDatabaseBackupManagerIntegrationTest {
     }
 
     @Test
-    fun `restore preserves scan history in selected and rollback backups`() = runBlocking {
-        val selected = snapshot("selected", "DUPLICATE")
-        insert(selected)
-        val output = ByteArrayOutputStream()
-        manager.createBackup(output)
+    fun `restore preserves scan history in selected and rollback backups`() =
+        runBlocking {
+            val selected = snapshot("selected", "DUPLICATE")
+            insert(selected)
+            val output = ByteArrayOutputStream()
+            manager.createBackup(output)
 
-        clear()
-        val replaced = snapshot("replaced", "NOT_FOUND")
-        insert(replaced)
-        val syncEngine = RoomSyncEngine(database, RoomSyncDomainStore(database))
-        syncEngine.initializeDevice("old-device")
-        syncEngine.recordLocalTransaction(listOf(replaced.works.first().toSyncUpsert()))
-        val preview = manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
-            as DatabaseBackupInspectResult.Valid
+            clear()
+            val replaced = snapshot("replaced", "NOT_FOUND")
+            insert(replaced)
+            val syncEngine = RoomSyncEngine(database, RoomSyncDomainStore(database))
+            syncEngine.initializeDevice("old-device")
+            syncEngine.recordLocalTransaction(listOf(replaced.works.first().toSyncUpsert()))
+            val preview =
+                manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
+                    as DatabaseBackupInspectResult.Valid
 
-        val restoreResult = manager.restoreBackup(preview.preview)
-        assertTrue(restoreResult.toString(), restoreResult is DatabaseRestoreResult.Success)
-        val result = restoreResult as DatabaseRestoreResult.Success
+            val restoreResult = manager.restoreBackup(preview.preview)
+            assertTrue(restoreResult.toString(), restoreResult is DatabaseRestoreResult.Success)
+            val result = restoreResult as DatabaseRestoreResult.Success
 
-        assertEquals(selected, readSnapshot())
-        val syncSettings = requireNotNull(database.syncDao().getSettings())
-        assertTrue(syncSettings.requiresReregistration)
-        assertEquals(null, syncSettings.deviceId)
-        assertTrue(database.syncDao().getPendingOperations(10).isEmpty())
-        val rollbackFile = File(backupDirectory, result.automaticBackupName)
-        assertTrue(rollbackFile.isFile)
-        val rollback = manager.inspectBackup(rollbackFile.inputStream())
-            as DatabaseBackupInspectResult.Valid
-        assertEquals(replaced, rollback.preview.snapshot)
-    }
-
-    @Test
-    fun `repeated failed restores keep only three verified rollback backups`() = runBlocking {
-        val current = snapshot("current", "DUPLICATE")
-        insert(current)
-        val invalid = DatabaseSnapshot(
-            works = emptyList(),
-            editions = current.editions,
-            copies = current.copies,
-        )
-        val preview = DatabaseBackupPreview(
-            metadata = DatabaseBackupMetadata(
-                formatVersion = 11,
-                databaseVersion = 10,
-                createdAt = 1,
-                appVersion = "test",
-                workCount = 0,
-                editionCount = 1,
-                copyCount = 1,
-            ),
-            snapshot = invalid,
-        )
-
-        repeat(6) {
-            assertTrue(manager.restoreBackup(preview) is DatabaseRestoreResult.Failure)
-            assertEquals(current, readSnapshot())
+            assertEquals(selected, readSnapshot())
+            val syncSettings = requireNotNull(database.syncDao().getSettings())
+            assertTrue(syncSettings.requiresReregistration)
+            assertEquals(null, syncSettings.deviceId)
+            assertTrue(database.syncDao().getPendingOperations(10).isEmpty())
+            val rollbackFile = File(backupDirectory, result.automaticBackupName)
+            assertTrue(rollbackFile.isFile)
+            val rollback =
+                manager.inspectBackup(rollbackFile.inputStream())
+                    as DatabaseBackupInspectResult.Valid
+            assertEquals(replaced, rollback.preview.snapshot)
         }
 
-        val backups = backupDirectory.listFiles()
-            .orEmpty()
-            .filter { it.name.endsWith(".ndcshelfbackup") }
-        assertEquals(3, backups.size)
-        backups.forEach { backup ->
-            assertTrue(manager.inspectBackup(backup.inputStream()) is DatabaseBackupInspectResult.Valid)
-        }
-        assertTrue(backupDirectory.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
-    }
-
     @Test
-    fun `failure before rollback creation prunes legacy overflow`() = runBlocking {
-        val current = snapshot("current", "DUPLICATE")
-        insert(current)
-        val output = ByteArrayOutputStream()
-        manager.createBackup(output)
-        val preview = manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
-            as DatabaseBackupInspectResult.Valid
-        backupDirectory.mkdirs()
-        repeat(5) { index ->
-            File(backupDirectory, "before-restore-legacy-$index.ndcshelfbackup").apply {
-                writeBytes(byteArrayOf(index.toByte()))
-                setLastModified(index.toLong())
+    fun `repeated failed restores keep only three verified rollback backups`() =
+        runBlocking {
+            val current = snapshot("current", "DUPLICATE")
+            insert(current)
+            val invalid =
+                DatabaseSnapshot(
+                    works = emptyList(),
+                    editions = current.editions,
+                    copies = current.copies,
+                )
+            val preview =
+                DatabaseBackupPreview(
+                    metadata =
+                        DatabaseBackupMetadata(
+                            formatVersion = 11,
+                            databaseVersion = 10,
+                            createdAt = 1,
+                            appVersion = "test",
+                            workCount = 0,
+                            editionCount = 1,
+                            copyCount = 1,
+                        ),
+                    snapshot = invalid,
+                )
+
+            repeat(6) {
+                assertTrue(manager.restoreBackup(preview) is DatabaseRestoreResult.Failure)
+                assertEquals(current, readSnapshot())
             }
+
+            val backups =
+                backupDirectory
+                    .listFiles()
+                    .orEmpty()
+                    .filter { it.name.endsWith(".ndcshelfbackup") }
+            assertEquals(3, backups.size)
+            backups.forEach { backup ->
+                assertTrue(manager.inspectBackup(backup.inputStream()) is DatabaseBackupInspectResult.Valid)
+            }
+            assertTrue(backupDirectory.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
         }
-        spaceAvailable = false
 
-        val result = manager.restoreBackup(preview.preview)
+    @Test
+    fun `failure before rollback creation prunes legacy overflow`() =
+        runBlocking {
+            val current = snapshot("current", "DUPLICATE")
+            insert(current)
+            val output = ByteArrayOutputStream()
+            manager.createBackup(output)
+            val preview =
+                manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
+                    as DatabaseBackupInspectResult.Valid
+            backupDirectory.mkdirs()
+            repeat(5) { index ->
+                File(backupDirectory, "before-restore-legacy-$index.ndcshelfbackup").apply {
+                    writeBytes(byteArrayOf(index.toByte()))
+                    setLastModified(index.toLong())
+                }
+            }
+            spaceAvailable = false
 
-        assertEquals(
-            DatabaseRestoreResult.Failure(DatabaseBackupFailure.INSUFFICIENT_SPACE),
-            result,
-        )
-        assertEquals(current, readSnapshot())
-        assertEquals(
-            3,
-            backupDirectory.listFiles().orEmpty().count { it.name.endsWith(".ndcshelfbackup") },
-        )
-    }
+            val result = manager.restoreBackup(preview.preview)
+
+            assertEquals(
+                DatabaseRestoreResult.Failure(DatabaseBackupFailure.INSUFFICIENT_SPACE),
+                result,
+            )
+            assertEquals(current, readSnapshot())
+            assertEquals(
+                3,
+                backupDirectory.listFiles().orEmpty().count { it.name.endsWith(".ndcshelfbackup") },
+            )
+        }
 
     private suspend fun insert(snapshot: DatabaseSnapshot) {
         val dao = database.libraryDao()
@@ -179,6 +194,7 @@ class RoomDatabaseBackupManagerIntegrationTest {
         database.seriesWatchDao().upsertCandidates(snapshot.seriesReleaseCandidates)
         dao.upsertEditions(snapshot.editions)
         dao.upsertCopies(snapshot.copies)
+        database.readingSessionDao().upsertAll(snapshot.readingSessions)
         dao.upsertScanSessions(snapshot.scanSessions)
         dao.upsertScanAttempts(snapshot.scanAttempts)
     }
@@ -187,6 +203,7 @@ class RoomDatabaseBackupManagerIntegrationTest {
         val dao = database.libraryDao()
         dao.deleteAllScanAttempts()
         dao.deleteAllScanSessions()
+        database.readingSessionDao().deleteAll()
         dao.deleteAllCopies()
         database.seriesWatchDao().deleteAllCandidates()
         database.seriesWatchDao().deleteAllWatches()
@@ -210,82 +227,114 @@ class RoomDatabaseBackupManagerIntegrationTest {
             series = database.seriesDao().getAllSeries(),
             seriesWatches = database.seriesWatchDao().getAllWatches(),
             seriesReleaseCandidates = database.seriesWatchDao().getAllCandidates(),
+            readingSessions = database.readingSessionDao().getAll(),
         )
     }
 
-    private fun snapshot(prefix: String, outcome: String) = DatabaseSnapshot(
-        works = listOf(
-            BookWorkEntity("$prefix-work", "$prefix-title", "$prefix-author"),
-            BookWorkEntity("$prefix-work-alt", "$prefix-title 文庫版", "$prefix-author"),
-        ),
-        editions = listOf(
-            BookEditionEntity(
-                id = "$prefix-edition",
-                workId = "$prefix-work",
-                isbn13 = "9784101010014",
-                publisher = null,
-                publishedYear = null,
-                coverUrl = null,
-                ndcCode = null,
-                ndcEdition = null,
-                classificationSource = "UNKNOWN",
+    private fun snapshot(
+        prefix: String,
+        outcome: String,
+    ) = DatabaseSnapshot(
+        works =
+            listOf(
+                BookWorkEntity("$prefix-work", "$prefix-title", "$prefix-author"),
+                BookWorkEntity("$prefix-work-alt", "$prefix-title 文庫版", "$prefix-author"),
             ),
-        ),
-        copies = listOf(
-            OwnedCopyEntity(
-                id = "$prefix-copy",
-                editionId = "$prefix-edition",
-                mediaType = "PHYSICAL",
-                location = "未設定",
-                readingStatus = "UNREAD",
-                addedAt = 1,
+        editions =
+            listOf(
+                BookEditionEntity(
+                    id = "$prefix-edition",
+                    workId = "$prefix-work",
+                    isbn13 = "9784101010014",
+                    publisher = null,
+                    publishedYear = null,
+                    coverUrl = null,
+                    ndcCode = null,
+                    ndcEdition = null,
+                    classificationSource = "UNKNOWN",
+                ),
             ),
-        ),
+        copies =
+            listOf(
+                OwnedCopyEntity(
+                    id = "$prefix-copy",
+                    editionId = "$prefix-edition",
+                    mediaType = "PHYSICAL",
+                    location = "未設定",
+                    readingStatus = "UNREAD",
+                    addedAt = 1,
+                ),
+            ),
         scanSessions = listOf(ScanSessionEntity("$prefix-session", 10, 30)),
-        scanAttempts = listOf(
-            ScanAttemptEntity(
-                id = "$prefix-attempt",
-                sessionId = "$prefix-session",
-                isbn = "9784101010014",
-                outcome = outcome,
-                copyId = null,
-                copySnapshot = null,
-                attemptedAt = 20,
-                undoneAt = null,
+        scanAttempts =
+            listOf(
+                ScanAttemptEntity(
+                    id = "$prefix-attempt",
+                    sessionId = "$prefix-session",
+                    isbn = "9784101010014",
+                    outcome = outcome,
+                    copyId = null,
+                    copySnapshot = null,
+                    attemptedAt = 20,
+                    undoneAt = null,
+                ),
             ),
-        ),
-        workGroups = listOf(
-            WorkGroupEntity("$prefix-group", "$prefix-title", "$prefix-author", true, 1, 2),
-        ),
-        workGroupMemberships = listOf(
-            WorkGroupMembershipEntity("$prefix-group-member-a", "$prefix-group", "$prefix-work", 1),
-            WorkGroupMembershipEntity(
-                "$prefix-group-member-b",
-                "$prefix-group",
-                "$prefix-work-alt",
-                1,
+        workGroups =
+            listOf(
+                WorkGroupEntity("$prefix-group", "$prefix-title", "$prefix-author", true, 1, 2),
             ),
-        ),
+        workGroupMemberships =
+            listOf(
+                WorkGroupMembershipEntity("$prefix-group-member-a", "$prefix-group", "$prefix-work", 1),
+                WorkGroupMembershipEntity(
+                    "$prefix-group-member-b",
+                    "$prefix-group",
+                    "$prefix-work-alt",
+                    1,
+                ),
+            ),
         series = listOf(SeriesEntity("$prefix-series", "$prefix-series-title", 1, 2)),
-        seriesWatches = listOf(
-            SeriesWatchEntity(
-                "$prefix-series", "$prefix-series-title", true, 1, 2, 3, 3,
+        seriesWatches =
+            listOf(
+                SeriesWatchEntity(
+                    "$prefix-series",
+                    "$prefix-series-title",
+                    true,
+                    1,
+                    2,
+                    3,
+                    3,
+                ),
             ),
-        ),
-        seriesReleaseCandidates = listOf(
-            SeriesReleaseCandidateEntity(
-                id = "$prefix-candidate",
-                seriesId = "$prefix-series",
-                sourceRecordId = "$prefix-ndl-record",
-                title = "$prefix-series-title 2",
-                primaryAuthor = "$prefix-author",
-                isbn13 = null,
-                publisher = null,
-                publishedDate = "2026",
-                firstSeenAt = 3,
-                lastSeenAt = 4,
-                notifiedAt = 4,
+        seriesReleaseCandidates =
+            listOf(
+                SeriesReleaseCandidateEntity(
+                    id = "$prefix-candidate",
+                    seriesId = "$prefix-series",
+                    sourceRecordId = "$prefix-ndl-record",
+                    title = "$prefix-series-title 2",
+                    primaryAuthor = "$prefix-author",
+                    isbn13 = null,
+                    publisher = null,
+                    publishedDate = "2026",
+                    firstSeenAt = 3,
+                    lastSeenAt = 4,
+                    notifiedAt = 4,
+                ),
             ),
-        ),
+        readingSessions =
+            listOf(
+                ReadingSessionEntity(
+                    id = "$prefix-reading-session",
+                    copyId = "$prefix-copy",
+                    status = "FINISHED",
+                    startedDay = "2026-07",
+                    finishedDay = "2026-07-29",
+                    rating = 4,
+                    note = "$prefix-note",
+                    createdAt = 5,
+                    updatedAt = 6,
+                ),
+            ),
     )
 }
