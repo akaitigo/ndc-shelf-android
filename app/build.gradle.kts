@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.about.libraries)
     alias(libs.plugins.cyclonedx)
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -120,6 +121,9 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.rule)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.androidx.navigation.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
