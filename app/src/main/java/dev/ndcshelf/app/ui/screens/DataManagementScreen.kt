@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.Dangerous
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.SettingsBackupRestore
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -50,6 +51,9 @@ import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportValidationError
+import dev.ndcshelf.app.domain.sync.SyncEngineStatus
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun DataManagementScreen(
@@ -57,6 +61,7 @@ fun DataManagementScreen(
     exportInProgress: Boolean,
     importState: LibraryImportUiState,
     databaseBackupState: DatabaseBackupUiState,
+    syncStatus: SyncEngineStatus = SyncEngineStatus(),
     onExportJson: () -> Unit,
     onExportCsv: () -> Unit,
     onImportJson: () -> Unit,
@@ -117,6 +122,8 @@ fun DataManagementScreen(
                 )
             }
         }
+        item { SectionTitle(stringResource(R.string.data_management_sync_section)) }
+        item { SyncStatusCard(syncStatus) }
         item { SectionTitle(stringResource(R.string.data_management_transfer_section)) }
         item {
             DataOperationCard(
@@ -270,6 +277,48 @@ fun DataManagementScreen(
             onConfirm = onConfirmImport,
             onDismiss = onDismissImport,
         )
+    }
+}
+
+@Composable
+private fun SyncStatusCard(status: SyncEngineStatus) {
+    val lastSuccessful = remember(status.lastSuccessfulAt) {
+        status.lastSuccessfulAt?.let { timestamp ->
+            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(timestamp))
+        }
+    }
+    val detail = when {
+        status.requiresReregistration -> stringResource(R.string.sync_status_requires_reregistration)
+        !status.enabled -> stringResource(R.string.sync_status_off)
+        else -> stringResource(
+            R.string.sync_status_on,
+            status.pendingOperationCount,
+            status.unresolvedConflictCount,
+            lastSuccessful ?: stringResource(R.string.sync_status_never),
+        )
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(SYNC_STATUS_TAG),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        shape = RoundedCornerShape(22.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(Icons.Rounded.Sync, contentDescription = null)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    stringResource(R.string.sync_status_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(detail, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
 }
 
@@ -570,5 +619,6 @@ internal const val EXPORT_CSV_TAG = "data_export_csv"
 internal const val IMPORT_JSON_TAG = "data_import_json"
 internal const val IMPORT_CSV_TAG = "data_import_csv"
 internal const val BACKUP_TAG = "data_database_backup"
+internal const val SYNC_STATUS_TAG = "data_sync_status"
 internal const val RESTORE_TAG = "data_database_restore"
 internal const val DATA_LIST_TAG = "data_management_list"

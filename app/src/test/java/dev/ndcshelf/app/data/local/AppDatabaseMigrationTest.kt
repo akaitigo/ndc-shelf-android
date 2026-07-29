@@ -526,6 +526,52 @@ class AppDatabaseMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun version11To12AddsDisabledEmptySyncStateWithoutChangingDomainData() {
+        migrationHelper.createDatabase(V11_DATABASE, 11).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', '同期前の本', '匿名著者')")
+            close()
+        }
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            V11_DATABASE,
+            APP_DATABASE_VERSION,
+            true,
+            *AppDatabase.MIGRATIONS.toTypedArray(),
+        )
+
+        migrated.query("SELECT title FROM book_works WHERE id = 'work'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("同期前の本", cursor.getString(0))
+        }
+        migrated.query(
+            "SELECT enabled, deviceId, nextCounter, lastSuccessfulAt, requiresReregistration " +
+                "FROM sync_settings WHERE id = 1",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+            assertTrue(cursor.isNull(1))
+            assertEquals(0L, cursor.getLong(2))
+            assertTrue(cursor.isNull(3))
+            assertEquals(0, cursor.getInt(4))
+        }
+        listOf(
+            "sync_operations",
+            "sync_field_states",
+            "sync_tombstones",
+            "sync_cursors",
+            "sync_acknowledgements",
+            "sync_conflicts",
+            "sync_unresolved_dependencies",
+        ).forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+        }
+        migrated.close()
+    }
+
     private fun androidx.sqlite.db.SupportSQLiteDatabase.queryNames(
         sql: String,
         column: String,
@@ -586,6 +632,7 @@ class AppDatabaseMigrationTest {
         const val V8_DATABASE = "migration-v8"
         const val V9_DATABASE = "migration-v9"
         const val V10_DATABASE = "migration-v10"
+        const val V11_DATABASE = "migration-v11"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

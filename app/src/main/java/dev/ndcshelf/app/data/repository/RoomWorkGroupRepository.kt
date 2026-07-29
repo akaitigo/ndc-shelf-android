@@ -20,6 +20,10 @@ import dev.ndcshelf.app.domain.model.WorkVariantSuggestion
 import dev.ndcshelf.app.domain.model.WorkVariantSuggestionConfidence
 import dev.ndcshelf.app.domain.repository.WorkGroupMutationResult
 import dev.ndcshelf.app.domain.repository.WorkGroupRepository
+import dev.ndcshelf.app.domain.sync.SyncMutation
+import dev.ndcshelf.app.domain.sync.SyncMutationJournal
+import dev.ndcshelf.app.data.sync.syncDelete
+import dev.ndcshelf.app.data.sync.toSyncUpsert
 import kotlinx.coroutines.CancellationException
 import java.text.Normalizer
 import java.util.Locale
@@ -29,6 +33,7 @@ class RoomWorkGroupRepository(
     private val database: AppDatabase,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val syncJournal: SyncMutationJournal = SyncMutationJournal.Disabled,
 ) : WorkGroupRepository {
     private val groupDao = database.workGroupDao()
 
@@ -80,28 +85,31 @@ class RoomWorkGroupRepository(
                 return@mutate WorkGroupMutationResult.Conflict
             }
             val now = nowMillis()
+            val syncMutations = mutableListOf<SyncMutation>()
             val group = when {
                 sourceMembership != null -> groupDao.findGroupById(sourceMembership.groupId)
                 targetMembership != null -> groupDao.findGroupById(targetMembership.groupId)
                 else -> null
             }
             val groupId = group?.id ?: idFactory().also { groupId ->
-                groupDao.insertGroup(
-                    WorkGroupEntity(
+                val created = WorkGroupEntity(
                         id = groupId,
                         title = source.title,
                         primaryAuthor = source.primaryAuthor,
                         seriesSubstitutionEnabled = seriesSubstitutionEnabled,
                         createdAt = now,
                         updatedAt = now,
-                    ),
-                )
+                    )
+                groupDao.insertGroup(created)
+                syncMutations += created.toSyncUpsert()
             }
             if (group != null) {
                 groupDao.updateSeriesSubstitution(groupId, seriesSubstitutionEnabled, now)
+                syncMutations += requireNotNull(groupDao.findGroupById(groupId)).toSyncUpsert()
             }
-            if (sourceMembership == null) insertMembership(groupId, sourceWorkId, now)
-            if (targetMembership == null) insertMembership(groupId, targetWorkId, now)
+            if (sourceMembership == null) syncMutations += insertMembership(groupId, sourceWorkId, now).toSyncUpsert()
+            if (targetMembership == null) syncMutations += insertMembership(groupId, targetWorkId, now).toSyncUpsert()
+            syncJournal.record(syncMutations)
             WorkGroupMutationResult.Linked(groupId)
         }
     }
@@ -112,9 +120,16 @@ class RoomWorkGroupRepository(
         if (groupDao.deleteMembership(membershipId) != 1) {
             return@mutate WorkGroupMutationResult.Conflict
         }
-        if (groupDao.getMembershipsForGroup(membership.groupId).size < MIN_GROUP_SIZE) {
+        val mutations = mutableListOf<SyncMutation>(syncDelete("workGroupMembership", membershipId))
+        val remainingMemberships = groupDao.getMembershipsForGroup(membership.groupId)
+        if (remainingMemberships.size < MIN_GROUP_SIZE) {
             groupDao.deleteGroup(membership.groupId)
+            mutations += remainingMemberships.map { item ->
+                syncDelete("workGroupMembership", item.id)
+            }
+            mutations += syncDelete("workGroup", membership.groupId)
         }
+        syncJournal.record(mutations)
         WorkGroupMutationResult.Unlinked
     }
 
@@ -123,6 +138,7 @@ class RoomWorkGroupRepository(
         enabled: Boolean,
     ): WorkGroupMutationResult = mutate {
         if (groupDao.updateSeriesSubstitution(groupId, enabled, nowMillis()) == 1) {
+            syncJournal.record(listOf(requireNotNull(groupDao.findGroupById(groupId)).toSyncUpsert()))
             WorkGroupMutationResult.Updated
         } else {
             WorkGroupMutationResult.Invalid
@@ -140,15 +156,15 @@ class RoomWorkGroupRepository(
             WorkGroupMutationResult.Failure
         }
 
-    private suspend fun insertMembership(groupId: String, workId: String, now: Long) {
-        groupDao.insertMembership(
-            WorkGroupMembershipEntity(
+    private suspend fun insertMembership(groupId: String, workId: String, now: Long): WorkGroupMembershipEntity {
+        val membership = WorkGroupMembershipEntity(
                 id = idFactory(),
                 groupId = groupId,
                 workId = workId,
                 createdAt = now,
-            ),
-        )
+            )
+        groupDao.insertMembership(membership)
+        return membership
     }
 
     private suspend fun loadSnapshot(): Snapshot {

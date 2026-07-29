@@ -228,6 +228,12 @@
     <string name="data_management_title">データ管理</string>
     <string name="data_management_description">蔵書を別の場所へ移す、表計算ソフトで編集する、障害に備えて完全退避する操作をまとめています。</string>
     <string name="data_management_privacy_notice">ここで扱うファイルにはタイトル、ISBN、読書状態、置き場所などの個人データが含まれます。完全バックアップには購入予定も含まれます。ファイル自体は暗号化されないため、端末や保存先の暗号化機能で保護してください。</string>
+    <string name="data_management_sync_section">任意同期</string>
+    <string name="sync_status_title">同期状態</string>
+    <string name="sync_status_off">同期はオフです。蔵書は端末内だけで利用できます。</string>
+    <string name="sync_status_on">送信待ち: %1$d件\n未解決の競合: %2$d件\n最終成功: %3$s</string>
+    <string name="sync_status_never">まだありません</string>
+    <string name="sync_status_requires_reregistration">完全バックアップから復元したため同期は停止しています。再登録が必要です。</string>
     <string name="data_management_transfer_section">共有・移行</string>
     <string name="data_management_backup_section">完全バックアップ</string>
     <string name="data_management_destructive_section">現在のデータを置き換える操作</string>

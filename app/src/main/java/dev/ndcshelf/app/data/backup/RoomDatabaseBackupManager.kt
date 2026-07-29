@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.room.withTransaction
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.APP_DATABASE_VERSION
+import dev.ndcshelf.app.data.sync.resetSyncStateAfterDomainRestore
 import dev.ndcshelf.app.domain.backup.BackupCodecException
 import dev.ndcshelf.app.domain.backup.DatabaseBackupCodec
 import dev.ndcshelf.app.domain.backup.DatabaseBackupCreateResult
@@ -124,6 +125,7 @@ class RoomDatabaseBackupManager(
                 dao.upsertCopies(preview.snapshot.copies)
                 dao.upsertScanSessions(preview.snapshot.scanSessions)
                 dao.upsertScanAttempts(preview.snapshot.scanAttempts)
+                resetSyncStateAfterDomainRestore(database.syncDao())
 
                 check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
             }

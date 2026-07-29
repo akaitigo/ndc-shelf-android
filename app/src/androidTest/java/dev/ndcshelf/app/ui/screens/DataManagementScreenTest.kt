@@ -63,6 +63,15 @@ class DataManagementScreenTest {
         composeRule.onNodeWithTag(EXPORT_JSON_TAG, useUnmergedTree = true).assertIsNotEnabled()
     }
 
+    @Test
+    fun syncStatus_defaultsToOfflineWithoutShowingLibraryData() {
+        setContent(bookCount = 3)
+
+        composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(hasTestTag(SYNC_STATUS_TAG))
+        composeRule.onNodeWithTag(SYNC_STATUS_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText("同期はオフです。蔵書は端末内だけで利用できます。").assertIsDisplayed()
+    }
+
     private fun setContent(
         bookCount: Int,
         exportInProgress: Boolean = false,

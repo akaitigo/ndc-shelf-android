@@ -15,6 +15,8 @@ import dev.ndcshelf.app.data.local.toSQLiteQuery
 import dev.ndcshelf.app.data.remote.BookMetadataFailure
 import dev.ndcshelf.app.data.remote.BookMetadataLookupResult
 import dev.ndcshelf.app.data.remote.BookMetadataService
+import dev.ndcshelf.app.data.sync.syncDelete
+import dev.ndcshelf.app.data.sync.toSyncUpsert
 import dev.ndcshelf.app.domain.importer.ImportApplyResult
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportPreviewResult
@@ -60,6 +62,8 @@ import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
+import dev.ndcshelf.app.domain.sync.SyncMutation
+import dev.ndcshelf.app.domain.sync.SyncMutationJournal
 import dev.ndcshelf.app.scanner.Isbn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -72,6 +76,7 @@ class DefaultLibraryRepository(
     private val metadataService: BookMetadataService,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val syncJournal: SyncMutationJournal = SyncMutationJournal.Disabled,
 ) : LibraryRepository {
     private val dao = database.libraryDao()
     private val bookEditValidator = BookEditValidator()
@@ -231,20 +236,29 @@ class DefaultLibraryRepository(
             attempt to book
         }
         val now = nowMillis()
+        val syncMutations = mutableListOf<SyncMutation>()
         books.forEach { (attempt, book) ->
             check(dao.deleteCopyById(book.copyId) == 1)
+            syncMutations += syncDelete("ownedCopy", book.copyId)
             check(dao.markScanAttemptUndone(attempt.id, now) == 1)
             if (dao.countCopiesForEdition(book.editionId) == 0 &&
                 dao.findWishlistByEditionId(book.editionId) == null
             ) {
                 check(dao.deleteEditionById(book.editionId) == 1)
+                syncMutations += syncDelete("edition", book.editionId)
                 if (dao.countEditionsForWork(book.workId) == 0) {
                     if (database.workGroupDao().findMembershipByWorkId(book.workId) == null) {
+                        val seriesMemberships = database.seriesDao().findMembershipsForWork(book.workId)
                         dao.deleteWorkById(book.workId)
+                        syncMutations += seriesMemberships.map { membership ->
+                            syncDelete("seriesMembership", membership.membershipId)
+                        }
+                        syncMutations += syncDelete("work", book.workId)
                     }
                 }
             }
         }
+        syncJournal.record(syncMutations)
         return ScanUndoResult.Undone(books.size)
     }
 
@@ -301,15 +315,12 @@ class DefaultLibraryRepository(
 
         try {
             database.withTransaction {
-                dao.insertWork(
-                    BookWorkEntity(
+                val work = BookWorkEntity(
                         id = workId,
                         title = metadata.title,
                         primaryAuthor = author,
-                    ),
-                )
-                dao.insertEdition(
-                    BookEditionEntity(
+                    )
+                val edition = BookEditionEntity(
                         id = editionId,
                         workId = workId,
                         isbn13 = isbn13,
@@ -319,10 +330,8 @@ class DefaultLibraryRepository(
                         ndcCode = metadata.ndcCode,
                         ndcEdition = metadata.ndcEdition,
                         classificationSource = source.name,
-                    ),
-                )
-                dao.insertCopy(
-                    OwnedCopyEntity(
+                    )
+                val copy = OwnedCopyEntity(
                         id = copyId,
                         editionId = editionId,
                         mediaType = MediaType.PHYSICAL.name,
@@ -330,8 +339,11 @@ class DefaultLibraryRepository(
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
                         copyLabel = "1冊目",
-                    ),
-                )
+                    )
+                dao.insertWork(work)
+                dao.insertEdition(edition)
+                dao.insertCopy(copy)
+                syncJournal.record(listOf(work.toSyncUpsert(), edition.toSyncUpsert(), copy.toSyncUpsert()))
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -390,11 +402,8 @@ class DefaultLibraryRepository(
                 } else {
                     ClassificationSource.MANUAL
                 }
-                dao.insertWork(
-                    BookWorkEntity(workId, validated.title, validated.primaryAuthor),
-                )
-                dao.insertEdition(
-                    BookEditionEntity(
+                val work = BookWorkEntity(workId, validated.title, validated.primaryAuthor)
+                val edition = BookEditionEntity(
                         id = editionId,
                         workId = workId,
                         isbn13 = validated.isbn13,
@@ -405,10 +414,8 @@ class DefaultLibraryRepository(
                         ndcEdition = validated.ndcEdition,
                         classificationSource = classificationSource.name,
                         bibliographicSource = BibliographicSource.MANUAL.name,
-                    ),
-                )
-                dao.insertCopy(
-                    OwnedCopyEntity(
+                    )
+                val copy = OwnedCopyEntity(
                         id = copyId,
                         editionId = editionId,
                         mediaType = validated.mediaType.name,
@@ -416,8 +423,11 @@ class DefaultLibraryRepository(
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
                         copyLabel = "1冊目",
-                    ),
-                )
+                    )
+                dao.insertWork(work)
+                dao.insertEdition(edition)
+                dao.insertCopy(copy)
+                syncJournal.record(listOf(work.toSyncUpsert(), edition.toSyncUpsert(), copy.toSyncUpsert()))
                 ManualBookResult.Added(
                     LibraryBook(
                         copyId = copyId,
@@ -554,6 +564,17 @@ class DefaultLibraryRepository(
             ) {
                 return@withTransaction ManualReconciliationApplyResult.Conflict
             }
+            val trackedWorkIds = setOfNotNull(current.workId, isbnEdition?.workId)
+            val trackedEditionIds = setOfNotNull(current.editionId, isbnEdition?.id)
+            val trackedCopyIds = dao.getAllCopies()
+                .filter { it.editionId in trackedEditionIds }
+                .mapTo(linkedSetOf(), OwnedCopyEntity::id)
+            val groupsBefore = database.workGroupDao().getAllGroups().associateBy { it.id }
+            val membershipsBefore = database.workGroupDao().getAllMemberships().associateBy { it.id }
+            val seriesMembershipsBefore = database.seriesDao().getAllMemberships().associateBy { it.id }
+            val wishlistBefore = trackedEditionIds.associateWith { editionId ->
+                dao.findWishlistByEditionId(editionId)
+            }
             val targetId = isbnEdition?.id
             if (targetId != null) {
                 val target = isbnEdition
@@ -602,6 +623,38 @@ class DefaultLibraryRepository(
                     ) == 1,
                 )
             }
+            val workMutations = trackedWorkIds.map { workId ->
+                dao.findWorkById(workId)?.toSyncUpsert() ?: syncDelete("work", workId)
+            }
+            val editionMutations = trackedEditionIds.map { editionId ->
+                dao.findEditionById(editionId)?.toSyncUpsert() ?: syncDelete("edition", editionId)
+            }
+            val copyMutations = trackedCopyIds.map { copyId ->
+                dao.findCopyById(copyId)?.toSyncUpsert() ?: syncDelete("ownedCopy", copyId)
+            }
+            val wishlistMutations = wishlistBefore.mapNotNull { (editionId, before) ->
+                if (before != null && dao.findWishlistByEditionId(editionId) == null) {
+                    syncDelete("wishlistItem", editionId)
+                } else null
+            }
+            val groupsAfter = database.workGroupDao().getAllGroups().associateBy { it.id }
+            val membershipsAfter = database.workGroupDao().getAllMemberships().associateBy { it.id }
+            val seriesMembershipsAfter = database.seriesDao().getAllMemberships().associateBy { it.id }
+            val groupMutations = groupsBefore.keys.union(groupsAfter.keys).map { id ->
+                groupsAfter[id]?.toSyncUpsert() ?: syncDelete("workGroup", id)
+            }
+            val membershipMutations = membershipsBefore.keys.union(membershipsAfter.keys).map { id ->
+                membershipsAfter[id]?.toSyncUpsert() ?: syncDelete("workGroupMembership", id)
+            }
+            val seriesMembershipMutations = seriesMembershipsBefore.keys.union(seriesMembershipsAfter.keys)
+                .map { id ->
+                    seriesMembershipsAfter[id]?.toSyncUpsert() ?: syncDelete("seriesMembership", id)
+                }
+            syncJournal.record(
+                copyMutations + membershipMutations + seriesMembershipMutations +
+                    editionMutations + groupMutations +
+                    workMutations + wishlistMutations,
+            )
             ManualReconciliationApplyResult.Applied
         }
     } catch (cancellation: CancellationException) {
@@ -627,8 +680,7 @@ class DefaultLibraryRepository(
                 }
                 val copyId = idFactory()
                 val addedAt = nowMillis()
-                dao.insertCopy(
-                    OwnedCopyEntity(
+                val copy = OwnedCopyEntity(
                         id = copyId,
                         editionId = existing.editionId,
                         mediaType = MediaType.PHYSICAL.name,
@@ -636,8 +688,9 @@ class DefaultLibraryRepository(
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
                         copyLabel = normalizedLabel,
-                    ),
-                )
+                    )
+                dao.insertCopy(copy)
+                syncJournal.record(listOf(copy.toSyncUpsert()))
                 AddBookResult.Added(
                     existing.toDomain().copy(
                         copyId = copyId,
@@ -709,14 +762,19 @@ class DefaultLibraryRepository(
     ): BookstoreChangeResult = try {
         database.withTransaction {
             val existingEdition = dao.findEditionByIsbn(book.isbn13)
+            val syncMutations = mutableListOf<SyncMutation>()
             val editionId: String
             val workId: String
             if (existingEdition == null) {
                 if (book.purchaseStatus != null || book.ownedCopyCount != 0) {
                     return@withTransaction BookstoreChangeResult.Conflict
                 }
-                dao.insertWork(book.toWorkEntity())
-                dao.insertEdition(book.toEditionEntity())
+                val work = book.toWorkEntity()
+                val edition = book.toEditionEntity()
+                dao.insertWork(work)
+                dao.insertEdition(edition)
+                syncMutations += work.toSyncUpsert()
+                syncMutations += edition.toSyncUpsert()
                 editionId = book.editionId
                 workId = book.workId
             } else {
@@ -744,17 +802,16 @@ class DefaultLibraryRepository(
             }
             if (status != null) {
                 val updatedAt = maxOf(now, (previous?.updatedAt ?: -1L) + 1L)
-                dao.upsertWishlistItem(
-                    WishlistItemEntity(
+                val wishlist = WishlistItemEntity(
                         editionId = editionId,
                         status = status.name,
                         createdAt = previous?.createdAt ?: now,
                         updatedAt = updatedAt,
-                    ),
-                )
+                    )
+                dao.upsertWishlistItem(wishlist)
+                syncMutations += wishlist.toSyncUpsert()
             } else {
-                dao.insertCopy(
-                    OwnedCopyEntity(
+                val copy = OwnedCopyEntity(
                         id = idFactory(),
                         editionId = editionId,
                         mediaType = MediaType.PHYSICAL.name,
@@ -762,12 +819,15 @@ class DefaultLibraryRepository(
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = now,
                         copyLabel = "${currentCopyCount + 1}冊目",
-                    ),
-                )
+                    )
+                dao.insertCopy(copy)
                 dao.deleteWishlistByEditionId(editionId)
+                syncMutations += copy.toSyncUpsert()
+                if (previous != null) syncMutations += syncDelete("wishlistItem", editionId)
             }
             val local = findLocalBookstoreBook(book.isbn13)
                 ?: return@withTransaction BookstoreChangeResult.Conflict
+            syncJournal.record(syncMutations)
             BookstoreChangeResult.Updated(
                 local.copy(workId = workId, editionId = editionId),
             )
@@ -857,6 +917,14 @@ class DefaultLibraryRepository(
                     readingStatus = edit.readingStatus.name,
                 )
                 val current = checkNotNull(dao.findOwnedByCopyId(copyId)).toDomain()
+                val reorderedCopies = setOfNotNull(previous.locationTierId, current.locationTierId)
+                    .flatMap { tierId -> database.locationDao().getOrderedCopies(tierId) }
+                    .distinctBy(OwnedCopyEntity::id)
+                    .map { it.toSyncUpsert() }
+                syncJournal.record(
+                    listOf(current.toWorkEntity().toSyncUpsert(), current.toEditionEntity().toSyncUpsert()) +
+                        reorderedCopies.ifEmpty { listOf(current.toCopyEntity().toSyncUpsert()) },
+                )
                 UpdateBookResult.Updated(previous = previous, current = current)
             }
         } catch (cancellation: CancellationException) {
@@ -898,6 +966,7 @@ class DefaultLibraryRepository(
                     copyLabel = previous.copyLabel,
                     readingStatus = previous.readingStatus.name,
                 )
+                syncJournal.record(previous.toSyncMutations())
                 true
             }
         } catch (cancellation: CancellationException) {
@@ -928,6 +997,9 @@ class DefaultLibraryRepository(
                 copyId,
                 FractionalOrderKey.between(left, right, copyId),
             ) == 1)
+            syncJournal.record(
+                database.locationDao().getOrderedCopies(tierId).map { it.toSyncUpsert() },
+            )
             ShelfMoveResult.Moved
         }
     } catch (cancellation: CancellationException) {
@@ -940,17 +1012,25 @@ class DefaultLibraryRepository(
         database.withTransaction {
             val book = dao.findOwnedByCopyId(copyId)?.toDomain()
                 ?: return@withTransaction DeleteBookResult.NotFound
+            val syncMutations = mutableListOf<SyncMutation>(syncDelete("ownedCopy", copyId))
+            val seriesMemberships = database.seriesDao().findMembershipsForWork(book.workId)
             check(dao.deleteCopyById(copyId) == 1)
             if (dao.countCopiesForEdition(book.editionId) == 0 &&
                 dao.findWishlistByEditionId(book.editionId) == null
             ) {
                 check(dao.deleteEditionById(book.editionId) == 1)
+                syncMutations += syncDelete("edition", book.editionId)
             }
             if (dao.countEditionsForWork(book.workId) == 0) {
                 if (database.workGroupDao().findMembershipByWorkId(book.workId) == null) {
                     check(dao.deleteWorkById(book.workId) == 1)
+                    syncMutations += seriesMemberships.map { membership ->
+                        syncDelete("seriesMembership", membership.membershipId)
+                    }
+                    syncMutations += syncDelete("work", book.workId)
                 }
             }
+            syncJournal.record(syncMutations)
             DeleteBookResult.Deleted(book)
         }
     } catch (cancellation: CancellationException) {
@@ -961,27 +1041,49 @@ class DefaultLibraryRepository(
 
     override suspend fun restoreDeletedBook(book: LibraryBook): RestoreDeletedBookResult = try {
         database.withTransaction {
-            val expectedWork = book.toWorkEntity()
-            val expectedEdition = book.toEditionEntity()
-            val expectedCopy = book.toCopyEntity()
             if (dao.findCopyById(book.copyId) != null) {
                 return@withTransaction RestoreDeletedBookResult.Conflict
             }
+            val originalWork = book.toWorkEntity()
             val existingWork = dao.findWorkById(book.workId)
-            if (existingWork != null && existingWork != expectedWork) {
+            if (existingWork != null && existingWork != originalWork) {
                 return@withTransaction RestoreDeletedBookResult.Conflict
             }
             val existingEdition = dao.findEditionById(book.editionId)
             val isbnEdition = book.isbn13?.let { dao.findEditionByIsbn(it) }
-            if (existingEdition != null && existingEdition != expectedEdition) {
+            if (existingEdition != null && existingEdition != book.toEditionEntity()) {
                 return@withTransaction RestoreDeletedBookResult.Conflict
             }
             if (isbnEdition != null && isbnEdition.id != book.editionId) {
                 return@withTransaction RestoreDeletedBookResult.Conflict
             }
+            val restoredWorkId = if (
+                existingWork == null && syncJournal.hasTombstone("work", book.workId)
+            ) idFactory() else book.workId
+            val restoredEditionId = if (
+                existingEdition == null && syncJournal.hasTombstone("edition", book.editionId)
+            ) idFactory() else book.editionId
+            val restoredCopyId = if (
+                syncJournal.hasTombstone("ownedCopy", book.copyId)
+            ) idFactory() else book.copyId
+            val restored = book.copy(
+                workId = restoredWorkId,
+                editionId = restoredEditionId,
+                copyId = restoredCopyId,
+            )
+            val expectedWork = restored.toWorkEntity()
+            val expectedEdition = restored.toEditionEntity()
+            val expectedCopy = restored.toCopyEntity()
             if (existingWork == null) dao.insertWork(expectedWork)
             if (existingEdition == null) dao.insertEdition(expectedEdition)
             dao.insertCopy(expectedCopy)
+            syncJournal.record(
+                listOfNotNull(
+                    expectedWork.toSyncUpsert().takeIf { existingWork == null },
+                    expectedEdition.toSyncUpsert().takeIf { existingEdition == null },
+                    expectedCopy.toSyncUpsert(),
+                ),
+            )
             RestoreDeletedBookResult.Restored
         }
     } catch (cancellation: CancellationException) {
@@ -1032,16 +1134,22 @@ class DefaultLibraryRepository(
                 }
             } ?: book
         }
-        dao.upsertWorks(
-            resolved.distinctBy(LibraryBook::workId).map(LibraryBook::toWorkEntity),
-        )
-        dao.upsertEditions(
-            resolved.distinctBy(LibraryBook::editionId).map(LibraryBook::toEditionEntity),
-        )
-        dao.upsertCopies(resolved.map(LibraryBook::toCopyEntity))
+        val works = resolved.distinctBy(LibraryBook::workId).map(LibraryBook::toWorkEntity)
+        val editions = resolved.distinctBy(LibraryBook::editionId).map(LibraryBook::toEditionEntity)
+        val copies = resolved.map(LibraryBook::toCopyEntity)
+        dao.upsertWorks(works)
+        dao.upsertEditions(editions)
+        dao.upsertCopies(copies)
         resolved.map(LibraryBook::editionId).distinct().forEach { editionId ->
             dao.deleteWishlistByEditionId(editionId)
         }
+        syncJournal.record(
+            works.map { it.toSyncUpsert() } +
+                editions.map { it.toSyncUpsert() } +
+                copies.map { it.toSyncUpsert() } +
+                editions.filter { it.id in wishlistEditionIds }
+                    .map { syncDelete("wishlistItem", it.id) },
+        )
     }
 
     private suspend fun resolveShelfOrderKey(
@@ -1100,6 +1208,12 @@ private fun LibraryBook.toWorkEntity() = BookWorkEntity(
     id = workId,
     title = title,
     primaryAuthor = primaryAuthor,
+)
+
+private fun LibraryBook.toSyncMutations(): List<SyncMutation> = listOf(
+    toWorkEntity().toSyncUpsert(),
+    toEditionEntity().toSyncUpsert(),
+    toCopyEntity().toSyncUpsert(),
 )
 
 private fun LibraryBook.toEditionEntity() = BookEditionEntity(

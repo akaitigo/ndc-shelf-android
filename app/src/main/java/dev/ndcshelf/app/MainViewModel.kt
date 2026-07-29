@@ -68,6 +68,8 @@ import dev.ndcshelf.app.domain.repository.SeriesConfirmationTarget
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.repository.WorkGroupMutationResult
 import dev.ndcshelf.app.domain.repository.WorkGroupRepository
+import dev.ndcshelf.app.domain.sync.SyncEngineStatus
+import dev.ndcshelf.app.domain.sync.SyncStatusRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -103,6 +105,7 @@ class MainViewModel(
     private val workGroupRepository: WorkGroupRepository? = null,
     private val seriesWatchRepository: SeriesWatchRepository? = null,
     private val seriesWatchScheduler: SeriesWatchScheduler? = null,
+    syncStatusRepository: SyncStatusRepository? = null,
 ) : ViewModel() {
     init {
         if (seriesWatchRepository != null && seriesWatchScheduler != null) {
@@ -160,6 +163,9 @@ class MainViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val seriesWatches = (seriesWatchRepository?.observeWatches() ?: flowOf(emptyList()))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val syncStatus: StateFlow<SyncEngineStatus> =
+        (syncStatusRepository?.observeStatus() ?: flowOf(SyncEngineStatus()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SyncEngineStatus())
     private val _seriesWatchMutationState =
         MutableStateFlow<SeriesWatchMutationUiState>(SeriesWatchMutationUiState.Idle)
     val seriesWatchMutationState = _seriesWatchMutationState.asStateFlow()
@@ -1125,6 +1131,7 @@ class MainViewModel(
             workGroupRepository: WorkGroupRepository? = null,
             seriesWatchRepository: SeriesWatchRepository? = null,
             seriesWatchScheduler: SeriesWatchScheduler? = null,
+            syncStatusRepository: SyncStatusRepository? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1139,6 +1146,7 @@ class MainViewModel(
                         workGroupRepository = workGroupRepository,
                         seriesWatchRepository = seriesWatchRepository,
                         seriesWatchScheduler = seriesWatchScheduler,
+                        syncStatusRepository = syncStatusRepository,
                     ) as T
                 }
             }

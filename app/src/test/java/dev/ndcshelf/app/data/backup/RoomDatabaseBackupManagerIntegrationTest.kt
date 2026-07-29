@@ -14,6 +14,9 @@ import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
 import dev.ndcshelf.app.data.local.SeriesWatchEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
+import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
+import dev.ndcshelf.app.data.sync.RoomSyncEngine
+import dev.ndcshelf.app.data.sync.toSyncUpsert
 import dev.ndcshelf.app.domain.backup.DatabaseBackupInspectResult
 import dev.ndcshelf.app.domain.backup.DatabaseBackupFailure
 import dev.ndcshelf.app.domain.backup.DatabaseBackupMetadata
@@ -77,6 +80,9 @@ class RoomDatabaseBackupManagerIntegrationTest {
         clear()
         val replaced = snapshot("replaced", "NOT_FOUND")
         insert(replaced)
+        val syncEngine = RoomSyncEngine(database, RoomSyncDomainStore(database))
+        syncEngine.initializeDevice("old-device")
+        syncEngine.recordLocalTransaction(listOf(replaced.works.first().toSyncUpsert()))
         val preview = manager.inspectBackup(ByteArrayInputStream(output.toByteArray()))
             as DatabaseBackupInspectResult.Valid
 
@@ -85,6 +91,10 @@ class RoomDatabaseBackupManagerIntegrationTest {
         val result = restoreResult as DatabaseRestoreResult.Success
 
         assertEquals(selected, readSnapshot())
+        val syncSettings = requireNotNull(database.syncDao().getSettings())
+        assertTrue(syncSettings.requiresReregistration)
+        assertEquals(null, syncSettings.deviceId)
+        assertTrue(database.syncDao().getPendingOperations(10).isEmpty())
         val rollbackFile = File(backupDirectory, result.automaticBackupName)
         assertTrue(rollbackFile.isFile)
         val rollback = manager.inspectBackup(rollbackFile.inputStream())
