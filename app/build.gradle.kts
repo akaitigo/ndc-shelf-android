@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.about.libraries)
     alias(libs.plugins.cyclonedx)
@@ -75,6 +76,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.navigation.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
@@ -103,6 +105,8 @@ dependencies {
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.androidx.navigation.testing)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
@@ -111,9 +115,10 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
-val generatedLicenseReport = layout.buildDirectory.file(
-    "generated/aboutLibraries/release/res/raw/aboutlibraries.json",
-)
+val generatedLicenseReport =
+    layout.buildDirectory.file(
+        "generated/aboutLibraries/release/res/raw/aboutlibraries.json",
+    )
 
 val generateThirdPartyNotices by tasks.registering(Copy::class) {
     group = "documentation"
@@ -186,15 +191,22 @@ val verifyBackupPolicy by tasks.registering {
     inputs.files(manifest, legacyRules, api28Rules, modernRules)
 
     doLast {
-        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }
+        val factory =
+            javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }
+
         fun parse(file: File) = factory.newDocumentBuilder().parse(file)
-        fun childElements(parent: org.w3c.dom.Element, tag: String): List<org.w3c.dom.Element> =
+
+        fun childElements(
+            parent: org.w3c.dom.Element,
+            tag: String,
+        ): List<org.w3c.dom.Element> =
             (0 until parent.childNodes.length)
                 .map { parent.childNodes.item(it) }
                 .filterIsInstance<org.w3c.dom.Element>()
                 .filter { it.tagName == tag }
+
         fun assertRule(
             element: org.w3c.dom.Element,
             domain: String,
@@ -204,8 +216,10 @@ val verifyBackupPolicy by tasks.registering {
             check(element.getAttribute("requireFlags") == flags)
         }
 
-        val application = parse(manifest.asFile).getElementsByTagName("application")
-            .item(0) as org.w3c.dom.Element
+        val application =
+            parse(manifest.asFile)
+                .getElementsByTagName("application")
+                .item(0) as org.w3c.dom.Element
         val androidNamespace = "http://schemas.android.com/apk/res/android"
         check(application.getAttributeNS(androidNamespace, "allowBackup") == "true")
         check(application.getAttributeNS(androidNamespace, "fullBackupContent") == "@xml/backup_rules")
@@ -214,17 +228,18 @@ val verifyBackupPolicy by tasks.registering {
                 "@xml/data_extraction_rules",
         )
 
-        val allDomains = setOf(
-            "root",
-            "file",
-            "database",
-            "sharedpref",
-            "external",
-            "device_root",
-            "device_file",
-            "device_database",
-            "device_sharedpref",
-        )
+        val allDomains =
+            setOf(
+                "root",
+                "file",
+                "database",
+                "sharedpref",
+                "external",
+                "device_root",
+                "device_file",
+                "device_database",
+                "device_sharedpref",
+            )
         val legacyRoot = parse(legacyRules.asFile).documentElement
         check(childElements(legacyRoot, "include").isEmpty())
         val legacyExcludes = childElements(legacyRoot, "exclude")
