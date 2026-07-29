@@ -13,6 +13,9 @@ import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
 import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
 import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
 import dev.ndcshelf.app.data.consent.RoomConsentRepository
+import dev.ndcshelf.app.data.diagnostics.DiagnosticsLoggingBookMetadataService
+import dev.ndcshelf.app.data.diagnostics.FileDiagnosticsLogger
+import dev.ndcshelf.app.data.diagnostics.RoomDiagnosticsSnapshotCollector
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
@@ -26,6 +29,7 @@ import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
 import dev.ndcshelf.app.data.sync.RoomSyncEngine
 import dev.ndcshelf.app.data.sync.RoomSyncStatusRepository
 import dev.ndcshelf.app.domain.consent.ConsentRepository
+import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
@@ -119,10 +123,17 @@ class AppContainer(
 
     val syncStatusRepository = RoomSyncStatusRepository(database)
 
+    val diagnosticsLogger: DiagnosticsLogger =
+        FileDiagnosticsLogger(application.noBackupFilesDir.resolve("diagnostics"))
+
     val libraryRepository: LibraryRepository =
         DefaultLibraryRepository(
             database = database,
-            metadataService = NdlBookMetadataService(),
+            metadataService =
+                DiagnosticsLoggingBookMetadataService(
+                    delegate = NdlBookMetadataService(),
+                    logger = diagnosticsLogger,
+                ),
             syncJournal = syncEngine,
         )
 
@@ -143,6 +154,16 @@ class AppContainer(
     val seriesReleaseNotifier = AndroidSeriesReleaseNotifier(application)
 
     val consentRepository: ConsentRepository = RoomConsentRepository(database)
+
+    val diagnosticsSnapshotCollector =
+        RoomDiagnosticsSnapshotCollector(
+            database = database,
+            consentRepository = consentRepository,
+            logger = diagnosticsLogger,
+            appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            androidSdkInt = android.os.Build.VERSION.SDK_INT,
+        )
 
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
 

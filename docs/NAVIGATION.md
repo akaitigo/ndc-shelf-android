@@ -14,6 +14,7 @@
 | `InsightsRoute` | なし | 読書傾向 |
 | `DataGraph` → `DataRoute` | なし | データ管理タブの開始画面 |
 | `DataGraph` → `ConsentRoute` | なし | プライバシーと同意（目的別同意の確認・付与・撤回） |
+| `DataGraph` → `DiagnosticsRoute` | なし | 診断とサポート情報（端末内のみ・選択式の診断ファイル生成） |
 | `InfoRoute` | なし | アプリ情報 |
 | `OnboardingRoute` | なし | 初回オンボーディング（未完了時に自動表示、情報画面から再表示可） |
 

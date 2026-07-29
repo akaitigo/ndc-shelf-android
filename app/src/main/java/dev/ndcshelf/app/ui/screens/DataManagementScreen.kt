@@ -76,6 +76,7 @@ fun DataManagementScreen(
     onDismissDatabaseBackup: () -> Unit,
     contentPadding: PaddingValues,
     onOpenConsent: (() -> Unit)? = null,
+    onOpenDiagnostics: (() -> Unit)? = null,
 ) {
     val importBusy =
         importState === LibraryImportUiState.Loading ||
@@ -135,6 +136,16 @@ fun DataManagementScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.data_privacy_consent_button))
+                }
+            }
+        }
+        if (onOpenDiagnostics != null) {
+            item {
+                OutlinedButton(
+                    onClick = onOpenDiagnostics,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.data_diagnostics_button))
                 }
             }
         }

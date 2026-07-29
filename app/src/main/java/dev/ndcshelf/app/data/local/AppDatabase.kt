@@ -72,6 +72,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncDao(): SyncDao
 
     abstract fun consentDao(): ConsentDao
+
+    abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
 
 private val MIGRATION_12_13 =
