@@ -82,6 +82,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun readingSessionDao(): ReadingSessionDao
 
     abstract fun tagDao(): TagDao
+
+    abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
 
 // v14→v15 はタグ・タグ付与・保存済み検索の空テーブル追加のみで、既存データを変更しない。

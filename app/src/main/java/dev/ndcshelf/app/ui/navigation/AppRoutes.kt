@@ -62,6 +62,9 @@ data object TagManagementRoute
 @Serializable
 data object OnboardingRoute
 
+@Serializable
+data object DiagnosticsRoute
+
 enum class TopLevelDestination(
     val route: Any,
     @StringRes val labelRes: Int,
