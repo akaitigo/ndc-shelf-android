@@ -19,6 +19,7 @@ NDC Shelfは、最初のリリースでは単一のAndroidアプリモジュー�
 | `data/repository` | ローカル・リモートデータの統合 |
 | `scanner` | ISBN検証とリアルタイムバーコード解析 |
 | `ui` | Compose画面、テーマ、表示部品 |
+| `ui/navigation` | 型安全route定義とタブ構成（規則は[NAVIGATION.md](NAVIGATION.md)） |
 
 ## 登録フロー
 

@@ -23,7 +23,6 @@ class MainActivity : ComponentActivity() {
             locationRepository = application.container.locationRepository,
             librarySearchSettings = application.container.librarySearchSettings,
             seriesRepository = application.container.seriesRepository,
-            workGroupRepository = application.container.workGroupRepository,
             seriesWatchRepository = application.container.seriesWatchRepository,
             seriesWatchScheduler = application.container.seriesWatchScheduler,
             syncStatusRepository = application.container.syncStatusRepository,
@@ -36,7 +35,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NdcShelfTheme {
-                NdcShelfApp(viewModel, requestedEditionId) { requestedEditionId = null }
+                NdcShelfApp(
+                    viewModel = viewModel,
+                    requestedEditionId = requestedEditionId,
+                    onBookDetailRequestHandled = { requestedEditionId = null },
+                )
             }
         }
     }
@@ -58,7 +61,10 @@ internal fun Intent.bookDetailEditionId(): String? {
     return data?.bookDetailEditionId()
 }
 
-internal fun restoredBookDetailEditionId(savedState: Bundle?, intent: Intent): String? =
+internal fun restoredBookDetailEditionId(
+    savedState: Bundle?,
+    intent: Intent,
+): String? =
     if (savedState?.containsKey(BOOK_DETAIL_STATE_KEY) == true) {
         savedState.getString(BOOK_DETAIL_STATE_KEY)
     } else {

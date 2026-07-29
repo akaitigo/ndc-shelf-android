@@ -1,20 +1,13 @@
 package dev.ndcshelf.app.ui
 
-import android.app.Activity
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
-import androidx.compose.material.icons.rounded.Analytics
-import androidx.compose.material.icons.rounded.CollectionsBookmark
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.QrCodeScanner
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -27,43 +20,66 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
-import androidx.core.content.ContextCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.navigation
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import dev.ndcshelf.app.BookDeleteFailure
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditFailure
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.BuildConfig
 import dev.ndcshelf.app.DatabaseBackupUiState
-import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.LibraryExportUiState
+import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.MainActivity
 import dev.ndcshelf.app.MainViewModel
+import dev.ndcshelf.app.NdcShelfApplication
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.SeriesWatchMutationUiState
-import dev.ndcshelf.app.R
+import dev.ndcshelf.app.WorkVariantViewModel
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
-import dev.ndcshelf.app.ui.screens.InsightsScreen
+import dev.ndcshelf.app.ui.navigation.DataRoute
+import dev.ndcshelf.app.ui.navigation.InfoRoute
+import dev.ndcshelf.app.ui.navigation.InsightsRoute
+import dev.ndcshelf.app.ui.navigation.LibraryGraph
+import dev.ndcshelf.app.ui.navigation.LibraryRoute
+import dev.ndcshelf.app.ui.navigation.ScanRoute
+import dev.ndcshelf.app.ui.navigation.SeriesGraph
+import dev.ndcshelf.app.ui.navigation.SeriesRoute
+import dev.ndcshelf.app.ui.navigation.SeriesSuggestionRoute
+import dev.ndcshelf.app.ui.navigation.TopLevelDestination
+import dev.ndcshelf.app.ui.navigation.WorkVariantRoute
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
+import dev.ndcshelf.app.ui.screens.DataManagementScreen
+import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.SeriesScreen
 import dev.ndcshelf.app.ui.screens.SeriesSuggestionScreen
 import dev.ndcshelf.app.ui.screens.WorkVariantScreen
-import dev.ndcshelf.app.ui.screens.DataManagementScreen
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,6 +90,7 @@ fun NdcShelfApp(
     viewModel: MainViewModel,
     requestedEditionId: String? = null,
     onBookDetailRequestHandled: () -> Unit = {},
+    navController: NavHostController = rememberNavController(),
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -97,30 +114,40 @@ fun NdcShelfApp(
     val libraryStats by viewModel.libraryStats.collectAsStateWithLifecycle()
     val seriesEditorState by viewModel.seriesEditorState.collectAsStateWithLifecycle()
     val seriesWatchMutationState by viewModel.seriesWatchMutationState.collectAsStateWithLifecycle()
-    val workVariantState by viewModel.workVariantState.collectAsStateWithLifecycle()
     val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
-    var selected by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var selectedSeriesId by rememberSaveable { mutableStateOf<String?>(null) }
     var bookstoreRequestKey by rememberSaveable { mutableIntStateOf(0) }
-    var showSeriesEditor by rememberSaveable { mutableStateOf(false) }
-    var workVariantWorkId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingSeriesWatchId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(workVariantWorkId) {
-        workVariantWorkId?.let(viewModel::prepareWorkVariantEditor)
-    }
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = backStackEntry?.destination
 
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        pendingSeriesWatchId?.let { seriesId ->
-            if (granted) viewModel.setSeriesWatchEnabled(seriesId, true)
-            else viewModel.reportSeriesWatchPermissionDenied()
+    fun navigateToTab(route: Any) {
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
         }
-        pendingSeriesWatchId = null
     }
 
-    fun setSeriesWatch(seriesId: String, enabled: Boolean) {
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            pendingSeriesWatchId?.let { seriesId ->
+                if (granted) {
+                    viewModel.setSeriesWatchEnabled(seriesId, true)
+                } else {
+                    viewModel.reportSeriesWatchPermissionDenied()
+                }
+            }
+            pendingSeriesWatchId = null
+        }
+
+    fun setSeriesWatch(
+        seriesId: String,
+        enabled: Boolean,
+    ) {
         if (!enabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
@@ -133,48 +160,58 @@ fun NdcShelfApp(
     }
 
     LaunchedEffect(seriesEditorState) {
+        val onSuggestionScreen =
+            navController.currentBackStackEntry?.destination?.hasRoute<SeriesSuggestionRoute>() == true
         if (seriesEditorState === SeriesEditorUiState.Removed) {
             snackbarHostState.showSnackbar(resources.getString(R.string.series_membership_removed))
             viewModel.clearSeriesEditorState()
-        } else if (seriesEditorState === SeriesEditorUiState.Error && !showSeriesEditor) {
+        } else if (seriesEditorState === SeriesEditorUiState.Error && !onSuggestionScreen) {
             snackbarHostState.showSnackbar(resources.getString(R.string.series_membership_remove_error))
             viewModel.clearSeriesEditorState()
         }
     }
 
     LaunchedEffect(seriesWatchMutationState) {
-        val message = when (seriesWatchMutationState) {
-            SeriesWatchMutationUiState.PermissionDenied -> R.string.series_watch_permission_denied
-            SeriesWatchMutationUiState.Invalid, SeriesWatchMutationUiState.Error ->
-                R.string.series_watch_update_error
-            SeriesWatchMutationUiState.Updated -> R.string.series_watch_updated
-            else -> null
-        }
+        val message =
+            when (seriesWatchMutationState) {
+                SeriesWatchMutationUiState.PermissionDenied -> {
+                    R.string.series_watch_permission_denied
+                }
+
+                SeriesWatchMutationUiState.Invalid, SeriesWatchMutationUiState.Error -> {
+                    R.string.series_watch_update_error
+                }
+
+                SeriesWatchMutationUiState.Updated -> {
+                    R.string.series_watch_updated
+                }
+
+                else -> {
+                    null
+                }
+            }
         if (message != null) {
             snackbarHostState.showSnackbar(resources.getString(message))
             viewModel.clearSeriesWatchMutationState()
         }
     }
 
-    LaunchedEffect(requestedEditionId) {
-        if (requestedEditionId != null) {
-            selected = AppDestination.LIBRARY
-            viewModel.selectLibraryEdition(requestedEditionId)
-        }
-    }
-
-    fun saveExport(uri: Uri?, format: LibraryExportFormat) {
+    fun saveExport(
+        uri: Uri?,
+        format: LibraryExportFormat,
+    ) {
         if (uri == null) {
             scope.launch {
                 snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
             }
             return
         }
-        val output = try {
-            context.contentResolver.openOutputStream(uri, "wt")
-        } catch (_: Exception) {
-            null
-        }
+        val output =
+            try {
+                context.contentResolver.openOutputStream(uri, "wt")
+            } catch (_: Exception) {
+                null
+            }
         if (output == null) {
             scope.launch {
                 snackbarHostState.showSnackbar(resources.getString(R.string.export_failure))
@@ -184,104 +221,114 @@ fun NdcShelfApp(
         }
     }
 
-    val jsonExporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(LibraryExportFormat.JSON.mimeType),
-    ) { uri -> saveExport(uri, LibraryExportFormat.JSON) }
-    val csvExporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(LibraryExportFormat.CSV.mimeType),
-    ) { uri -> saveExport(uri, LibraryExportFormat.CSV) }
-    val jsonImporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri == null) {
-            scope.launch {
-                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
-            }
-        } else {
-            val input = try {
-                context.contentResolver.openInputStream(uri)
-            } catch (_: Exception) {
-                null
-            }
-            if (input == null) {
+    val jsonExporter =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument(LibraryExportFormat.JSON.mimeType),
+        ) { uri -> saveExport(uri, LibraryExportFormat.JSON) }
+    val csvExporter =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument(LibraryExportFormat.CSV.mimeType),
+        ) { uri -> saveExport(uri, LibraryExportFormat.CSV) }
+    val jsonImporter =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) {
                 scope.launch {
-                    snackbarHostState.showSnackbar(resources.getString(R.string.import_open_failure))
+                    snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
                 }
             } else {
-                viewModel.loadJsonImport(input)
+                val input =
+                    try {
+                        context.contentResolver.openInputStream(uri)
+                    } catch (_: Exception) {
+                        null
+                    }
+                if (input == null) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(resources.getString(R.string.import_open_failure))
+                    }
+                } else {
+                    viewModel.loadJsonImport(input)
+                }
             }
         }
-    }
-    val csvImporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri == null) {
-            scope.launch {
-                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
-            }
-        } else {
-            val input = try {
-                context.contentResolver.openInputStream(uri)
-            } catch (_: Exception) {
-                null
-            }
-            if (input == null) {
+    val csvImporter =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) {
                 scope.launch {
-                    snackbarHostState.showSnackbar(resources.getString(R.string.import_open_failure))
+                    snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
                 }
             } else {
-                viewModel.loadCsvImport(input)
+                val input =
+                    try {
+                        context.contentResolver.openInputStream(uri)
+                    } catch (_: Exception) {
+                        null
+                    }
+                if (input == null) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(resources.getString(R.string.import_open_failure))
+                    }
+                } else {
+                    viewModel.loadCsvImport(input)
+                }
             }
         }
-    }
-    val databaseBackupCreator = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip"),
-    ) { uri ->
-        if (uri == null) {
-            scope.launch {
-                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
-            }
-        } else {
-            val output = try {
-                context.contentResolver.openOutputStream(uri, "wt")
-            } catch (_: Exception) {
-                null
-            }
-            if (output == null) {
+    val databaseBackupCreator =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/zip"),
+        ) { uri ->
+            if (uri == null) {
                 scope.launch {
-                    snackbarHostState.showSnackbar(
-                        resources.getString(R.string.database_backup_output_failure),
-                    )
+                    snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
                 }
             } else {
-                viewModel.createDatabaseBackup(output)
+                val output =
+                    try {
+                        context.contentResolver.openOutputStream(uri, "wt")
+                    } catch (_: Exception) {
+                        null
+                    }
+                if (output == null) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            resources.getString(R.string.database_backup_output_failure),
+                        )
+                    }
+                } else {
+                    viewModel.createDatabaseBackup(output)
+                }
             }
         }
-    }
-    val databaseBackupRestorer = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri == null) {
-            scope.launch {
-                snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
-            }
-        } else {
-            val input = try {
-                context.contentResolver.openInputStream(uri)
-            } catch (_: Exception) {
-                null
-            }
-            if (input == null) {
+    val databaseBackupRestorer =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) {
                 scope.launch {
-                    snackbarHostState.showSnackbar(
-                        resources.getString(R.string.database_backup_open_failure),
-                    )
+                    snackbarHostState.showSnackbar(resources.getString(R.string.data_operation_cancelled))
                 }
             } else {
-                viewModel.loadDatabaseBackup(input)
+                val input =
+                    try {
+                        context.contentResolver.openInputStream(uri)
+                    } catch (_: Exception) {
+                        null
+                    }
+                if (input == null) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            resources.getString(R.string.database_backup_open_failure),
+                        )
+                    }
+                } else {
+                    viewModel.loadDatabaseBackup(input)
+                }
             }
         }
-    }
 
     LaunchedEffect(importState) {
         val result = importState as? LibraryImportUiState.Success ?: return@LaunchedEffect
@@ -297,14 +344,23 @@ fun NdcShelfApp(
     }
 
     LaunchedEffect(libraryExportState) {
-        val message = when (val state = libraryExportState) {
-            is LibraryExportUiState.Success -> resources.getString(
-                R.string.export_success,
-                state.bookCount,
-            )
-            LibraryExportUiState.Error -> resources.getString(R.string.export_failure)
-            else -> return@LaunchedEffect
-        }
+        val message =
+            when (val state = libraryExportState) {
+                is LibraryExportUiState.Success -> {
+                    resources.getString(
+                        R.string.export_success,
+                        state.bookCount,
+                    )
+                }
+
+                LibraryExportUiState.Error -> {
+                    resources.getString(R.string.export_failure)
+                }
+
+                else -> {
+                    return@LaunchedEffect
+                }
+            }
         snackbarHostState.showSnackbar(message)
         viewModel.consumeLibraryExportResult()
     }
@@ -312,64 +368,78 @@ fun NdcShelfApp(
     LaunchedEffect(bookEditState) {
         when (val state = bookEditState) {
             is BookEditUiState.Saved -> {
-                val result = snackbarHostState.showSnackbar(
-                    message = resources.getString(R.string.book_edit_success),
-                    actionLabel = resources.getString(R.string.book_edit_undo),
-                    withDismissAction = true,
-                )
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = resources.getString(R.string.book_edit_success),
+                        actionLabel = resources.getString(R.string.book_edit_undo),
+                        withDismissAction = true,
+                    )
                 if (result == SnackbarResult.ActionPerformed) {
                     viewModel.undoLastBookEdit()
                 } else {
                     viewModel.clearBookEditState()
                 }
             }
+
             BookEditUiState.Undone -> {
                 snackbarHostState.showSnackbar(resources.getString(R.string.book_edit_undone))
                 viewModel.clearBookEditState()
             }
+
             is BookEditUiState.Error -> {
-                val message = when (state.failure) {
-                    BookEditFailure.NOT_FOUND -> R.string.book_edit_not_found
-                    BookEditFailure.SAVE -> R.string.book_edit_failure
-                    BookEditFailure.UNDO -> R.string.book_edit_undo_failure
-                }
+                val message =
+                    when (state.failure) {
+                        BookEditFailure.NOT_FOUND -> R.string.book_edit_not_found
+                        BookEditFailure.SAVE -> R.string.book_edit_failure
+                        BookEditFailure.UNDO -> R.string.book_edit_undo_failure
+                    }
                 snackbarHostState.showSnackbar(resources.getString(message))
                 viewModel.clearBookEditState()
             }
-            else -> Unit
+
+            else -> {
+                Unit
+            }
         }
     }
 
     LaunchedEffect(bookDeleteState) {
         when (val state = bookDeleteState) {
             is BookDeleteUiState.Deleted -> {
-                val result = snackbarHostState.showSnackbar(
-                    message = resources.getString(R.string.book_delete_success),
-                    actionLabel = resources.getString(R.string.book_delete_undo),
-                    withDismissAction = true,
-                    duration = SnackbarDuration.Long,
-                )
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = resources.getString(R.string.book_delete_success),
+                        actionLabel = resources.getString(R.string.book_delete_undo),
+                        withDismissAction = true,
+                        duration = SnackbarDuration.Long,
+                    )
                 if (result == SnackbarResult.ActionPerformed) {
                     viewModel.undoLastBookDeletion()
                 } else {
                     viewModel.clearBookDeleteState()
                 }
             }
+
             BookDeleteUiState.Restored -> {
                 snackbarHostState.showSnackbar(resources.getString(R.string.book_delete_restored))
                 viewModel.clearBookDeleteState()
             }
+
             is BookDeleteUiState.Error -> {
-                val message = when (state.failure) {
-                    BookDeleteFailure.NOT_FOUND -> R.string.book_delete_not_found
-                    BookDeleteFailure.DELETE -> R.string.book_delete_failure
-                    BookDeleteFailure.RESTORE_CONFLICT -> R.string.book_delete_restore_conflict
-                    BookDeleteFailure.RESTORE -> R.string.book_delete_restore_failure
-                }
+                val message =
+                    when (state.failure) {
+                        BookDeleteFailure.NOT_FOUND -> R.string.book_delete_not_found
+                        BookDeleteFailure.DELETE -> R.string.book_delete_failure
+                        BookDeleteFailure.RESTORE_CONFLICT -> R.string.book_delete_restore_conflict
+                        BookDeleteFailure.RESTORE -> R.string.book_delete_restore_failure
+                    }
                 snackbarHostState.showSnackbar(resources.getString(message))
                 viewModel.clearBookDeleteState()
             }
-            else -> Unit
+
+            else -> {
+                Unit
+            }
         }
     }
 
@@ -381,6 +451,7 @@ fun NdcShelfApp(
                 )
                 viewModel.dismissDatabaseBackup()
             }
+
             is DatabaseBackupUiState.Restored -> {
                 snackbarHostState.showSnackbar(
                     resources.getString(
@@ -389,13 +460,17 @@ fun NdcShelfApp(
                         state.automaticBackupName,
                     ),
                 )
-                val restart = Intent(context, MainActivity::class.java).addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK,
-                )
+                val restart =
+                    Intent(context, MainActivity::class.java).addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                    )
                 context.startActivity(restart)
                 (context as? Activity)?.finish()
             }
-            else -> Unit
+
+            else -> {
+                Unit
+            }
         }
     }
 
@@ -429,11 +504,15 @@ fun NdcShelfApp(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar(tonalElevation = 2.dp) {
-                AppDestination.entries.forEach { destination ->
+                TopLevelDestination.entries.forEach { destination ->
                     val label = stringResource(destination.labelRes)
+                    val isSelected =
+                        currentDestination?.hierarchy?.any {
+                            it.hasRoute(destination.route::class)
+                        } == true
                     NavigationBarItem(
-                        selected = selected == destination,
-                        onClick = { selected = destination },
+                        selected = isSelected,
+                        onClick = { navigateToTab(destination.route) },
                         icon = {
                             Icon(
                                 imageVector = destination.icon,
@@ -446,116 +525,115 @@ fun NdcShelfApp(
             }
         },
     ) { contentPadding ->
-        when (selected) {
-            AppDestination.LIBRARY -> {
-                val criteria by viewModel.librarySearchCriteria.collectAsStateWithLifecycle()
-                val result by viewModel.librarySearchResult.collectAsStateWithLifecycle()
-                if (workVariantWorkId != null) {
-                    WorkVariantScreen(
-                        state = workVariantState,
-                        onBack = {
-                            workVariantWorkId = null
-                            viewModel.clearWorkVariantState()
+        NavHost(
+            navController = navController,
+            startDestination = LibraryGraph,
+        ) {
+            navigation<LibraryGraph>(startDestination = LibraryRoute) {
+                composable<LibraryRoute> {
+                    val criteria by viewModel.librarySearchCriteria.collectAsStateWithLifecycle()
+                    val result by viewModel.librarySearchResult.collectAsStateWithLifecycle()
+                    LibraryScreen(
+                        books = result.books,
+                        searchCriteria = criteria,
+                        searchIsCurrent = result.criteria == criteria,
+                        libraryStats = libraryStats,
+                        onQueryChange = viewModel::updateLibraryQuery,
+                        onReadingStatusChange = viewModel::updateLibraryReadingStatus,
+                        onSortChange = viewModel::updateLibrarySort,
+                        onSelectedEditionChange = viewModel::selectLibraryEdition,
+                        initialEditionId = requestedEditionId,
+                        onInitialEditionHandled = onBookDetailRequestHandled,
+                        onSaveBook = viewModel::saveBookEdit,
+                        onDeleteBook = viewModel::deleteBook,
+                        bookEditState = bookEditState,
+                        onClearBookEditState = viewModel::clearBookEditState,
+                        bookDeleteState = bookDeleteState,
+                        onClearBookDeleteState = viewModel::clearBookDeleteState,
+                        locations = locations,
+                        locationMutationState = locationMutationState,
+                        onAddLocation = viewModel::addLocation,
+                        onRenameLocation = viewModel::renameLocation,
+                        onMoveLocation = viewModel::moveLocation,
+                        onDeleteLocation = viewModel::deleteLocation,
+                        onClearLocationState = viewModel::clearLocationMutationState,
+                        shelfMoveState = shelfMoveState,
+                        onMoveBookWithinTier = viewModel::moveBookWithinTier,
+                        onClearShelfMoveState = viewModel::clearShelfMoveState,
+                        manualReconciliationState = manualReconciliationState,
+                        onPreviewManualReconciliation = viewModel::previewManualReconciliation,
+                        onConfirmManualReconciliation = viewModel::confirmManualReconciliation,
+                        onClearManualReconciliation = viewModel::clearManualReconciliationState,
+                        onManageSeries = { workId ->
+                            navigateToTab(SeriesGraph)
+                            navController.navigate(SeriesSuggestionRoute(workId)) {
+                                launchSingleTop = true
+                            }
                         },
-                        onLink = viewModel::linkWorkVariant,
-                        onUnlink = viewModel::unlinkWorkVariant,
-                        onSetSeriesSubstitution = viewModel::setWorkVariantSeriesSubstitution,
+                        onManageVariants = { workId ->
+                            navController.navigate(WorkVariantRoute(workId)) {
+                                launchSingleTop = true
+                            }
+                        },
                         contentPadding = contentPadding,
                     )
-                } else LibraryScreen(
-                    books = result.books,
-                    searchCriteria = criteria,
-                    searchIsCurrent = result.criteria == criteria,
-                    libraryStats = libraryStats,
-                    onQueryChange = viewModel::updateLibraryQuery,
-                    onReadingStatusChange = viewModel::updateLibraryReadingStatus,
-                    onSortChange = viewModel::updateLibrarySort,
-                    onSelectedEditionChange = viewModel::selectLibraryEdition,
-                    initialEditionId = requestedEditionId,
-                    onInitialEditionHandled = onBookDetailRequestHandled,
-                    onSaveBook = viewModel::saveBookEdit,
-                    onDeleteBook = viewModel::deleteBook,
-                    bookEditState = bookEditState,
-                    onClearBookEditState = viewModel::clearBookEditState,
-                    bookDeleteState = bookDeleteState,
-                    onClearBookDeleteState = viewModel::clearBookDeleteState,
-                    locations = locations,
-                    locationMutationState = locationMutationState,
-                    onAddLocation = viewModel::addLocation,
-                    onRenameLocation = viewModel::renameLocation,
-                    onMoveLocation = viewModel::moveLocation,
-                    onDeleteLocation = viewModel::deleteLocation,
-                    onClearLocationState = viewModel::clearLocationMutationState,
-                    shelfMoveState = shelfMoveState,
-                    onMoveBookWithinTier = viewModel::moveBookWithinTier,
-                    onClearShelfMoveState = viewModel::clearShelfMoveState,
-                    manualReconciliationState = manualReconciliationState,
-                    onPreviewManualReconciliation = viewModel::previewManualReconciliation,
-                    onConfirmManualReconciliation = viewModel::confirmManualReconciliation,
-                    onClearManualReconciliation = viewModel::clearManualReconciliationState,
-                    onManageSeries = { workId ->
-                        viewModel.prepareSeriesEditor(workId)
-                        showSeriesEditor = true
-                        selected = AppDestination.SERIES
-                    },
-                    onManageVariants = { workId ->
-                        workVariantWorkId = workId
-                    },
+                }
+
+                composable<WorkVariantRoute> {
+                    val application = context.applicationContext as NdcShelfApplication
+                    val workVariantViewModel: WorkVariantViewModel =
+                        viewModel(
+                            factory =
+                                WorkVariantViewModel.factory(
+                                    application.container.workGroupRepository,
+                                ),
+                        )
+                    val workVariantState by workVariantViewModel.state.collectAsStateWithLifecycle()
+                    WorkVariantScreen(
+                        state = workVariantState,
+                        onBack = { navController.popBackStack() },
+                        onLink = workVariantViewModel::linkVariant,
+                        onUnlink = workVariantViewModel::unlinkVariant,
+                        onSetSeriesSubstitution = workVariantViewModel::setSeriesSubstitution,
+                        contentPadding = contentPadding,
+                    )
+                }
+            }
+
+            composable<ScanRoute> {
+                ScanScreen(
+                    scanState = scanState,
+                    bookstoreState = bookstoreState,
+                    wishlist = wishlist,
+                    scanSessions = scanSessions,
+                    scanSessionState = scanSessionState,
+                    manualRegistrationState = manualRegistrationState,
+                    onSubmitIsbn = viewModel::submitIsbn,
+                    onLookupBookstore = viewModel::lookupBookstore,
+                    onCameraError = viewModel::reportCameraError,
+                    onBookstoreCameraError = viewModel::reportBookstoreCameraError,
+                    onRetry = viewModel::retryScan,
+                    onRetryBookstore = viewModel::retryBookstoreLookup,
+                    onClearState = viewModel::clearScanState,
+                    onClearBookstoreState = viewModel::clearBookstoreState,
+                    onAddDuplicateCopy = viewModel::addDuplicateCopy,
+                    onAddManualBook = viewModel::addManualBook,
+                    onClearManualRegistrationState = viewModel::clearManualRegistrationState,
+                    onChangePurchaseState = viewModel::changePurchaseState,
+                    onSelectWishlistItem = viewModel::selectWishlistItem,
+                    onStartScanSession = viewModel::startScanSession,
+                    onFinishScanSession = viewModel::finishScanSession,
+                    onUndoScanAttempt = viewModel::undoScanAttempt,
+                    onUndoScanSession = viewModel::undoScanSession,
                     contentPadding = contentPadding,
+                    bookstoreRequestKey = bookstoreRequestKey,
                 )
             }
 
-            AppDestination.SCAN -> ScanScreen(
-                scanState = scanState,
-                bookstoreState = bookstoreState,
-                wishlist = wishlist,
-                scanSessions = scanSessions,
-                scanSessionState = scanSessionState,
-                manualRegistrationState = manualRegistrationState,
-                onSubmitIsbn = viewModel::submitIsbn,
-                onLookupBookstore = viewModel::lookupBookstore,
-                onCameraError = viewModel::reportCameraError,
-                onBookstoreCameraError = viewModel::reportBookstoreCameraError,
-                onRetry = viewModel::retryScan,
-                onRetryBookstore = viewModel::retryBookstoreLookup,
-                onClearState = viewModel::clearScanState,
-                onClearBookstoreState = viewModel::clearBookstoreState,
-                onAddDuplicateCopy = viewModel::addDuplicateCopy,
-                onAddManualBook = viewModel::addManualBook,
-                onClearManualRegistrationState = viewModel::clearManualRegistrationState,
-                onChangePurchaseState = viewModel::changePurchaseState,
-                onSelectWishlistItem = viewModel::selectWishlistItem,
-                onStartScanSession = viewModel::startScanSession,
-                onFinishScanSession = viewModel::finishScanSession,
-                onUndoScanAttempt = viewModel::undoScanAttempt,
-                onUndoScanSession = viewModel::undoScanSession,
-                contentPadding = contentPadding,
-                bookstoreRequestKey = bookstoreRequestKey,
-            )
-
-            AppDestination.SERIES -> {
-                val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
-                val seriesWatches by viewModel.seriesWatches.collectAsStateWithLifecycle()
-                if (showSeriesEditor) {
-                    val seriesSuggestions by viewModel.seriesSuggestions.collectAsStateWithLifecycle()
-                    SeriesSuggestionScreen(
-                        suggestions = seriesSuggestions,
-                        catalog = seriesCatalog,
-                        focusedSuggestion = (seriesEditorState as? SeriesEditorUiState.Ready)?.suggestion,
-                        state = seriesEditorState,
-                        onConfirm = viewModel::confirmSeries,
-                        onBack = {
-                            showSeriesEditor = false
-                            viewModel.clearSeriesEditorState()
-                        },
-                        onSaved = { seriesId ->
-                            selectedSeriesId = seriesId
-                            showSeriesEditor = false
-                        },
-                        onClearState = viewModel::clearSeriesEditorState,
-                        contentPadding = contentPadding,
-                    )
-                } else {
+            navigation<SeriesGraph>(startDestination = SeriesRoute) {
+                composable<SeriesRoute> {
+                    val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
+                    val seriesWatches by viewModel.seriesWatches.collectAsStateWithLifecycle()
                     SeriesScreen(
                         series = seriesCatalog,
                         watches = seriesWatches,
@@ -563,76 +641,105 @@ fun NdcShelfApp(
                         onSelectSeries = { selectedSeriesId = it },
                         onOpenEdition = { editionId ->
                             viewModel.selectLibraryEdition(editionId)
-                            selected = AppDestination.LIBRARY
+                            navigateToTab(LibraryGraph)
                         },
                         onOpenBookstore = { isbn ->
                             bookstoreRequestKey += 1
                             viewModel.lookupBookstore(isbn)
-                            selected = AppDestination.SCAN
+                            navigateToTab(ScanRoute)
                         },
                         onManageSuggestions = {
                             viewModel.clearSeriesEditorState()
-                            showSeriesEditor = true
+                            navController.navigate(SeriesSuggestionRoute()) {
+                                launchSingleTop = true
+                            }
                         },
                         onRemoveMembership = viewModel::removeSeriesMembership,
                         onSetWatchEnabled = ::setSeriesWatch,
                         contentPadding = contentPadding,
                     )
                 }
+
+                composable<SeriesSuggestionRoute> { entry ->
+                    val route = entry.toRoute<SeriesSuggestionRoute>()
+                    val seriesCatalog by viewModel.seriesCatalog.collectAsStateWithLifecycle()
+                    val seriesSuggestions by viewModel.seriesSuggestions.collectAsStateWithLifecycle()
+                    LaunchedEffect(route.workId) {
+                        route.workId?.let(viewModel::prepareSeriesEditor)
+                    }
+                    SeriesSuggestionScreen(
+                        suggestions = seriesSuggestions,
+                        catalog = seriesCatalog,
+                        focusedSuggestion = (seriesEditorState as? SeriesEditorUiState.Ready)?.suggestion,
+                        state = seriesEditorState,
+                        onConfirm = viewModel::confirmSeries,
+                        onBack = {
+                            viewModel.clearSeriesEditorState()
+                            navController.popBackStack()
+                        },
+                        onSaved = { seriesId ->
+                            selectedSeriesId = seriesId
+                            navController.popBackStack()
+                        },
+                        onClearState = viewModel::clearSeriesEditorState,
+                        contentPadding = contentPadding,
+                    )
+                }
             }
 
-            AppDestination.INSIGHTS -> {
+            composable<InsightsRoute> {
                 val books by viewModel.books.collectAsStateWithLifecycle()
                 InsightsScreen(books = books, contentPadding = contentPadding)
             }
 
-            AppDestination.DATA -> DataManagementScreen(
-                bookCount = libraryStats.totalCount,
-                exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
-                importState = importState,
-                databaseBackupState = databaseBackupState,
-                syncStatus = syncStatus,
-                onExportJson = { requestExport(LibraryExportFormat.JSON) },
-                onExportCsv = { requestExport(LibraryExportFormat.CSV) },
-                onImportJson = {
-                    jsonImporter.launch(arrayOf("application/json", "text/json"))
-                },
-                onImportCsv = {
-                    csvImporter.launch(arrayOf("text/csv", "text/comma-separated-values"))
-                },
-                onCreateDatabaseBackup = ::requestDatabaseBackup,
-                onSelectDatabaseBackup = {
-                    databaseBackupRestorer.launch(
-                        arrayOf("application/zip", "application/octet-stream"),
-                    )
-                },
-                onSelectImportPolicy = viewModel::selectImportConflictPolicy,
-                onConfirmImport = viewModel::confirmImport,
-                onDismissImport = viewModel::dismissImport,
-                onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
-                onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
-                contentPadding = contentPadding,
-            )
+            composable<DataRoute> {
+                DataManagementScreen(
+                    bookCount = libraryStats.totalCount,
+                    exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
+                    importState = importState,
+                    databaseBackupState = databaseBackupState,
+                    syncStatus = syncStatus,
+                    onExportJson = { requestExport(LibraryExportFormat.JSON) },
+                    onExportCsv = { requestExport(LibraryExportFormat.CSV) },
+                    onImportJson = {
+                        jsonImporter.launch(arrayOf("application/json", "text/json"))
+                    },
+                    onImportCsv = {
+                        csvImporter.launch(arrayOf("text/csv", "text/comma-separated-values"))
+                    },
+                    onCreateDatabaseBackup = ::requestDatabaseBackup,
+                    onSelectDatabaseBackup = {
+                        databaseBackupRestorer.launch(
+                            arrayOf("application/zip", "application/octet-stream"),
+                        )
+                    },
+                    onSelectImportPolicy = viewModel::selectImportConflictPolicy,
+                    onConfirmImport = viewModel::confirmImport,
+                    onDismissImport = viewModel::dismissImport,
+                    onConfirmDatabaseRestore = viewModel::confirmDatabaseRestore,
+                    onDismissDatabaseBackup = viewModel::dismissDatabaseBackup,
+                    contentPadding = contentPadding,
+                )
+            }
 
-            AppDestination.INFO -> AppInfoScreen(
-                versionName = BuildConfig.VERSION_NAME,
-                versionCode = BuildConfig.VERSION_CODE,
-                buildType = BuildConfig.BUILD_TYPE,
-                onOpenUrl = ::openExternalUrl,
-                contentPadding = contentPadding,
-            )
+            composable<InfoRoute> {
+                AppInfoScreen(
+                    versionName = BuildConfig.VERSION_NAME,
+                    versionCode = BuildConfig.VERSION_CODE,
+                    buildType = BuildConfig.BUILD_TYPE,
+                    onOpenUrl = ::openExternalUrl,
+                    contentPadding = contentPadding,
+                )
+            }
         }
     }
-}
 
-private enum class AppDestination(
-    @androidx.annotation.StringRes val labelRes: Int,
-    val icon: ImageVector,
-) {
-    LIBRARY(R.string.navigation_library, Icons.AutoMirrored.Rounded.LibraryBooks),
-    SCAN(R.string.navigation_scan, Icons.Rounded.QrCodeScanner),
-    SERIES(R.string.navigation_series, Icons.Rounded.CollectionsBookmark),
-    INSIGHTS(R.string.navigation_insights, Icons.Rounded.Analytics),
-    DATA(R.string.navigation_data, Icons.Rounded.Storage),
-    INFO(R.string.navigation_info, Icons.Rounded.Info),
+    LaunchedEffect(requestedEditionId) {
+        if (requestedEditionId != null) {
+            // NavHostがgraphを設定するまで待ってから遷移する
+            navController.currentBackStackEntryFlow.first()
+            navigateToTab(LibraryGraph)
+            viewModel.selectLibraryEdition(requestedEditionId)
+        }
+    }
 }
