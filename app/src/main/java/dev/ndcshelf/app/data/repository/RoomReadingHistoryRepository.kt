@@ -40,6 +40,11 @@ class RoomReadingHistoryRepository(
             rows.map(ReadingSessionRow::toDomain)
         }
 
+    override fun observeAllSessions(): Flow<List<ReadingSession>> =
+        dao.observeAllSessions().map { rows ->
+            rows.map(ReadingSessionRow::toDomain)
+        }
+
     override suspend fun addSession(
         copyId: String,
         draft: ReadingSessionDraft,
