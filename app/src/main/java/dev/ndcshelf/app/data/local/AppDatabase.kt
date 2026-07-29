@@ -76,6 +76,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun consentDao(): ConsentDao
 
     abstract fun readingSessionDao(): ReadingSessionDao
+
+    abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
 
 // 既存の owned_copies.readingStatus からセッションを自動生成しない。
