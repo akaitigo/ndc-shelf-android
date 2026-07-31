@@ -126,6 +126,7 @@ dependencies {
     implementation(libs.tink.android)
     implementation(libs.json.canonicalization)
     implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.window.core)
     implementation(libs.aboutlibraries.core)
     implementation(libs.androidx.profileinstaller)
     baselineProfile(project(":baselineprofile"))

@@ -8,15 +8,10 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,8 +23,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +63,8 @@ import dev.ndcshelf.app.domain.diagnostics.DiagnosticsSnapshot
 import dev.ndcshelf.app.domain.diagnostics.buildDiagnosticsReport
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.model.OnboardingStore
+import dev.ndcshelf.app.ui.adaptive.AdaptiveLayout
+import dev.ndcshelf.app.ui.adaptive.AdaptiveNavigationScaffold
 import dev.ndcshelf.app.ui.navigation.ConsentRoute
 import dev.ndcshelf.app.ui.navigation.DataGraph
 import dev.ndcshelf.app.ui.navigation.DataRoute
@@ -84,7 +79,6 @@ import dev.ndcshelf.app.ui.navigation.SeriesGraph
 import dev.ndcshelf.app.ui.navigation.SeriesRoute
 import dev.ndcshelf.app.ui.navigation.SeriesSuggestionRoute
 import dev.ndcshelf.app.ui.navigation.TagManagementRoute
-import dev.ndcshelf.app.ui.navigation.TopLevelDestination
 import dev.ndcshelf.app.ui.navigation.WorkVariantRoute
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.ConsentPayloadDialog
@@ -113,6 +107,7 @@ fun NdcShelfApp(
     onBookDetailRequestHandled: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
     onboardingStore: OnboardingStore? = null,
+    layoutOverride: AdaptiveLayout? = null,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -668,31 +663,18 @@ fun NdcShelfApp(
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            NavigationBar(tonalElevation = 2.dp) {
-                TopLevelDestination.entries.forEach { destination ->
-                    val label = stringResource(destination.labelRes)
-                    val isSelected =
-                        currentDestination?.hierarchy?.any {
-                            it.hasRoute(destination.route::class)
-                        } == true
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { navigateToTab(destination.route) },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = label,
-                            )
-                        },
-                        label = { Text(label) },
-                    )
-                }
-            }
+    // サイズクラスによる分岐はこの1箇所へ集約する。各画面は「与えられた幅で最適に描画する」
+    // 責務だけを持ち、端末種別の判定を持たない（docs/ADAPTIVE_LAYOUT.md）。
+    AdaptiveNavigationScaffold(
+        isSelected = { destination ->
+            currentDestination?.hierarchy?.any {
+                it.hasRoute(destination.route::class)
+            } == true
         },
-    ) { contentPadding ->
+        onSelectDestination = { destination -> navigateToTab(destination.route) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        layoutOverride = layoutOverride,
+    ) { adaptiveLayout, contentPadding ->
         NavHost(
             navController = navController,
             startDestination = LibraryGraph,
@@ -761,6 +743,8 @@ fun NdcShelfApp(
                         onOpenTagManager = {
                             navController.navigate(TagManagementRoute) { launchSingleTop = true }
                         },
+                        twoPane = adaptiveLayout.usesListDetailPanes,
+                        listPaneWidth = adaptiveLayout.listPaneWidth,
                         contentPadding = contentPadding,
                     )
                 }
@@ -857,6 +841,8 @@ fun NdcShelfApp(
                         },
                         onRemoveMembership = viewModel::removeSeriesMembership,
                         onSetWatchEnabled = ::setSeriesWatch,
+                        twoPane = adaptiveLayout.usesListDetailPanes,
+                        listPaneWidth = adaptiveLayout.listPaneWidth,
                         contentPadding = contentPadding,
                     )
                 }

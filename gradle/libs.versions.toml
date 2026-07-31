@@ -27,6 +27,9 @@ work = "2.11.2"
 tink = "1.18.0"
 jsonCanonicalization = "1.1"
 documentfile = "1.0.1"
+# WindowSizeClassのbreakpoint定義（docs/ADAPTIVE_LAYOUT.md）。既にwork/camera経由で
+# 解決済みのバージョンを明示宣言するだけで、新規artifactもAPKサイズ増加も発生しない。
+window = "1.5.0"
 # 1.4.1はAGP 9系で「Module `:app` is not a supported android module」となるため、
 # AGP 9対応が入った1.5系alphaを使う（Macrobenchmark実行はCI必須ジョブ外）。
 benchmark = "1.5.0-alpha07"
@@ -76,6 +79,7 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 apache-commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commonsCsv" }
 tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
+androidx-window-core = { module = "androidx.window:window-core", version.ref = "window" }
 json-canonicalization = { module = "io.github.erdtman:java-json-canonicalization", version.ref = "jsonCanonicalization" }
 aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutLibraries" }
 

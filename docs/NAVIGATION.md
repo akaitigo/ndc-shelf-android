@@ -23,10 +23,25 @@
 
 - route引数へは安定IDだけを渡す。DBモデル、タイトル等の個人データ、一時オブジェクトをBundleへ保存しない。
 - 引数のIDが無効・削除済みの場合、対象画面はエラー表示または選択解除で安全に処理し、クラッシュ・空白画面にしない。
-- 下部タブは`saveState`/`restoreState`付きで切り替え、タブごとの画面状態（検索条件、スクロール、詳細スタック）を保存・復元する。
+- トップレベルのタブは`saveState`/`restoreState`付きで切り替え、タブごとの画面状態（検索条件、スクロール、詳細スタック）を保存・復元する。
 - システム戻るは詳細→タブ→開始タブ（本棚）→終了の順に解決する。詳細画面は`popBackStack`で閉じる。
 - ディープリンク`ndcshelf://book/{editionId}`は`MainActivity`でID形式を検証してから本棚タブへ渡す。未知IDは選択を残さない。
 - Storage Access FrameworkのActivity Result launcherは`NdcShelfApp`ルートで登録を維持し、遷移先には置かない（プロセス再生成後の結果配送を保証するため）。
+
+## ウィンドウサイズクラスとの関係
+
+方針の正本は[docs/ADAPTIVE_LAYOUT.md](ADAPTIVE_LAYOUT.md)。routeとの接点は次の3点だけ。
+
+- **routeはサイズクラスで変わらない。** compactでもexpandedでも同じrouteを使い、
+  一覧＋詳細を1ペインで順に見せるか、2ペインで同時に見せるかだけが変わる。
+  「詳細を開いているか」をroute引数へ持たせない（サイズクラス変更のたびにroute書き換えが
+  必要になり、安定IDのみを渡す規則とも噛み合わないため）。
+- **トップレベル遷移の見た目だけが変わる。** compactは下部`NavigationBar`、medium/expandedは
+  左`NavigationRail`。遷移そのもの（`popUpTo` + `saveState`/`restoreState`）は同一で、
+  切り替えは`ui/adaptive/AdaptiveNavigationScaffold.kt`の1箇所に集約する。
+- **2ペインでは詳細の戻る操作を出さない。** 一覧が同時に見えているため、詳細ペインの
+  戻る矢印と`BackHandler`を無効化する（`showBackAction = false`）。システム戻るは
+  タブ・画面スタックの解決だけに使われる。
 
 ## ViewModelの分割方針
 
