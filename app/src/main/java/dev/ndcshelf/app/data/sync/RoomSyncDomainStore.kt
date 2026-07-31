@@ -8,8 +8,11 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ReadingSessionEntity
+import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
@@ -82,6 +85,18 @@ class RoomSyncDomainStore(
                     database.readingSessionDao().upsert(entity.toReadingSession())
                 }
 
+                "tag" -> {
+                    database.tagDao().upsertTag(entity.toTag())
+                }
+
+                "tagAssignment" -> {
+                    database.tagDao().upsertAssignment(entity.toTagAssignment())
+                }
+
+                "savedSearch" -> {
+                    database.tagDao().upsertSavedSearch(entity.toSavedSearch())
+                }
+
                 else -> {
                     error("Unsupported sync entity type")
                 }
@@ -93,6 +108,9 @@ class RoomSyncDomainStore(
     override suspend fun applyDeletes(entities: List<SyncEntityReference>): SyncDomainApplyResult {
         entities.sortedBy { DELETE_ORDER.indexOf(it.entityType) }.forEach { entity ->
             when (entity.entityType) {
+                "savedSearch" -> database.tagDao().deleteSavedSearchById(entity.entityId)
+                "tagAssignment" -> database.tagDao().deleteAssignmentById(entity.entityId)
+                "tag" -> database.tagDao().deleteTagById(entity.entityId)
                 "readingSession" -> database.readingSessionDao().deleteById(entity.entityId)
                 "workGroupMembership" -> database.workGroupDao().deleteMembership(entity.entityId)
                 "seriesMembership" -> database.seriesDao().deleteMembership(entity.entityId)
@@ -126,6 +144,9 @@ class RoomSyncDomainStore(
                 "seriesMembership",
                 "workGroupMembership",
                 "readingSession",
+                "tag",
+                "tagAssignment",
+                "savedSearch",
             )
         val DELETE_ORDER = UPSERT_ORDER.reversed()
     }
@@ -254,6 +275,47 @@ private fun SyncResolvedEntity.toReadingSession() =
         finishedDay = fields.optionalString("finishedDay", 10),
         rating = fields.optionalInt("rating"),
         note = fields.optionalString("note", 2_000),
+        createdAt = fields.requiredLong("createdAt"),
+        updatedAt = fields.requiredLong("updatedAt"),
+    )
+
+private fun SyncResolvedEntity.toTag() =
+    TagEntity(
+        id = entityId,
+        name = fields.requiredString("name", 50),
+        colorRole =
+            fields.requiredEnum(
+                "colorRole",
+                setOf(
+                    "GRAY",
+                    "RED",
+                    "ORANGE",
+                    "YELLOW",
+                    "GREEN",
+                    "TEAL",
+                    "BLUE",
+                    "PURPLE",
+                    "PINK",
+                    "BROWN",
+                ),
+            ),
+        createdAt = fields.requiredLong("createdAt"),
+        updatedAt = fields.requiredLong("updatedAt"),
+    )
+
+private fun SyncResolvedEntity.toTagAssignment() =
+    TagAssignmentEntity(
+        id = entityId,
+        tagId = fields.requiredString("tagId", 200),
+        workId = fields.requiredString("workId", 200),
+        createdAt = fields.requiredLong("createdAt"),
+    )
+
+private fun SyncResolvedEntity.toSavedSearch() =
+    SavedSearchEntity(
+        id = entityId,
+        name = fields.requiredString("name", 50),
+        criteriaJson = fields.requiredString("criteriaJson", 4_096),
         createdAt = fields.requiredLong("createdAt"),
         updatedAt = fields.requiredLong("updatedAt"),
     )

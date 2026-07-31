@@ -5,9 +5,14 @@ data class LibrarySearchCriteria(
     val readingStatus: ReadingStatus? = null,
     val sort: LibrarySort = LibrarySort.ADDED_NEWEST,
     val selectedEditionId: String? = null,
+    /** 選択タグを全て含む作品へ絞り込む（AND条件）。上限はTagNameRules.MAX_TAG_FILTERS。 */
+    val tagIds: Set<String> = emptySet(),
 ) {
     val normalizedQuery: String
         get() = query.trim().take(MAX_LIBRARY_QUERY_LENGTH)
+
+    val normalizedTagIds: Set<String>
+        get() = tagIds.take(TagNameRules.MAX_TAG_FILTERS).toSet()
 }
 
 enum class LibrarySort {

@@ -671,6 +671,53 @@ class AppDatabaseMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun version14To15AddsEmptyTagTablesWithoutChangingDomainData() {
+        migrationHelper.createDatabase(V14_DATABASE, 14).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', 'タグ前の本', '匿名著者')")
+            close()
+        }
+
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V14_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+
+        migrated.query("SELECT title FROM book_works WHERE id = 'work'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("タグ前の本", cursor.getString(0))
+        }
+        listOf("tags", "tag_assignments", "saved_searches").forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+        }
+        migrated.assertForeignKey("tag_assignments", "tags", "tagId", "id")
+        migrated.assertForeignKey("tag_assignments", "book_works", "workId", "id")
+        migrated.assertIndex("tags", "index_tags_name", unique = true)
+        migrated.assertIndex("tag_assignments", "index_tag_assignments_tagId_workId", unique = true)
+        migrated.assertIndex("saved_searches", "index_saved_searches_name", unique = true)
+        migrated.execSQL("PRAGMA foreign_keys=ON")
+        migrated.execSQL("INSERT INTO tags VALUES ('tag', 'SF', 'BLUE', 1, 2)")
+        migrated.execSQL("INSERT INTO tag_assignments VALUES ('assignment', 'tag', 'work', 3)")
+        assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
+            migrated.execSQL(
+                "INSERT INTO tag_assignments VALUES ('assignment-duplicate', 'tag', 'work', 4)",
+            )
+        }
+        migrated.execSQL("DELETE FROM tags WHERE id = 'tag'")
+        migrated.query("SELECT COUNT(*) FROM tag_assignments").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
     private fun androidx.sqlite.db.SupportSQLiteDatabase.queryNames(
         sql: String,
         column: String,
@@ -735,6 +782,7 @@ class AppDatabaseMigrationTest {
         const val V11_DATABASE = "migration-v11"
         const val V12_DATABASE = "migration-v12"
         const val V13_DATABASE = "migration-v13"
+        const val V14_DATABASE = "migration-v14"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 

@@ -9,6 +9,8 @@ import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionAttemptRow
 import dev.ndcshelf.app.data.local.ScanSessionEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistBookRow
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.toSQLiteQuery
@@ -48,6 +50,9 @@ import dev.ndcshelf.app.domain.model.ReconciliationEditionSnapshot
 import dev.ndcshelf.app.domain.model.ScanAttempt
 import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
 import dev.ndcshelf.app.domain.model.ScanSession
+import dev.ndcshelf.app.domain.model.Tag
+import dev.ndcshelf.app.domain.model.TagColorRole
+import dev.ndcshelf.app.domain.model.TagNameRules
 import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.BookstoreChangeResult
@@ -281,10 +286,15 @@ class DefaultLibraryRepository(
                 if (dao.countEditionsForWork(book.workId) == 0) {
                     if (database.workGroupDao().findMembershipByWorkId(book.workId) == null) {
                         val seriesMemberships = database.seriesDao().findMembershipsForWork(book.workId)
+                        val tagAssignments = database.tagDao().findAssignmentsForWork(book.workId)
                         dao.deleteWorkById(book.workId)
                         syncMutations +=
                             seriesMemberships.map { membership ->
                                 syncDelete("seriesMembership", membership.membershipId)
+                            }
+                        syncMutations +=
+                            tagAssignments.map { assignment ->
+                                syncDelete("tagAssignment", assignment.id)
                             }
                         syncMutations += syncDelete("work", book.workId)
                     }
@@ -638,6 +648,8 @@ class DefaultLibraryRepository(
                 val groupsBefore = database.workGroupDao().getAllGroups().associateBy { it.id }
                 val membershipsBefore = database.workGroupDao().getAllMemberships().associateBy { it.id }
                 val seriesMembershipsBefore = database.seriesDao().getAllMemberships().associateBy { it.id }
+                val tagAssignmentsBefore =
+                    database.tagDao().getAllAssignments().associateBy { it.id }
                 val wishlistBefore =
                     trackedEditionIds.associateWith { editionId ->
                         dao.findWishlistByEditionId(editionId)
@@ -727,9 +739,29 @@ class DefaultLibraryRepository(
                         .map { id ->
                             seriesMembershipsAfter[id]?.toSyncUpsert() ?: syncDelete("seriesMembership", id)
                         }
+                val tagAssignmentsAfter =
+                    database.tagDao().getAllAssignments().associateBy { it.id }
+                val tagAssignmentMutations =
+                    tagAssignmentsBefore.keys
+                        .union(tagAssignmentsAfter.keys)
+                        .mapNotNull { id ->
+                            when {
+                                tagAssignmentsAfter[id] == null -> {
+                                    syncDelete("tagAssignment", id)
+                                }
+
+                                tagAssignmentsBefore[id] != tagAssignmentsAfter[id] -> {
+                                    tagAssignmentsAfter[id]?.toSyncUpsert()
+                                }
+
+                                else -> {
+                                    null
+                                }
+                            }
+                        }
                 syncJournal.record(
                     copyMutations + membershipMutations + seriesMembershipMutations +
-                        editionMutations + groupMutations +
+                        tagAssignmentMutations + editionMutations + groupMutations +
                         workMutations + wishlistMutations,
                 )
                 ManualReconciliationApplyResult.Applied
@@ -1130,6 +1162,7 @@ class DefaultLibraryRepository(
                         syncDelete("readingSession", session.id)
                     }
                 val seriesMemberships = database.seriesDao().findMembershipsForWork(book.workId)
+                val tagAssignments = database.tagDao().findAssignmentsForWork(book.workId)
                 check(dao.deleteCopyById(copyId) == 1)
                 if (dao.countCopiesForEdition(book.editionId) == 0 &&
                     dao.findWishlistByEditionId(book.editionId) == null
@@ -1143,6 +1176,10 @@ class DefaultLibraryRepository(
                         syncMutations +=
                             seriesMemberships.map { membership ->
                                 syncDelete("seriesMembership", membership.membershipId)
+                            }
+                        syncMutations +=
+                            tagAssignments.map { assignment ->
+                                syncDelete("tagAssignment", assignment.id)
                             }
                         syncMutations += syncDelete("work", book.workId)
                     }
@@ -1234,11 +1271,26 @@ class DefaultLibraryRepository(
             batch = batch,
             existingBooks = dao.getLibrary().map(LibraryBookRow::toDomain),
             conflictPolicy = conflictPolicy,
+            existingTags =
+                database.tagDao().getAllTags().map { entity ->
+                    Tag(
+                        id = entity.id,
+                        name = entity.name,
+                        colorRole =
+                            TagColorRole.entries.firstOrNull { it.name == entity.colorRole }
+                                ?: TagColorRole.GRAY,
+                        createdAt = entity.createdAt,
+                        updatedAt = entity.updatedAt,
+                    )
+                },
         )
 
     override suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult = importCommitter.commit(preview)
 
-    private suspend fun writeImportedBooks(books: List<LibraryBook>) {
+    private suspend fun writeImportedBooks(
+        books: List<LibraryBook>,
+        preview: LibraryImportPreview,
+    ) {
         val existingEditionsByIsbn =
             dao
                 .getAllEditions()
@@ -1281,14 +1333,69 @@ class DefaultLibraryRepository(
         resolved.map(LibraryBook::editionId).distinct().forEach { editionId ->
             dao.deleteWishlistByEditionId(editionId)
         }
+        val tagMutations = applyImportedTags(resolved, preview)
         syncJournal.record(
             works.map { it.toSyncUpsert() } +
                 editions.map { it.toSyncUpsert() } +
                 copies.map { it.toSyncUpsert() } +
                 editions
                     .filter { it.id in wishlistEditionIds }
-                    .map { syncDelete("wishlistItem", it.id) },
+                    .map { syncDelete("wishlistItem", it.id) } +
+                tagMutations,
         )
+    }
+
+    /**
+     * インポートのタグ定義と各copyのタグ名を反映する。
+     * 既存タグは正規化済み名で再利用し（色は変更しない）、新規タグだけ作成する。
+     * 付与は（tagId, workId）で重複しないよう1件へ正規化する。
+     */
+    private suspend fun applyImportedTags(
+        resolved: List<LibraryBook>,
+        preview: LibraryImportPreview,
+    ): List<SyncMutation> {
+        if (preview.tagDefinitions.isEmpty() && preview.tagNamesByCopyId.isEmpty()) {
+            return emptyList()
+        }
+        val tagDao = database.tagDao()
+        val mutations = mutableListOf<SyncMutation>()
+        val now = nowMillis()
+        val tagsByName = tagDao.getAllTags().associateBy(TagEntity::name).toMutableMap()
+        preview.tagDefinitions.forEach { definition ->
+            if (tagsByName[definition.name] == null) {
+                check(tagDao.countTags() < TagNameRules.MAX_TAGS)
+                val entity =
+                    TagEntity(
+                        id = idFactory(),
+                        name = definition.name,
+                        colorRole = definition.colorRole.name,
+                        createdAt = now,
+                        updatedAt = now,
+                    )
+                tagDao.insertTag(entity)
+                tagsByName[definition.name] = entity
+                mutations += entity.toSyncUpsert()
+            }
+        }
+        val workIdByCopyId = resolved.associate { book -> book.copyId to book.workId }
+        preview.tagNamesByCopyId.forEach { (copyId, tagNames) ->
+            val workId = workIdByCopyId[copyId] ?: return@forEach
+            tagNames.forEach { tagName ->
+                val tag = checkNotNull(tagsByName[tagName])
+                if (tagDao.findAssignment(tag.id, workId) == null) {
+                    val assignment =
+                        TagAssignmentEntity(
+                            id = idFactory(),
+                            tagId = tag.id,
+                            workId = workId,
+                            createdAt = now,
+                        )
+                    tagDao.insertAssignment(assignment)
+                    mutations += assignment.toSyncUpsert()
+                }
+            }
+        }
+        return mutations
     }
 
     private suspend fun resolveShelfOrderKey(

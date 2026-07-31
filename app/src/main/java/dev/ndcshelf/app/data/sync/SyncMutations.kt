@@ -7,8 +7,11 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ReadingSessionEntity
+import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
@@ -163,6 +166,41 @@ fun ReadingSessionEntity.toSyncUpsert() =
             "finishedDay" to finishedDay.jsonValue(),
             "rating" to rating.jsonValue(),
             "note" to note.jsonValue(),
+            "createdAt" to JsonPrimitive(createdAt),
+            "updatedAt" to JsonPrimitive(updatedAt),
+        ),
+    )
+
+fun TagEntity.toSyncUpsert() =
+    SyncMutation.Upsert(
+        "tag",
+        id,
+        mapOf(
+            "name" to JsonPrimitive(name),
+            "colorRole" to JsonPrimitive(colorRole),
+            "createdAt" to JsonPrimitive(createdAt),
+            "updatedAt" to JsonPrimitive(updatedAt),
+        ),
+    )
+
+fun TagAssignmentEntity.toSyncUpsert() =
+    SyncMutation.Upsert(
+        "tagAssignment",
+        id,
+        mapOf(
+            "tagId" to JsonPrimitive(tagId),
+            "workId" to JsonPrimitive(workId),
+            "createdAt" to JsonPrimitive(createdAt),
+        ),
+    )
+
+fun SavedSearchEntity.toSyncUpsert() =
+    SyncMutation.Upsert(
+        "savedSearch",
+        id,
+        mapOf(
+            "name" to JsonPrimitive(name),
+            "criteriaJson" to JsonPrimitive(criteriaJson),
             "createdAt" to JsonPrimitive(createdAt),
             "updatedAt" to JsonPrimitive(updatedAt),
         ),

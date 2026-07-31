@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `LibraryGraph` → `LibraryRoute` | なし | 本棚タブの開始画面 |
 | `LibraryGraph` → `WorkVariantRoute` | `workId: String` | 版違い（作品グループ）編集 |
+| `LibraryGraph` → `TagManagementRoute` | なし | タグとコレクション（保存済み検索）の管理 |
 | `ScanRoute` | なし | スキャン・書店モード |
 | `SeriesGraph` → `SeriesRoute` | なし | シリーズ一覧・詳細 |
 | `SeriesGraph` → `SeriesSuggestionRoute` | `workId: String?` | シリーズ候補の確認・確定（nullは一覧起点） |

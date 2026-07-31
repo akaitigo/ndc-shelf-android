@@ -23,56 +23,63 @@ sealed interface LibraryJsonParseResult {
         val exportedAt: Long,
     ) : LibraryJsonParseResult
 
-    data class Invalid(val errors: List<ImportValidationError>) : LibraryJsonParseResult
+    data class Invalid(
+        val errors: List<ImportValidationError>,
+    ) : LibraryJsonParseResult
 }
 
 class LibraryJsonImporter(
     private val limits: LibraryImportLimits = LibraryImportLimits(),
 ) {
     suspend fun parse(input: InputStream): LibraryJsonParseResult {
-        val bytes = try {
-            readLimited(input)
-        } catch (_: SourceTooLargeException) {
-            return invalid("入力ファイルは${limits.maxSourceBytes}バイト以下にしてください")
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Exception) {
-            return invalid("JSONファイルを読み込めませんでした")
-        }
+        val bytes =
+            try {
+                readLimited(input)
+            } catch (_: SourceTooLargeException) {
+                return invalid("入力ファイルは${limits.maxSourceBytes}バイト以下にしてください")
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                return invalid("JSONファイルを読み込めませんでした")
+            }
 
-        val source = try {
-            decodeUtf8(bytes)
-        } catch (_: Exception) {
-            return invalid("JSONファイルはUTF-8で保存してください")
-        }
+        val source =
+            try {
+                decodeUtf8(bytes)
+            } catch (_: Exception) {
+                return invalid("JSONファイルはUTF-8で保存してください")
+            }
         currentCoroutineContext().ensureActive()
         if (!hasSafeNestingDepth(source)) {
             return invalid("JSONのネストは${MAX_NESTING_DEPTH}段以下にしてください")
         }
 
-        val root = try {
-            Json.parseToJsonElement(source) as? JsonObject
-                ?: return invalid("JSONのルートはオブジェクトにしてください")
-        } catch (_: Exception) {
-            return invalid("JSONの構文が正しくありません")
-        }
+        val root =
+            try {
+                Json.parseToJsonElement(source) as? JsonObject
+                    ?: return invalid("JSONのルートはオブジェクトにしてください")
+            } catch (_: Exception) {
+                return invalid("JSONの構文が正しくありません")
+            }
         currentCoroutineContext().ensureActive()
 
         val errors = mutableListOf<ImportValidationError>()
         reportUnknownFields(root, ROOT_FIELDS, null, errors)
         val schemaVersion = root.requiredLong("schemaVersion", null, errors)
-        val unsupportedSchema = schemaVersion != null &&
-            schemaVersion !in 1..LibraryExporter.SCHEMA_VERSION.toLong()
+        val unsupportedSchema =
+            schemaVersion != null &&
+                schemaVersion !in 1..LibraryExporter.SCHEMA_VERSION.toLong()
         if (unsupportedSchema) {
             errors.addCapped(
                 ImportValidationError(
                     recordNumber = null,
                     field = "schemaVersion",
-                    reason = if (schemaVersion > LibraryExporter.SCHEMA_VERSION) {
-                        "このアプリでは新しいスキーマバージョン${schemaVersion}を読み込めません"
-                    } else {
-                        "スキーマバージョン${schemaVersion}はサポートしていません"
-                    },
+                    reason =
+                        if (schemaVersion > LibraryExporter.SCHEMA_VERSION) {
+                            "このアプリでは新しいスキーマバージョン${schemaVersion}を読み込めません"
+                        } else {
+                            "スキーマバージョン${schemaVersion}はサポートしていません"
+                        },
                 ),
             )
         }
@@ -83,6 +90,32 @@ class LibraryJsonImporter(
         val declaredBookCount = root.requiredLong("bookCount", null, errors)
         if (declaredBookCount != null && declaredBookCount !in 0..limits.maxRecords.toLong()) {
             errors.addCapped(rootError("bookCount", "0〜${limits.maxRecords}件の範囲で指定してください"))
+        }
+        val schemaVersionInt = schemaVersion?.toInt() ?: 0
+        val importTags = mutableListOf<UnvalidatedImportTag>()
+        if (schemaVersionInt >= 4 && !unsupportedSchema) {
+            val tagsElement = root["tags"] as? JsonArray
+            if (tagsElement == null) {
+                errors.addCapped(rootError("tags", "配列として指定してください"))
+            } else if (tagsElement.size > MAX_TAG_DEFINITIONS) {
+                errors.addCapped(rootError("tags", "タグは${MAX_TAG_DEFINITIONS}件以下にしてください"))
+            } else {
+                tagsElement.forEachIndexed { index, element ->
+                    val tag = element as? JsonObject
+                    if (tag == null) {
+                        errors.addCapped(
+                            ImportValidationError(index + 1, "tags", "タグはオブジェクトにしてください"),
+                        )
+                        return@forEachIndexed
+                    }
+                    reportUnknownFields(tag, TAG_FIELDS, index + 1, errors)
+                    importTags +=
+                        UnvalidatedImportTag(
+                            name = tag.string("name", index + 1, nullable = false, errors),
+                            colorRole = tag.string("colorRole", index + 1, nullable = false, errors),
+                        )
+                }
+            }
         }
         val books = root["books"] as? JsonArray
         val tooManyBooks = books != null && books.size > limits.maxRecords
@@ -111,10 +144,12 @@ class LibraryJsonImporter(
         if (errors.isNotEmpty()) return LibraryJsonParseResult.Invalid(errors)
 
         return LibraryJsonParseResult.Valid(
-            batch = LibraryImportBatch(
-                sourceSizeBytes = bytes.size.toLong(),
-                records = records,
-            ),
+            batch =
+                LibraryImportBatch(
+                    sourceSizeBytes = bytes.size.toLong(),
+                    records = records,
+                    tags = importTags,
+                ),
             exportedAt = requireNotNull(exportedAt),
         )
     }
@@ -132,11 +167,13 @@ class LibraryJsonImporter(
         }
         val before = errors.size
         reportUnknownFields(book, BOOK_FIELDS, recordNumber, errors)
-        val requiredFields = when {
-            schemaVersion >= 3 -> BOOK_FIELDS
-            schemaVersion >= 2 -> BOOK_FIELDS - "bibliographicSource"
-            else -> BOOK_FIELDS - setOf("copyLabel", "bibliographicSource")
-        }
+        val requiredFields =
+            when {
+                schemaVersion >= 4 -> BOOK_FIELDS
+                schemaVersion >= 3 -> BOOK_FIELDS - "tags"
+                schemaVersion >= 2 -> BOOK_FIELDS - setOf("tags", "bibliographicSource")
+                else -> BOOK_FIELDS - setOf("tags", "copyLabel", "bibliographicSource")
+            }
         requiredFields.forEach { field ->
             if (field !in book) {
                 errors.addCapped(recordError(recordNumber, field, "項目がありません"))
@@ -154,22 +191,30 @@ class LibraryJsonImporter(
         val coverUrl = book.string("coverUrl", recordNumber, nullable = true, errors)
         val ndcCode = book.string("ndcCode", recordNumber, nullable = true, errors)
         val ndcEdition = book.string("ndcEdition", recordNumber, nullable = true, errors)
-        val classificationSource = book.string(
-            "classificationSource",
-            recordNumber,
-            nullable = false,
-            errors,
-        )
-        val bibliographicSource = if (schemaVersion >= 3) {
-            book.string("bibliographicSource", recordNumber, nullable = false, errors)
-        } else {
-            "NDL"
-        }
+        val classificationSource =
+            book.string(
+                "classificationSource",
+                recordNumber,
+                nullable = false,
+                errors,
+            )
+        val bibliographicSource =
+            if (schemaVersion >= 3) {
+                book.string("bibliographicSource", recordNumber, nullable = false, errors)
+            } else {
+                "NDL"
+            }
         val mediaType = book.string("mediaType", recordNumber, nullable = false, errors)
         val location = book.string("location", recordNumber, nullable = false, errors)
         val readingStatus = book.string("readingStatus", recordNumber, nullable = false, errors)
         val copyLabel = book.string("copyLabel", recordNumber, nullable = false, errors)
         val addedAt = book.long("addedAt", recordNumber, nullable = false, errors)
+        val tags =
+            if (schemaVersion >= 4) {
+                book.stringArray("tags", recordNumber, errors)
+            } else {
+                null
+            }
 
         if (errors.size != before) return null
         return UnvalidatedLibraryBook(
@@ -191,7 +236,35 @@ class LibraryJsonImporter(
             readingStatus = readingStatus,
             addedAt = addedAt,
             copyLabel = copyLabel,
+            tags = tags,
         )
+    }
+
+    private fun JsonObject.stringArray(
+        field: String,
+        recordNumber: Int,
+        errors: MutableList<ImportValidationError>,
+    ): List<String>? {
+        val value = this[field] ?: return null
+        val array = value as? JsonArray
+        if (array == null) {
+            errors.addCapped(recordError(recordNumber, field, "文字列の配列として指定してください"))
+            return null
+        }
+        if (array.size > MAX_TAG_DEFINITIONS) {
+            errors.addCapped(recordError(recordNumber, field, "タグは${MAX_TAG_DEFINITIONS}件以下にしてください"))
+            return null
+        }
+        val values = mutableListOf<String>()
+        array.forEach { element ->
+            val primitive = element as? JsonPrimitive
+            if (primitive == null || !primitive.isString) {
+                errors.addCapped(recordError(recordNumber, field, "文字列の配列として指定してください"))
+                return@forEach
+            }
+            values += primitive.content
+        }
+        return values
     }
 
     private suspend fun readLimited(input: InputStream): ByteArray {
@@ -211,9 +284,11 @@ class LibraryJsonImporter(
 
     private fun decodeUtf8(bytes: ByteArray): String {
         val start = if (bytes.startsWithUtf8Bom()) UTF8_BOM.size else 0
-        val decoder = StandardCharsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
+        val decoder =
+            StandardCharsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
         return decoder.decode(ByteBuffer.wrap(bytes, start, bytes.size - start)).toString()
     }
 
@@ -230,12 +305,18 @@ class LibraryJsonImporter(
                 }
             } else {
                 when (character) {
-                    '"' -> inString = true
+                    '"' -> {
+                        inString = true
+                    }
+
                     '{', '[' -> {
                         depth += 1
                         if (depth > MAX_NESTING_DEPTH) return false
                     }
-                    '}', ']' -> depth -= 1
+
+                    '}', ']' -> {
+                        depth -= 1
+                    }
                 }
             }
         }
@@ -255,11 +336,12 @@ class LibraryJsonImporter(
         }
     }
 
-    private fun String.safeForError(): String = if (length <= MAX_ERROR_FIELD_LENGTH) {
-        this
-    } else {
-        take(MAX_ERROR_FIELD_LENGTH) + "…"
-    }
+    private fun String.safeForError(): String =
+        if (length <= MAX_ERROR_FIELD_LENGTH) {
+            this
+        } else {
+            take(MAX_ERROR_FIELD_LENGTH) + "…"
+        }
 
     private fun JsonObject.requiredLong(
         field: String,
@@ -310,22 +392,27 @@ class LibraryJsonImporter(
         return primitive.content
     }
 
-    private fun ByteArray.startsWithUtf8Bom(): Boolean =
-        size >= UTF8_BOM.size && UTF8_BOM.indices.all { this[it] == UTF8_BOM[it] }
+    private fun ByteArray.startsWithUtf8Bom(): Boolean = size >= UTF8_BOM.size && UTF8_BOM.indices.all { this[it] == UTF8_BOM[it] }
 
     private fun MutableList<ImportValidationError>.addCapped(error: ImportValidationError) {
         if (size < MAX_ERRORS) add(error)
     }
 
-    private fun invalid(reason: String) = LibraryJsonParseResult.Invalid(
-        listOf(ImportValidationError(null, null, reason)),
-    )
+    private fun invalid(reason: String) =
+        LibraryJsonParseResult.Invalid(
+            listOf(ImportValidationError(null, null, reason)),
+        )
 
-    private fun rootError(field: String, reason: String) =
-        ImportValidationError(null, field, reason)
+    private fun rootError(
+        field: String,
+        reason: String,
+    ) = ImportValidationError(null, field, reason)
 
-    private fun recordError(record: Int, field: String?, reason: String) =
-        ImportValidationError(record, field, reason)
+    private fun recordError(
+        record: Int,
+        field: String?,
+        reason: String,
+    ) = ImportValidationError(record, field, reason)
 
     private class SourceTooLargeException : IllegalArgumentException()
 
@@ -333,27 +420,31 @@ class LibraryJsonImporter(
         const val MAX_ERRORS = 100
         const val MAX_ERROR_FIELD_LENGTH = 80
         const val MAX_NESTING_DEPTH = 64
+        const val MAX_TAG_DEFINITIONS = 100
         val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
-        val ROOT_FIELDS = setOf("schemaVersion", "exportedAt", "bookCount", "books")
-        val BOOK_FIELDS = setOf(
-            "copyId",
-            "workId",
-            "editionId",
-            "title",
-            "primaryAuthor",
-            "isbn13",
-            "publisher",
-            "publishedYear",
-            "coverUrl",
-            "ndcCode",
-            "ndcEdition",
-            "classificationSource",
-            "bibliographicSource",
-            "mediaType",
-            "location",
-            "readingStatus",
-            "copyLabel",
-            "addedAt",
-        )
+        val ROOT_FIELDS = setOf("schemaVersion", "exportedAt", "bookCount", "books", "tags")
+        val TAG_FIELDS = setOf("name", "colorRole")
+        val BOOK_FIELDS =
+            setOf(
+                "copyId",
+                "workId",
+                "editionId",
+                "title",
+                "primaryAuthor",
+                "isbn13",
+                "publisher",
+                "publishedYear",
+                "coverUrl",
+                "ndcCode",
+                "ndcEdition",
+                "classificationSource",
+                "bibliographicSource",
+                "mediaType",
+                "location",
+                "readingStatus",
+                "copyLabel",
+                "addedAt",
+                "tags",
+            )
     }
 }

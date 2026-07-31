@@ -11,7 +11,8 @@ internal fun LibrarySearchCriteria.toSQLiteQuery(): SupportSQLiteQuery {
 
     if (selectedEditionId == null) {
         normalizedQuery.takeIf(String::isNotEmpty)?.let { query ->
-            conditions += """
+            conditions +=
+                """
                 (
                     works.title LIKE ? ESCAPE '\' COLLATE NOCASE OR
                     works.primaryAuthor LIKE ? ESCAPE '\' COLLATE NOCASE OR
@@ -23,7 +24,7 @@ internal fun LibrarySearchCriteria.toSQLiteQuery(): SupportSQLiteQuery {
                     shelves.name LIKE ? ESCAPE '\' COLLATE NOCASE OR
                     tiers.name LIKE ? ESCAPE '\' COLLATE NOCASE
                 )
-            """.trimIndent()
+                """.trimIndent()
             val pattern = "%${query.escapeLikePattern()}%"
             repeat(9) { arguments += pattern }
         }
@@ -31,48 +32,75 @@ internal fun LibrarySearchCriteria.toSQLiteQuery(): SupportSQLiteQuery {
             conditions += "copies.readingStatus = ?"
             arguments += status.name
         }
+        // タグはAND条件（選択タグを全て含む作品）。ID等値比較のみでLIKEを使わない。
+        normalizedTagIds.sorted().forEach { tagId ->
+            conditions +=
+                """
+                EXISTS (
+                    SELECT 1 FROM tag_assignments AS assignments
+                    WHERE assignments.workId = works.id AND assignments.tagId = ?
+                )
+                """.trimIndent()
+            arguments += tagId
+        }
     } else {
         // Detail editing needs every edition copy and only its shelves' neighbors for placement.
-        conditions += """
+        conditions +=
+            """
             editions.id = ? OR copies.tierId IN (
                 SELECT selectedCopies.tierId
                 FROM owned_copies AS selectedCopies
                 WHERE selectedCopies.editionId = ? AND selectedCopies.tierId IS NOT NULL
             )
-        """.trimIndent()
+            """.trimIndent()
         arguments += selectedEditionId
         arguments += selectedEditionId
     }
 
-    val where = conditions.takeIf(List<String>::isNotEmpty)
-        ?.joinToString(prefix = "WHERE ", separator = " AND ")
-        .orEmpty()
-    val order = when (sort) {
-        LibrarySort.ADDED_NEWEST -> "copies.addedAt DESC, copies.id ASC"
-        LibrarySort.TITLE -> "works.title COLLATE NOCASE ASC, copies.addedAt DESC, copies.id ASC"
-        LibrarySort.AUTHOR ->
-            "works.primaryAuthor COLLATE NOCASE ASC, works.title COLLATE NOCASE ASC, copies.id ASC"
-        LibrarySort.NDC ->
-            "editions.ndcCode IS NULL ASC, editions.ndcCode ASC, works.title COLLATE NOCASE ASC, copies.id ASC"
-        LibrarySort.SHELF -> """
-            copies.tierId IS NULL ASC,
-            rooms.sortOrder ASC,
-            shelves.sortOrder ASC,
-            tiers.sortOrder ASC,
-            CASE WHEN copies.tierId IS NULL THEN copies.addedAt END ASC,
-            copies.shelfOrderKey IS NULL ASC,
-            copies.shelfOrderKey ASC,
-            copies.addedAt ASC,
-            copies.id ASC
-        """.trimIndent()
-    }
+    val where =
+        conditions
+            .takeIf(List<String>::isNotEmpty)
+            ?.joinToString(prefix = "WHERE ", separator = " AND ")
+            .orEmpty()
+    val order =
+        when (sort) {
+            LibrarySort.ADDED_NEWEST -> {
+                "copies.addedAt DESC, copies.id ASC"
+            }
+
+            LibrarySort.TITLE -> {
+                "works.title COLLATE NOCASE ASC, copies.addedAt DESC, copies.id ASC"
+            }
+
+            LibrarySort.AUTHOR -> {
+                "works.primaryAuthor COLLATE NOCASE ASC, works.title COLLATE NOCASE ASC, copies.id ASC"
+            }
+
+            LibrarySort.NDC -> {
+                "editions.ndcCode IS NULL ASC, editions.ndcCode ASC, works.title COLLATE NOCASE ASC, copies.id ASC"
+            }
+
+            LibrarySort.SHELF -> {
+                """
+                copies.tierId IS NULL ASC,
+                rooms.sortOrder ASC,
+                shelves.sortOrder ASC,
+                tiers.sortOrder ASC,
+                CASE WHEN copies.tierId IS NULL THEN copies.addedAt END ASC,
+                copies.shelfOrderKey IS NULL ASC,
+                copies.shelfOrderKey ASC,
+                copies.addedAt ASC,
+                copies.id ASC
+                """.trimIndent()
+            }
+        }
     return SimpleSQLiteQuery("$LIBRARY_SELECT\n$where\nORDER BY $order", arguments.toTypedArray())
 }
 
-private fun String.escapeLikePattern(): String =
-    replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+private fun String.escapeLikePattern(): String = replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-private val LIBRARY_SELECT = """
+private val LIBRARY_SELECT =
+    """
     SELECT
         copies.id AS copyId,
         works.id AS workId,
@@ -102,4 +130,4 @@ private val LIBRARY_SELECT = """
     LEFT JOIN location_tiers AS tiers ON tiers.id = copies.tierId
     LEFT JOIN location_shelves AS shelves ON shelves.id = tiers.shelfId
     LEFT JOIN location_rooms AS rooms ON rooms.id = shelves.roomId
-""".trimIndent()
+    """.trimIndent()

@@ -7,7 +7,7 @@ Roomで管理する全テーブルを、WALの状態に依存せず一貫した�
 
 ## 設計
 
-- バックアップ時はRoomの単一トランザクション内で `book_works`、`work_groups`、`work_group_memberships`、`book_editions`、`owned_copies`、`reading_sessions`、`wishlist_items`、`location_rooms`、`location_shelves`、`location_tiers`、`series`、`series_memberships`、`series_watches`、`series_release_candidates`、`scan_sessions`、`scan_attempts` を読み出す。
+- バックアップ時はRoomの単一トランザクション内で `book_works`、`work_groups`、`work_group_memberships`、`book_editions`、`owned_copies`、`reading_sessions`、`tags`、`tag_assignments`、`saved_searches`、`wishlist_items`、`location_rooms`、`location_shelves`、`location_tiers`、`series`、`series_memberships`、`series_watches`、`series_release_candidates`、`scan_sessions`、`scan_attempts` を読み出す。
 - DBファイルはコピーしない。Roomのトランザクション分離により論理スナップショットを作るため、WALファイルの取りこぼしが発生しない。
 - 復元前にZIP構造、形式版、DB版、件数、SHA-256、主キー重複、一意ISBN、外部キー参照、入力上限を検証する。
 - 復元は全対象テーブルの削除・挿入を1回のRoomトランザクションで行い、親セッションを子試行より先に復元する。挿入または事後照合に失敗した場合、Roomが変更全体をロールバックする。
@@ -22,7 +22,7 @@ Roomで管理する全テーブルを、WALの状態に依存せず一貫した�
 | `manifest.json` | 形式版、DB版、作成時刻、アプリ版、作品・作品グループ・版・所有コピー・読書セッション・購入候補・シリーズ・所属・監視設定・新刊候補・スキャンセッション・試行の件数、ペイロード全体のSHA-256 |
 | `database.json` | 蔵書、作品グループ、読書履歴、購入予定、置き場所、シリーズ、監視設定、新刊候補、通知状態、スキャン履歴のRoomエンティティ |
 
-現在の形式版は13、DB版は14である。Room v13で追加した目的別同意記録（`consent_records`）は端末固有の判断であるためpayload schemaへ追加せず、バックアップ・復元の対象外とする。manifestの形式版とpayload schema版は同値だけを許可し、片方だけ異なるファイルは復元前に拒否する。バックアップ形式とRoom DB版は独立しており、Room v12で追加した同期内部状態はpayload schemaへ追加しない。形式13では読書セッション履歴（状態・部分日付・評価・メモ）、形式12ではシリーズ監視設定・保存済み候補・通知状態、形式11では作品グループ・所属・シリーズ代替設定、形式10ではシリーズ所属の確定由来・確定者・候補生成時タイトル、形式9ではシリーズと所属、形式8ではISBNなし書誌と書誌情報の由来（`NDL` / `MANUAL`）、形式7ではスキャン履歴を保持する。旧形式の欠落項目は復元時に安全な既定値へ移行し、形式6より前は購入候補0件、形式7より前はスキャン履歴0件、形式8より前の書誌由来は`NDL`、形式9より前はシリーズ0件、形式10より前の所属は手動・ユーザー確定、形式11より前は作品グループ0件、形式12より前は監視設定と新刊候補0件、形式13より前は読書セッション0件として扱う。現在より新しいDB版は、データを変更する前に拒否する。
+現在の形式版は14、DB版は15である。Room v13で追加した目的別同意記録（`consent_records`）は端末固有の判断であるためpayload schemaへ追加せず、バックアップ・復元の対象外とする。manifestの形式版とpayload schema版は同値だけを許可し、片方だけ異なるファイルは復元前に拒否する。バックアップ形式とRoom DB版は独立しており、Room v12で追加した同期内部状態はpayload schemaへ追加しない。形式14ではタグ・タグ付与・保存済み検索（検索条件コレクション）、形式13では読書セッション履歴（状態・部分日付・評価・メモ）、形式12ではシリーズ監視設定・保存済み候補・通知状態、形式11では作品グループ・所属・シリーズ代替設定、形式10ではシリーズ所属の確定由来・確定者・候補生成時タイトル、形式9ではシリーズと所属、形式8ではISBNなし書誌と書誌情報の由来（`NDL` / `MANUAL`）、形式7ではスキャン履歴を保持する。旧形式の欠落項目は復元時に安全な既定値へ移行し、形式6より前は購入候補0件、形式7より前はスキャン履歴0件、形式8より前の書誌由来は`NDL`、形式9より前はシリーズ0件、形式10より前の所属は手動・ユーザー確定、形式11より前は作品グループ0件、形式12より前は監視設定と新刊候補0件、形式13より前は読書セッション0件、形式14より前はタグ・付与・保存済み検索0件として扱う。現在より新しいDB版は、データを変更する前に拒否する。
 
 ## 安全性と制限
 
