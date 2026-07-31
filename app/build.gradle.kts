@@ -34,6 +34,11 @@ android {
                 storePassword = System.getenv("NDC_SHELF_UPLOAD_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("NDC_SHELF_UPLOAD_KEY_ALIAS")
                 keyPassword = System.getenv("NDC_SHELF_UPLOAD_KEY_PASSWORD")
+                // minSdk 23のためv1も必要。v3はAPK Signature Scheme v3の鍵
+                // ローテーション経路を将来利用できるようにするため有効化する。
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
