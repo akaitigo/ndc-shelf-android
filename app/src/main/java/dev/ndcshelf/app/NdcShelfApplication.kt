@@ -17,6 +17,7 @@ import dev.ndcshelf.app.data.diagnostics.DiagnosticsLoggingBookMetadataService
 import dev.ndcshelf.app.data.diagnostics.FileDiagnosticsLogger
 import dev.ndcshelf.app.data.diagnostics.RoomDiagnosticsSnapshotCollector
 import dev.ndcshelf.app.data.local.AppDatabase
+import dev.ndcshelf.app.data.local.SharedPreferencesInsightsExclusionStore
 import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
 import dev.ndcshelf.app.data.remote.NdlSeriesReleaseService
@@ -32,6 +33,7 @@ import dev.ndcshelf.app.data.sync.RoomSyncEngine
 import dev.ndcshelf.app.data.sync.RoomSyncStatusRepository
 import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
+import dev.ndcshelf.app.domain.insights.InsightsExclusionStore
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.LocationRepository
@@ -175,6 +177,9 @@ class AppContainer(
         )
 
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
+
+    val insightsExclusionStore: InsightsExclusionStore =
+        SharedPreferencesInsightsExclusionStore(application)
 
     val databaseBackupManager =
         RoomDatabaseBackupManager(

@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.about.libraries)
     alias(libs.plugins.cyclonedx)
+    alias(libs.plugins.roborazzi)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -79,6 +81,14 @@ ksp {
     arg("room.generateKotlin", "true")
 }
 
+baselineProfile {
+    // プロファイルはリポジトリへコミットし、通常ビルドでは再生成しない。
+    // 再生成は .github/workflows/benchmark.yml（workflow_dispatch）または
+    // ローカルの :app:generateReleaseBaselineProfile で行う。
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -114,17 +124,23 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.apache.commons.csv)
     implementation(libs.aboutlibraries.core)
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.rule)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.androidx.navigation.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -194,6 +210,28 @@ tasks.cyclonedxDirectBom {
     includeLicenseText = false
     jsonOutput = layout.buildDirectory.file("reports/cyclonedx/ndc-shelf.cdx.json")
     xmlOutput.unsetConvention()
+}
+
+val verifyReleaseBundleSize by tasks.registering {
+    group = "verification"
+    description = "Verifies the release AAB stays within the size budget in docs/PERFORMANCE_BUDGETS.md."
+    dependsOn("bundleRelease")
+
+    // 実測17,590,996バイト（2026-07-29、R8有効・未署名）+20%を上限とする。
+    // 根拠と更新手順はdocs/PERFORMANCE_BUDGETS.mdに記載。
+    val budgetBytes = 21_000_000L
+    val bundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
+    inputs.file(bundle)
+    inputs.property("budgetBytes", budgetBytes)
+    doLast {
+        val actualBytes = bundle.get().asFile.length()
+        check(actualBytes in 1 until budgetBytes) {
+            "Release AAB is $actualBytes bytes, over the $budgetBytes byte budget. " +
+                "Investigate the size regression or update docs/PERFORMANCE_BUDGETS.md " +
+                "with a justified new budget before raising this limit."
+        }
+        println("Release AAB size: $actualBytes bytes (budget: $budgetBytes bytes)")
+    }
 }
 
 val verifyBackupPolicy by tasks.registering {

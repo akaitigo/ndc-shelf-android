@@ -121,6 +121,12 @@ WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻
 
 タグ名は**信頼できない入力**として扱う。表示はComposeの`Text`によるプレーンテキスト描画だけを使い、HTML・マークアップ・リンクとして解釈しない。将来の自然言語検索(#40)・再発見(#41)がタグを利用する場合も、タグ名をプロンプトやログへ命令として渡さず、引用データとして分離すること（AIへの入力は同意ゲート(#43)配下）。エクスポート・バックアップの対象は、JSON v4（タグ定義と蔵書ごとのタグ名、往復可能）、完全バックアップ形式v14（ID・付与・保存済み検索を含む正本）で、CSVは18列互換維持のため対象外とする（docs/EXPORT_FORMAT.md）。保存済み検索はタグIDを参照するため、内部IDを持たないJSONエクスポートへは含めず、完全バックアップだけで移行する。
 
+## 分析（Insights）
+
+分析タブの読書傾向（積読期間、NDC類、読了推移）とランダム再発見は、`domain/insights`の`LibraryInsightsCalculator`が蔵書・読書セッション・除外リスト・現在時刻・乱数seedを引数に取る純粋関数として集計します。集計は端末内だけで行い外部送信せず、候補には保存済みの事実だけから導いた「選ばれた理由」を必ず添えます。読了日つきの履歴が閾値未満の指標はグラフを表示せず、必要なデータを説明します（fail-safeな断定回避）。
+
+画面は`InsightsViewModel`（画面スコープ）が`LibraryRepository.observeLibrary()`、`ReadingHistoryRepository.observeAllSessions()`、`InsightsExclusionStore`を`combine`して状態を導出します。候補の「対象外にする」と「分析リセット」はSharedPreferences（`insights-exclusions`）ベースの除外ストアで永続化し、Room schemaを変更しません。除外は候補の提示だけに影響し、集計値・蔵書・履歴・同期・バックアップへは影響しません。指標の定義・限界・表現ガイドライン・TalkBack対応は[INSIGHTS.md](INSIGHTS.md)を正本とします。
+
 ## 蔵書検索
 
 本棚の検索・読書状態・並び順は`LibrarySearchCriteria`で表し、250msの入力待機後に`flatMapLatest`でRoomのObservable Queryを切り替えます。UIへは適用済み条件と結果を同じ`LibrarySearchResult`として渡し、入力中の条件と一致しない古い結果を表示しません。検索語は100文字に制限し、SQL `LIKE`の`%`、`_`、エスケープ文字はリテラルとして扱います。
