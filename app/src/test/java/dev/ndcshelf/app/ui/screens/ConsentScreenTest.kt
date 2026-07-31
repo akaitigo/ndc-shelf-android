@@ -16,7 +16,9 @@ import dev.ndcshelf.app.domain.consent.ConsentPurpose
 import dev.ndcshelf.app.domain.consent.ConsentRecord
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,7 +54,7 @@ class ConsentScreenTest {
         composeRule
             .onAllNodes(hasText(context.getString(R.string.consent_status_none)))[0]
             .assertIsDisplayed()
-        grantButtonFor(ConsentPurpose.SERIES_RELEASE_WATCH).performClick()
+        seriesGrantButton().performClick()
 
         composeRule.onNodeWithText("・年代記").assertExists()
         composeRule.onNodeWithText("・銀河の歴史").assertExists()
@@ -61,53 +63,79 @@ class ConsentScreenTest {
         composeRule.onNodeWithText(context.getString(R.string.consent_cancel_button)).performClick()
         assertNull(granted)
 
-        grantButtonFor(ConsentPurpose.SERIES_RELEASE_WATCH).performClick()
+        seriesGrantButton().performClick()
         composeRule.onNodeWithText(context.getString(R.string.consent_accept_button)).performClick()
         assertEquals(ConsentPurpose.SERIES_RELEASE_WATCH, granted)
     }
 
     @Test
     fun aiLibrarianPurposeIsListedWithItsOwnDestinationAndItems() {
-        var granted: ConsentPurpose? = null
         composeRule.setContent {
             NdcShelfTheme {
                 ConsentScreen(
                     consents = emptyMap(),
                     payloadPreviewItems = emptyMap(),
-                    onGrant = { granted = it },
+                    onGrant = {},
                     onRevoke = {},
                     contentPadding = PaddingValues(),
                 )
             }
         }
 
-        composeRule
-            .onNode(hasScrollAction())
-            .performScrollToNode(hasText(context.getString(R.string.consent_purpose_ai_title)))
+        scrollTo(context.getString(R.string.consent_purpose_ai_title))
         composeRule
             .onNodeWithText(context.getString(R.string.consent_purpose_ai_title))
             .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.consent_purpose_ai_destination))
+            .assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.consent_purpose_ai_items))
+            .assertExists()
+    }
 
-        grantButtonFor(ConsentPurpose.AI_LIBRARIAN).performClick()
+    /**
+     * AI司書は送信対象が質問ごとに決まるため、同意画面のプレビューは
+     * 「質問の直前に必ず確認できる」ことを説明する。同意は明示操作でのみ成立する。
+     */
+    @Test
+    fun aiLibrarianPayloadDialogExplainsPerQuestionSelection() {
+        var accepted = false
+        var dismissed = false
+        composeRule.setContent {
+            NdcShelfTheme {
+                ConsentPayloadDialog(
+                    purpose = ConsentPurpose.AI_LIBRARIAN,
+                    payloadItems = emptyList(),
+                    onAccept = { accepted = true },
+                    onDismiss = { dismissed = true },
+                )
+            }
+        }
 
         composeRule
             .onNodeWithText(context.getString(R.string.consent_preview_empty_ai))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.consent_purpose_ai_destination))
             .assertExists()
-        assertNull(granted)
+        assertFalse("表示しただけでは同意しない", accepted)
+
+        composeRule.onNodeWithText(context.getString(R.string.consent_cancel_button)).performClick()
+        assertTrue(dismissed)
+        assertFalse(accepted)
 
         composeRule.onNodeWithText(context.getString(R.string.consent_accept_button)).performClick()
-        assertEquals(ConsentPurpose.AI_LIBRARIAN, granted)
+        assertTrue(accepted)
     }
 
-    /** 同じラベルのボタンが目的ごとに並ぶため、表示順で対象を選ぶ。 */
-    private fun grantButtonFor(purpose: ConsentPurpose): SemanticsNodeInteraction {
-        val index =
-            listOf(
-                ConsentPurpose.SERIES_RELEASE_WATCH,
-                ConsentPurpose.LIBRARY_SYNC,
-                ConsentPurpose.AI_LIBRARIAN,
-            ).indexOf(purpose)
-        return composeRule.onAllNodes(hasText(context.getString(R.string.consent_grant_button)))[index]
+    /** シリーズ新刊は一覧の先頭カードなので、スクロールなしで先頭の同意ボタンを選べる。 */
+    private fun seriesGrantButton(): SemanticsNodeInteraction =
+        composeRule.onAllNodes(hasText(context.getString(R.string.consent_grant_button)))[0]
+
+    /** LazyColumnは画面外の要素を構成しないため、対象までスクロールしてから検証する。 */
+    private fun scrollTo(text: String) {
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText(text))
     }
 
     @Test
