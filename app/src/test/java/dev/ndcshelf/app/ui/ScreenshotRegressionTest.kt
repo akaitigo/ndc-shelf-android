@@ -10,8 +10,8 @@ import androidx.compose.ui.unit.Density
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.ndcshelf.app.BookDeleteUiState
-import dev.ndcshelf.app.InsightsUiState
 import dev.ndcshelf.app.BookEditUiState
+import dev.ndcshelf.app.InsightsUiState
 import dev.ndcshelf.app.LocationMutationUiState
 import dev.ndcshelf.app.domain.insights.InsightsMonth
 import dev.ndcshelf.app.domain.insights.LibraryInsightsCalculator
@@ -53,6 +53,15 @@ class ScreenshotRegressionTest {
 
     @Test
     fun libraryLargeFont() = captureScreen("library_large_font", fontScale = 1.5f) { LibraryFixture() }
+
+    @Test
+    fun libraryFontScale200() = captureScreen("library_font_scale_200", fontScale = 2.0f) { LibraryFixture() }
+
+    @Test
+    fun insightsFontScale200() = captureScreen("insights_font_scale_200", fontScale = 2.0f) { InsightsFixture() }
+
+    @Test
+    fun onboardingFontScale200() = captureScreen("onboarding_font_scale_200", fontScale = 2.0f) { OnboardingFixture() }
 
     @Test
     fun insightsLight() = captureScreen("insights_light") { InsightsFixture() }

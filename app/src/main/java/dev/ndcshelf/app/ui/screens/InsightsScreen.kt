@@ -102,7 +102,12 @@ private fun InsightsContent(
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
-            title = { Text(stringResource(R.string.insights_reset_dialog_title)) },
+            title = {
+                Text(
+                    stringResource(R.string.insights_reset_dialog_title),
+                    modifier = Modifier.semantics { heading() },
+                )
+            },
             text = { Text(stringResource(R.string.insights_reset_dialog_message)) },
             confirmButton = {
                 TextButton(
@@ -336,7 +341,11 @@ private fun InsightsContent(
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                                .semantics(mergeDescendants = true) {},
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Icon(Icons.Rounded.LocationOn, contentDescription = null)

@@ -221,6 +221,10 @@
     <string name="saved_search_rename_action">名称変更</string>
     <string name="saved_search_rename_title">保存済み検索の名称変更</string>
     <string name="saved_search_delete_action">削除</string>
+    <string name="saved_search_delete_confirm_title">保存済み検索を削除しますか？</string>
+    <string name="saved_search_delete_confirm_message">「%1$s」を削除します。この操作は取り消せません。保存した検索条件のみが削除され、蔵書には影響しません。</string>
+    <string name="saved_search_delete_confirm">削除する</string>
+    <string name="saved_search_delete_cancel">削除しない</string>
     <string name="saved_search_apply_label">保存済み検索</string>
     <string name="tag_bulk_selected_count">%1$d冊を選択中</string>
     <string name="tag_bulk_edit_action">タグ一括編集</string>
@@ -695,6 +699,26 @@
     <string name="nl_search_empty_hint">解釈チップを×で解除するか、別の言い回しを試してください</string>
 
     <string name="library_help_button">本棚のヘルプ</string>
+    <string name="library_title">My Library</string>
+    <string name="library_subtitle">%1$d冊の本を、ちゃんと見つけられる場所。</string>
+    <string name="library_search_placeholder">タイトル・著者・ISBN・NDC・棚で検索</string>
+    <string name="library_search_clear">検索をクリア</string>
+    <string name="library_summary_total">蔵書</string>
+    <string name="library_summary_classified">NDC分類済み</string>
+    <string name="library_summary_reading">読書中</string>
+    <string name="library_summary_value">%1$s: %2$s</string>
+    <string name="book_card_open_label">編集する</string>
+    <string name="book_card_bulk_select_label">一括選択を切り替える</string>
+    <string name="book_card_selected">選択済み</string>
+    <string name="book_card_unselected">未選択</string>
+    <string name="location_move_up_target">「%1$s」を上へ</string>
+    <string name="location_move_down_target">「%1$s」を下へ</string>
+    <string name="location_rename_target">「%1$s」の名前を変更</string>
+    <string name="location_delete_target">「%1$s」を削除</string>
+    <string name="camera_preview_label">カメラプレビュー。ダブルタップでその位置にピントを合わせます。バーコードを読み取れない場合は、下のISBN手入力または手動登録を使えます。</string>
+    <string name="camera_focus_requested">ピントを合わせています</string>
+    <string name="scan_close">閉じる</string>
+    <string name="book_edit_icon_hint">編集</string>
     <string name="library_help_title">本棚の見かた</string>
     <string name="library_help_ndc">NDC（日本十進分類法）: 図書館と同じ0〜9類の分類番号です。書誌取得時に自動で付き、手動で補正できます。</string>
     <string name="library_help_location">置き場所: 部屋・本棚・段の階層で管理します。段の中の並び順も記録され、本を戻す位置を確認できます。</string>
@@ -737,6 +761,9 @@
     <string name="diagnostics_picker_events">最近の事象コード</string>
     <string name="diagnostics_picker_confirm">この内容で作成</string>
     <string name="data_diagnostics_button">診断とサポート情報</string>
+
+    <string name="diagnostics_loading">診断情報を読み込んでいます</string>
+
 
     <string name="ai_librarian_open_action">AI司書に相談</string>
     <string name="ai_librarian_title">AI司書に相談</string>

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,6 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
@@ -68,6 +72,7 @@ fun DiagnosticsScreen(
                     text = stringResource(R.string.diagnostics_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics { heading() },
                 )
                 Text(
                     text = stringResource(R.string.diagnostics_description),
@@ -78,13 +83,20 @@ fun DiagnosticsScreen(
         }
         if (snapshot == null) {
             item {
-                Row(
+                Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .padding(24.dp),
-                    horizontalArrangement = Arrangement.Center,
-                ) { CircularProgressIndicator() }
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        text = stringResource(R.string.diagnostics_loading),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
             return@LazyColumn
         }
@@ -168,7 +180,8 @@ fun DiagnosticsScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = 24.dp)
+                        .semantics(mergeDescendants = true) {},
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(event.code.name, style = MaterialTheme.typography.bodySmall)
@@ -206,17 +219,37 @@ private fun DiagnosticsSectionDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.diagnostics_picker_title)) },
+        title = {
+            Text(
+                stringResource(R.string.diagnostics_picker_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.diagnostics_picker_description))
                 DiagnosticsSection.entries.forEach { section ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    val checked = section.name in selected
+                    Row(
+                        modifier =
+                            Modifier
+                                .toggleable(
+                                    value = checked,
+                                    role = Role.Checkbox,
+                                    onValueChange = { newChecked ->
+                                        selected =
+                                            if (newChecked) {
+                                                selected + section.name
+                                            } else {
+                                                selected - section.name
+                                            }
+                                    },
+                                ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Checkbox(
-                            checked = section.name in selected,
-                            onCheckedChange = { checked ->
-                                selected = if (checked) selected + section.name else selected - section.name
-                            },
+                            checked = checked,
+                            onCheckedChange = null,
                         )
                         Text(stringResource(section.labelRes))
                     }
@@ -253,7 +286,12 @@ private fun DiagnosticsCard(
                 .padding(horizontal = 16.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
+            )
             content()
         }
     }
@@ -265,7 +303,10 @@ private fun DiagnosticsRow(
     value: String,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium)

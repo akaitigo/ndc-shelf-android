@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -41,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
@@ -69,12 +73,13 @@ internal fun WorkVariantScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            end = 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 24.dp,
-        ),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                top = contentPadding.calculateTopPadding() + 8.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
@@ -87,34 +92,42 @@ internal fun WorkVariantScreen(
                 }
                 Text(
                     stringResource(R.string.work_variant_title),
+                    modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
             }
         }
         when (state) {
-            WorkVariantUiState.Idle, WorkVariantUiState.Loading, WorkVariantUiState.Saving -> item {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.width(12.dp))
-                    Text(stringResource(R.string.work_variant_loading))
+            WorkVariantUiState.Idle, WorkVariantUiState.Loading, WorkVariantUiState.Saving -> {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.width(12.dp))
+                        Text(stringResource(R.string.work_variant_loading))
+                    }
                 }
             }
+
             WorkVariantUiState.Conflict,
             WorkVariantUiState.Invalid,
             WorkVariantUiState.Error,
-            -> item {
-                val message = when (state) {
-                    WorkVariantUiState.Conflict -> R.string.work_variant_conflict
-                    WorkVariantUiState.Invalid -> R.string.work_variant_invalid
-                    else -> R.string.work_variant_error
+            -> {
+                item {
+                    val message =
+                        when (state) {
+                            WorkVariantUiState.Conflict -> R.string.work_variant_conflict
+                            WorkVariantUiState.Invalid -> R.string.work_variant_invalid
+                            else -> R.string.work_variant_error
+                        }
+                    Text(stringResource(message), color = MaterialTheme.colorScheme.error)
                 }
-                Text(stringResource(message), color = MaterialTheme.colorScheme.error)
             }
+
             is WorkVariantUiState.Ready -> {
                 item {
                     Text(
@@ -133,10 +146,14 @@ internal fun WorkVariantScreen(
                         )
                     }
                     items(state.editor.groupMembers, key = WorkVariant::workId) { member ->
+                        // 非クリッカブルCard内のタイトル・著者・版情報を1ストップで
+                        // 読み上げるためmergeする。解除ボタンは個別ノードのまま残る。
                         Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            ),
+                            modifier = Modifier.semantics(mergeDescendants = true) {},
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                ),
                         ) {
                             Column(Modifier.padding(14.dp)) {
                                 WorkVariantCard(member)
@@ -164,9 +181,10 @@ internal fun WorkVariantScreen(
                     items(state.editor.suggestions, key = { it.work.workId }) { suggestion ->
                         Card(
                             onClick = { selected = suggestion },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                ),
                         ) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(
@@ -241,14 +259,26 @@ internal fun WorkVariantScreen(
 }
 
 @Composable
-private fun SettingRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = MaterialTheme.shapes.large,
     ) {
+        // Switch単体では対象が読み上げられないため、行全体をtoggleableにして
+        // ラベル・説明・状態を1ノードへ統合する（Switch自身のクリックは無効化）。
         Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = checked,
+                        role = Role.Switch,
+                        onValueChange = onCheckedChange,
+                    ).padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -260,7 +290,7 @@ private fun SettingRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(checked = checked, onCheckedChange = null)
         }
     }
 }
@@ -277,12 +307,14 @@ private fun WorkVariantCard(work: WorkVariant) {
 @Composable
 private fun EditionLine(edition: EditionVariant) {
     val unknown = stringResource(R.string.work_variant_unknown)
-    val media = edition.mediaTypes.joinToString("/") {
-        when (it) {
-            MediaType.PHYSICAL -> "紙"
-            MediaType.DIGITAL -> "電子"
-        }
-    }.ifEmpty { unknown }
+    val media =
+        edition.mediaTypes
+            .joinToString("/") {
+                when (it) {
+                    MediaType.PHYSICAL -> "紙"
+                    MediaType.DIGITAL -> "電子"
+                }
+            }.ifEmpty { unknown }
     Text(
         stringResource(
             R.string.work_variant_edition_meta,
@@ -307,5 +339,10 @@ private fun EditionLine(edition: EditionVariant) {
 
 @Composable
 private fun SectionTitle(value: String) {
-    Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Text(
+        value,
+        modifier = Modifier.semantics { heading() },
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
 }

@@ -24,6 +24,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
@@ -63,7 +65,12 @@ fun ConsentScreen(
     revokePurpose?.let { purpose ->
         AlertDialog(
             onDismissRequest = { revokePurpose = null },
-            title = { Text(stringResource(R.string.consent_revoke_confirm_title)) },
+            title = {
+                Text(
+                    stringResource(R.string.consent_revoke_confirm_title),
+                    modifier = Modifier.semantics { heading() },
+                )
+            },
             text = { Text(stringResource(R.string.consent_revoked_notice)) },
             confirmButton = {
                 TextButton(
@@ -91,6 +98,7 @@ fun ConsentScreen(
                 Text(
                     text = stringResource(R.string.consent_screen_title),
                     style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.semantics { heading() },
                 )
                 Text(
                     text = stringResource(R.string.consent_screen_description),
@@ -129,6 +137,7 @@ private fun ConsentPurposeCard(
                 text = stringResource(purpose.titleRes),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
             )
             Text(
                 text = consentStatusText(purpose, record),
@@ -170,7 +179,7 @@ private fun ConsentDetailRow(
     labelRes: Int,
     valueRes: Int,
 ) {
-    Row(Modifier.fillMaxWidth()) {
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
         Text(
             text = stringResource(labelRes),
             style = MaterialTheme.typography.bodySmall,
@@ -197,7 +206,12 @@ fun ConsentPayloadDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.consent_preview_title)) },
+        title = {
+            Text(
+                stringResource(R.string.consent_preview_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(purpose.titleRes), fontWeight = FontWeight.Bold)

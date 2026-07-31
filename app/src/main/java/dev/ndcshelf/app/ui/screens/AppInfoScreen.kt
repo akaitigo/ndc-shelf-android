@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mikepenz.aboutlibraries.Libs
@@ -447,7 +449,12 @@ private fun ScreenHeading(
     title: String,
     description: String,
 ) {
-    Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    Text(
+        title,
+        style = MaterialTheme.typography.headlineMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.semantics { heading() },
+    )
     Text(
         text = description,
         modifier = Modifier.padding(top = 6.dp),
@@ -469,7 +476,12 @@ private fun DetailHeading(
             )
         }
         Spacer(Modifier.width(4.dp))
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() },
+        )
     }
 }
 
@@ -477,7 +489,10 @@ private fun DetailHeading(
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        modifier = Modifier.padding(top = 10.dp),
+        modifier =
+            Modifier
+                .padding(top = 10.dp)
+                .semantics { heading() },
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
     )
@@ -498,7 +513,12 @@ private fun InfoCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
+            )
             content()
         }
     }
