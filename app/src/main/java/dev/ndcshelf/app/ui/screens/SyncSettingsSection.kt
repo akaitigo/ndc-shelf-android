@@ -133,6 +133,7 @@ fun SyncSettingsSection(
                         onRevokeDevice(deviceId)
                         revokeTarget = null
                     },
+                    modifier = Modifier.testTag(SYNC_REVOKE_CONFIRM_TAG),
                 ) { Text(stringResource(R.string.sync_revoke_button)) }
             },
             dismissButton = {
@@ -154,6 +155,7 @@ fun SyncSettingsSection(
                         onPurgeRemote()
                         confirmPurge = false
                     },
+                    modifier = Modifier.testTag(SYNC_PURGE_CONFIRM_TAG),
                 ) { Text(stringResource(R.string.sync_purge_button)) }
             },
             dismissButton = {
@@ -175,6 +177,7 @@ fun SyncSettingsSection(
                         onStopSync()
                         confirmStop = false
                     },
+                    modifier = Modifier.testTag(SYNC_STOP_CONFIRM_TAG),
                 ) { Text(stringResource(R.string.sync_stop_button)) }
             },
             dismissButton = {
@@ -528,3 +531,6 @@ internal const val SYNC_PURGE_TAG = "sync_purge"
 internal const val SYNC_STOP_TAG = "sync_stop"
 internal const val SYNC_ERROR_TAG = "sync_error"
 internal const val SYNC_REVOKE_TAG_PREFIX = "sync_revoke_"
+internal const val SYNC_REVOKE_CONFIRM_TAG = "sync_revoke_confirm"
+internal const val SYNC_PURGE_CONFIRM_TAG = "sync_purge_confirm"
+internal const val SYNC_STOP_CONFIRM_TAG = "sync_stop_confirm"

@@ -11,7 +11,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dev.ndcshelf.app.NdcShelfApplication
-import dev.ndcshelf.app.data.sync.E2eeSyncCoordinator
 import dev.ndcshelf.app.domain.consent.ConsentPurpose
 import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.sync.LibrarySyncScheduler
@@ -59,7 +58,12 @@ class LibrarySyncWorker(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as NdcShelfApplication).container
-        val runner = LibrarySyncRunner(container.syncCoordinator, container.consentRepository)
+        val runner =
+            LibrarySyncRunner(
+                consentRepository = container.consentRepository,
+                // 同意検査を通過するまでcoordinatorを解決しない（鍵・backendへ触れない）。
+                syncNow = { container.syncCoordinator.syncNow() },
+            )
         return when (runner.run()) {
             LibrarySyncRunResult.SUCCESS -> Result.success()
             LibrarySyncRunResult.RETRY -> Result.retry()
@@ -68,15 +72,15 @@ class LibrarySyncWorker(
 }
 
 internal class LibrarySyncRunner(
-    private val coordinator: E2eeSyncCoordinator,
     private val consentRepository: ConsentRepository,
+    private val syncNow: suspend () -> SyncActionResult,
 ) {
     suspend fun run(): LibrarySyncRunResult {
         // 同意なし・撤回後はbackend・鍵・fileへ触れない（fail-closed）。
         if (!consentRepository.isGranted(ConsentPurpose.LIBRARY_SYNC)) {
             return LibrarySyncRunResult.SUCCESS
         }
-        return when (val result = coordinator.syncNow()) {
+        return when (val result = syncNow()) {
             is SyncActionResult.Failure -> {
                 if (result.failure.retryable) LibrarySyncRunResult.RETRY else LibrarySyncRunResult.SUCCESS
             }

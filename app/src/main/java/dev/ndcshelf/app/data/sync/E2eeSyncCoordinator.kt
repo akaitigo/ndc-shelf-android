@@ -299,6 +299,23 @@ class E2eeSyncCoordinator(
             database.withTransaction {
                 keyDao.upsertIdentity(identity)
                 storeWrappedKey(SyncKeyManager.KEY_TYPE_HPKE_PRIVATE, 1, hpkeKeyPair.privateKey, libraryOpaqueId)
+                // 承認前でも自端末の公開鍵を保持する（envelope復号の宛先確認に使う）。
+                keyDao.upsertPeerDevices(
+                    listOf(
+                        SyncPeerDeviceEntity(
+                            deviceId = deviceId,
+                            name = identity.deviceName,
+                            signingPublicKey = Base64Url.encode(signingPublicKey),
+                            hpkePublicKey = Base64Url.encode(hpkeKeyPair.publicKey),
+                            addedAtGeneration = 1,
+                            revokedAtGeneration = null,
+                            lastSyncAt = null,
+                            lastObjectId = null,
+                            lastEncryptionCounter = 0,
+                            isSelf = true,
+                        ),
+                    ),
+                )
                 keyDao.insertInvite(
                     SyncInviteEntity(
                         nonce = inviteNonce,

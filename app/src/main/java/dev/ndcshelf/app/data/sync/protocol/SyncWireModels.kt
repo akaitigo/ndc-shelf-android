@@ -23,12 +23,15 @@ object SyncWireJson {
         Json {
             ignoreUnknownKeys = true
             isLenient = false
+            // kind等の判別fieldを必ずwireへ出す（canonical bytesを送受で一致させる）。
+            encodeDefaults = true
         }
 
     val strict: Json =
         Json {
             ignoreUnknownKeys = false
             isLenient = false
+            encodeDefaults = true
         }
 
     fun canonicalBytes(jsonText: String): ByteArray = JsonCanonicalizer(jsonText).encodedUTF8
