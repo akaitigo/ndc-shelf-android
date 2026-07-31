@@ -29,6 +29,13 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
   がオンボーディング→手動登録→本棚表示→Activity再生成の主要フローを実DBで検証する。
 - 検証成果は各リリースのGitHub Actions run URLをリリースチェックリストへ記録する。
 
+- **更新インストール回帰**: `update-install`ジョブがv0.1.2（commit d852975、versionCode 3）の
+  APKをビルドして`adb install`し、アプリdataへマーカーを置いてから現行debug APKを
+  `adb install -r`し、data保持・署名互換・更新後起動を検証する。旧schema DBの引き継ぎは
+  `LegacyDatabaseUpgradeInstrumentationTest`がAPI 26／29／35で検証する。これによりリリース
+  ゲートの「旧版から更新して既存蔵書が保持される」はDB層・パッケージ層が自動証跡となり、
+  実機ゲートには実UI操作と実端末の確認だけが残る。
+
 ## 手動実機層（リリースゲート証跡）
 
 各リリース前に `docs/releases/V*_RELEASE_CHECKLIST.md` の実機ゲートで実施:
