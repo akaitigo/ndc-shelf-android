@@ -27,7 +27,7 @@ flakyな時間指標を必須CIへ入れない方針（Issue #48）に従い、�
 | cold start（TTID）p95 | 1,200 ms以下 | Macrobenchmark `StartupTimingMetric` / 実機 `adb shell am start -W` | 2・3 |
 | warm start（TTID）p95 | 600 ms以下 | 同上（`StartupMode.WARM`） | 2・3 |
 | Baseline Profile効果 | cold start中央値をprofileなし比で有意に短縮（悪化しない） | `:baselineprofile` の `StartupBenchmark` | 2 |
-| Play Vitals「起動が遅い」割合 | cold 5秒超 0.1%未満 | Play Console Vitals | 3 |
+| 実機のcold起動時間 | 代表端末で5秒未満 | 手動計測（`am start -W`のTotalTime） | 3 |
 
 Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenerator` で生成し、
 `app/src/release/generated/baselineProfiles/` へコミットする（`saveInSrc = true`、
@@ -123,7 +123,7 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 | 同期1サイクルの通信量（差分100操作） | 1 MiB以下 | 同上 |
 | バックグラウンドwakeup | 新刊ウォッチは一意周期Work1件のみ、同期はユーザー操作起点＋周期Work1件以内 | WorkManager Inspectorで一意Work名と件数を確認 |
 | 失敗時の再試行 | 上限付き指数バックオフ＋jitter（`docs/SYNC_PROTOCOL.md`）、`battery-not-low`・ネットワーク接続制約付き | WorkManager Inspector（`docs/SERIES_WATCH_DEVICE_TESTING.md`） |
-| 電池 | Play Vitals「過度なwakeup」警告ゼロ | Play Console Vitals |
+| 電池 | 24時間で同期・新刊ウォッチ由来のwakeupが設定回数を超えない | Battery Historian／`dumpsys batterystats` |
 
 ## 実機ラボ測定手順と記録先
 

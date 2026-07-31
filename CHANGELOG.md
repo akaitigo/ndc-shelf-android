@@ -34,6 +34,7 @@
 
 ### Changed
 
+- 配布方針を無料OSSのGitHub Releases署名付きAPKへ変更（アプリストアへは公開しない）。リリースはpre-release→stableの2段階とし、APK・SHA256SUMS・署名証明書・SBOM・NOTICESを添付する。判断は[ADR 0008](docs/adr/0008-github-releases-apk-distribution.md)。
 - リリースゲートの「旧版からの更新でデータが保持される」検証をCIへ自動化（v0.1.2 APKからの更新インストールとRoom v1 DBの引き継ぎをエミュレーターで毎回検証）。
 - CIへ主要画面のライト・ダーク・大文字スクリーンショット回帰（Roborazzi golden比較）、API 26エミュレーターの互換性行列、手動登録→本棚→Activity再生成のE2Eテストを追加。実機検証との分離と証跡はdocs/DEVICE_TEST_MATRIX.mdへ定義。
 - ランチャーアイコンをadaptive icon（foreground/background/monochrome、安全領域準拠、Android 13テーマアイコン対応）へ移行。

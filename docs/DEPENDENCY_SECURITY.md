@@ -30,7 +30,7 @@ reason = "owner=@maintainer; rationale=affected API is not packaged or reachable
 
 1. `./gradlew verifyLicenseReport :app:cyclonedxDirectBom`を実行し、NOTICEとSBOMを生成する。
 2. CIのDependency Review、OSV、ライセンス検証が成功していることを確認する。
-3. SBOMの直接依存をGoogle Play SDK Indexで照合し、ポリシー・既知問題・提供元のData safety guidanceを確認する。
+3. SBOMの直接依存について、提供元が公開する既知問題とデータ収集の説明を確認する。Google Play SDK Indexは参考情報として利用できるが、ストア配布を行わないため申告義務の根拠にはしない。
 4. Manifest、SBOM、実装から権限、通信先、送信値、SDKのデータ収集を再調査する。
 5. `PRIVACY.md`、アプリ内説明、`docs/STORE_LISTING.md`の回答が実装と一致することを確認する。
 6. GitHub Releaseへ自動添付されたSBOMとNOTICEを、署名済み成果物の証跡として保管する。通常のCIでも`release-compliance` artifactを30日保管する。
@@ -46,7 +46,7 @@ SDK Indexや自動スキャナーは補助資料であり、ライセンス判�
 | Coil 3.5.0 / OkHttp 4.12.0 | アプリ実装の通信先をNDL SearchのHTTPS allowlistへ制限 | ISBN検索と表紙取得の既存説明を維持 |
 | Room / Compose / AndroidX | 端末内UI・保存用途で、アプリ実装から外部通信を開始しない | 追加申告なし |
 
-[Google Play SDK Index](https://play.google.com/sdks)でMaven IDを検索し、公開されている安全性・ポリシー情報を確認した。Play Consoleだけに表示される提供元メッセージは公開前ゲートで再確認する。今回の依存構成と実装は`PRIVACY.md`、アプリ内説明、`docs/STORE_LISTING.md`と一致しており、利用者向け説明の意味変更は不要だった。
+[Google Play SDK Index](https://play.google.com/sdks)でMaven IDを検索し、公開されている安全性情報を参考として確認した。今回の依存構成と実装は`PRIVACY.md`、アプリ内説明、`docs/STORE_LISTING.md`と一致しており、利用者向け説明の意味変更は不要だった。
 
 ## ローカル検証
 
