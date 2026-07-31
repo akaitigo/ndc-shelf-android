@@ -283,7 +283,11 @@ private fun consentStatusText(
 private fun formatConsentDate(millis: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(millis))
 
 /** 表示対象は提供済み機能の目的だけ。未提供機能は該当Issueの実装時に追加する。 */
-private val AVAILABLE_PURPOSES = listOf(ConsentPurpose.SERIES_RELEASE_WATCH)
+private val AVAILABLE_PURPOSES =
+    listOf(
+        ConsentPurpose.SERIES_RELEASE_WATCH,
+        ConsentPurpose.LIBRARY_SYNC,
+    )
 
 internal val ConsentPurpose.titleRes: Int
     get() =
@@ -298,6 +302,7 @@ internal val ConsentPurpose.purposeRes: Int
     get() =
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_purpose
+            ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_purpose
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_purpose
             else -> R.string.consent_purpose_not_available
         }
@@ -306,6 +311,7 @@ internal val ConsentPurpose.destinationRes: Int
     get() =
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_destination
+            ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_destination
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_destination
             else -> R.string.consent_purpose_not_available
         }
@@ -314,6 +320,7 @@ internal val ConsentPurpose.itemsRes: Int
     get() =
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_items
+            ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_items
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_items
             else -> R.string.consent_purpose_not_available
         }
@@ -322,6 +329,7 @@ internal val ConsentPurpose.retentionRes: Int
     get() =
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_retention
+            ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_retention
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_retention
             else -> R.string.consent_purpose_not_available
         }
@@ -330,6 +338,7 @@ internal val ConsentPurpose.thirdPartyRes: Int
     get() =
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_third_party
+            ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_third_party
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_third_party
             else -> R.string.consent_purpose_not_available
         }

@@ -79,6 +79,7 @@ fun DataManagementScreen(
     contentPadding: PaddingValues,
     onOpenConsent: (() -> Unit)? = null,
     onOpenDiagnostics: (() -> Unit)? = null,
+    syncSettings: (@Composable () -> Unit)? = null,
 ) {
     val importBusy =
         importState === LibraryImportUiState.Loading ||
@@ -154,6 +155,9 @@ fun DataManagementScreen(
         }
         item { SectionTitle(stringResource(R.string.data_management_sync_section)) }
         item { SyncStatusCard(syncStatus) }
+        if (syncSettings != null) {
+            item { syncSettings() }
+        }
         item { SectionTitle(stringResource(R.string.data_management_transfer_section)) }
         item {
             DataOperationCard(

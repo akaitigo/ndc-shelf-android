@@ -61,6 +61,7 @@ import dev.ndcshelf.app.ReadingSessionFailure
 import dev.ndcshelf.app.ReadingSessionUiState
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.SeriesWatchMutationUiState
+import dev.ndcshelf.app.SyncSettingsViewModel
 import dev.ndcshelf.app.TagMutationUiState
 import dev.ndcshelf.app.WorkVariantViewModel
 import dev.ndcshelf.app.data.local.SharedPreferencesOnboardingStore
@@ -96,6 +97,7 @@ import dev.ndcshelf.app.ui.screens.OnboardingScreen
 import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.SeriesScreen
 import dev.ndcshelf.app.ui.screens.SeriesSuggestionScreen
+import dev.ndcshelf.app.ui.screens.SyncSettingsSection
 import dev.ndcshelf.app.ui.screens.TagManagementScreen
 import dev.ndcshelf.app.ui.screens.WorkVariantScreen
 import kotlinx.coroutines.flow.first
@@ -908,6 +910,40 @@ fun NdcShelfApp(
 
             navigation<DataGraph>(startDestination = DataRoute) {
                 composable<DataRoute> {
+                    val application = context.applicationContext as NdcShelfApplication
+                    val syncViewModel: SyncSettingsViewModel =
+                        viewModel(
+                            factory =
+                                SyncSettingsViewModel.factory(
+                                    coordinator = application.container.syncCoordinator,
+                                    consentRepository = application.container.consentRepository,
+                                    deviceName = Build.MODEL ?: "Android",
+                                ),
+                        )
+                    val syncUiState by syncViewModel.uiState.collectAsStateWithLifecycle()
+                    val syncConfiguration by syncViewModel.configuration.collectAsStateWithLifecycle()
+                    val syncDevices by syncViewModel.devices.collectAsStateWithLifecycle()
+                    val syncConsentGranted by syncViewModel.syncConsentGranted.collectAsStateWithLifecycle()
+                    var pendingSyncJoinCode by rememberSaveable { mutableStateOf<String?>(null) }
+                    val syncFolderPicker =
+                        rememberLauncherForActivityResult(
+                            ActivityResultContracts.OpenDocumentTree(),
+                        ) { uri ->
+                            val joinCode = pendingSyncJoinCode
+                            pendingSyncJoinCode = null
+                            if (uri != null) {
+                                context.contentResolver.takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                                )
+                                if (joinCode == null) {
+                                    syncViewModel.createLibrary(uri.toString())
+                                } else {
+                                    syncViewModel.joinLibrary(uri.toString(), joinCode)
+                                }
+                            }
+                        }
                     DataManagementScreen(
                         bookCount = libraryStats.totalCount,
                         exportInProgress = libraryExportState === LibraryExportUiState.Exporting,
@@ -940,6 +976,34 @@ fun NdcShelfApp(
                             navController.navigate(DiagnosticsRoute) { launchSingleTop = true }
                         },
                         contentPadding = contentPadding,
+                        syncSettings = {
+                            SyncSettingsSection(
+                                configuration = syncConfiguration,
+                                devices = syncDevices,
+                                uiState = syncUiState,
+                                consentGranted = syncConsentGranted,
+                                onGrantConsent = syncViewModel::grantSyncConsent,
+                                onStartCreate = {
+                                    pendingSyncJoinCode = null
+                                    syncFolderPicker.launch(null)
+                                },
+                                onStartJoin = { code ->
+                                    pendingSyncJoinCode = code
+                                    syncFolderPicker.launch(null)
+                                },
+                                onSyncNow = syncViewModel::syncNow,
+                                onCompleteJoin = syncViewModel::completeJoin,
+                                onCreateInvite = syncViewModel::createInvite,
+                                onRefreshJoinCandidates = syncViewModel::refreshJoinCandidates,
+                                onApproveJoin = syncViewModel::approveJoin,
+                                onRevokeDevice = syncViewModel::revokeDevice,
+                                onPurgeRemote = syncViewModel::purgeRemote,
+                                onStopSync = syncViewModel::stopSync,
+                                onDismissInvite = syncViewModel::dismissInvite,
+                                onDismissReceipt = syncViewModel::dismissDeletionReceipt,
+                                onDismissFailure = syncViewModel::dismissFailure,
+                            )
+                        },
                     )
                 }
 
