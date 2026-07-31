@@ -8,10 +8,10 @@ ADR 0005とSync Protocol v1に従い、交換可能な同期backend interface、
 
 - branch: `agent/issue-38-sync-backend`
 - base: `main`
-- base HEAD: `7d77b36`
+- base HEAD: `7d77b36`（作業後半で`origin/main`（#118まで）をマージ。Room版はmainのタグ機能v15と衝突したため自分の版をv16へ改番）
 - related Issue: #38
 - dependencies: #36（protocol確定）、#37（RoomSyncEngine）、#39（ConsentPurpose.LIBRARY_SYNC・ConsentPayloadDialog）
-- database: Room v14。暗号鍵state、device registry cache、招待、quarantineは未実装
+- database: Room v15（mainのタグ機能まで）。暗号鍵state、device registry cache、招待、quarantineは未実装
 
 ## Decisions
 
@@ -20,7 +20,7 @@ ADR 0005とSync Protocol v1に従い、交換可能な同期backend interface、
 - HPKE `DHKEM(P-256, HKDF-SHA256)/HKDF-SHA256/AES-256-GCM` はGoogle Tink（`tink-android`、Apache-2.0）を使用する。protocol 6.1節が要求するinfo/AAD束縛のためTinkのHPKE contextを用い、HPKE primitiveを独自実装しない。AES-256-GCM・SHA256withECDSA・HKDFはplatform（javax.crypto/AndroidKeyStore）とTink subtle（`Hkdf`、DER検証）を使う。
 - RFC 8785 canonical JSONは保守済み実装`io.github.erdtman:java-json-canonicalization`（Apache-2.0）へ委譲し、独自canonicalizerを作らない。
 - 鍵管理は`SyncKeyManager` interfaceで抽象化する。本番は`AndroidKeystoreSyncKeyManager`（Keystore内non-exportable P-256署名鍵 + AES-256-GCM wrapping key、`setRandomizedEncryptionRequired(true)`、AADでkey種別・libraryId・key versionを認証）、JVMテストは同じ契約の`FakeSyncKeyManager`（JCA in-memory鍵）で実crypto経路を検証する。Keystore実鍵はandroidTestで検証する。
-- HPKE秘密鍵とepoch keyはwrapping keyで暗号化した`sync_wrapped_keys`（Room v15）だけへ永続化する。平文鍵・平文operationをRoom外・log・backupへ出さない。
+- HPKE秘密鍵とepoch keyはwrapping keyで暗号化した`sync_wrapped_keys`（Room v16）だけへ永続化する。平文鍵・平文operationをRoom外・log・backupへ出さない。
 - nonceは32-bit zero prefix + big-endian 64-bit encryption counterの96-bit。counterは`sync_identity`でobject作成前にtransactionalに増加・永続化し、再利用しない。counter異常はdevice ID廃棄と再登録を要求する。
 - device registryは署名済みJSON文書としてbackendへ置き、headがregistry hashと世代を持つ。端末追加・失効はregistryGenerationを進め、失効は同一管理transactionで新epochへrotationし、失効端末へ新keyをwrapしない。失効generation以後に旧端末が署名したobjectは拒否する。
 - 新端末追加はSAF adapterでは短時間・一回限りの招待コード（QR相当のout-of-band secret。既存端末に表示し新端末へ手入力）とHMACで新端末公開鍵を認証し、双方に表示する6桁verification codeの照合と既存端末での明示承認後にHPKEでcurrent epoch keyをwrapする。10分expiry・nonce一回性・trusted head固定はprotocol 8.2どおり。QR画像表示は同一payloadのUI表現として将来課題とし、protocol意味は変更しない。
@@ -36,7 +36,7 @@ ADR 0005とSync Protocol v1に従い、交換可能な同期backend interface、
 - `SyncBackend` interface、エラー分類enum、capability・head・registry・envelopeのwire model
 - RFC 8785 canonical JSON、AES-256-GCM content envelope（6節）、HPKE device key envelope（6.1節）、ECDSA署名・厳密DER検証
 - `SyncKeyManager`（Keystore実装 + JVM fake）と鍵のwrap保存
-- Room v14→v15（sync_identity、sync_wrapped_keys、sync_peer_devices、sync_invites、sync_quarantine）
+- Room v15→v16（sync_identity、sync_wrapped_keys、sync_peer_devices、sync_invites、sync_processed_envelopes、sync_quarantine）
 - SAFフォルダadapter（DocumentsContract実装 + java.io File実装）と冪等upload・CAS head・削除receipt
 - 同期lifecycle coordinator（有効化、genesis/bootstrap snapshot、手動同期、端末追加・承認・失効、sign-out、remote purge）
 - WorkManager定期同期（opt-in時のみ）
@@ -69,18 +69,18 @@ ADR 0005とSync Protocol v1に従い、交換可能な同期backend interface、
 - SAF adapterのIO失敗・権限喪失・容量不足の分類、冪等upload、CAS競合
 - 同期OFF/同意なしでbackend・鍵・ファイルアクセスがゼロ
 - backup restore後のsync state resetとdomain data保持、同期無効化後のlocal data不変・JSON export継続
-- Migration v14→v15と全migration path、schema JSON差分ゼロ
-- `verifyV04ReleaseConfiguration verifyBackupPolicy verifyLicenseReport :app:cyclonedxDirectBom testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest`
+- Migration v15→v16と全migration path、schema JSON差分ゼロ
+- `verifyRoborazziDebug lintDebug assembleDebug assembleDebugAndroidTest verifyV04ReleaseConfiguration verifyBackupPolicy verifyLicenseReport :app:cyclonedxDirectBom`と`git diff --exit-code -- app/schemas`
 
 ## Acceptance Criteria
 
-- [ ] Transport interfaceと参照SAFフォルダadapterを分離して提供する。
-- [ ] 鍵材料をAndroid Keystore（署名鍵・wrapping key）とwrap済みblobだけで保存する。
-- [ ] 新端末追加は明示確認・verification code・HPKE key wrappingを経る。
-- [ ] 端末一覧・最終同期表示・個別失効（generation進行 + epoch rotation）を提供する。
-- [ ] リモート全削除と完了確認receiptを提供する。
-- [ ] transport共通のエラー分類とretry方針を実装する。
-- [ ] backendを変えてもJSON exportとlocal利用を維持する。
+- [x] Transport interfaceと参照SAFフォルダadapterを分離して提供する。
+- [x] 鍵材料をAndroid Keystore（署名鍵・wrapping key）とwrap済みblobだけで保存する。
+- [x] 新端末追加は明示確認・verification code・HPKE key wrappingを経る。
+- [x] 端末一覧・最終同期表示・個別失効（generation進行 + epoch rotation）を提供する。
+- [x] リモート全削除と完了確認receiptを提供する。
+- [x] transport共通のエラー分類とretry方針を実装する。
+- [x] backendを変えてもJSON exportとlocal利用を維持する。
 
 ## Stop Conditions
 
