@@ -32,6 +32,32 @@ internal fun LibrarySearchCriteria.toSQLiteQuery(): SupportSQLiteQuery {
             conditions += "copies.readingStatus = ?"
             arguments += status.name
         }
+        // 自然言語解釈で導出した条件。NDC類は先頭1桁の等値比較で判定する。
+        ndcTopClass?.let { topClass ->
+            conditions += "substr(editions.ndcCode, 1, 1) = ?"
+            arguments += topClass.toString()
+        }
+        locationQuery?.takeIf(String::isNotEmpty)?.let { location ->
+            conditions +=
+                """
+                (
+                    copies.location LIKE ? ESCAPE '\' COLLATE NOCASE OR
+                    rooms.name LIKE ? ESCAPE '\' COLLATE NOCASE OR
+                    shelves.name LIKE ? ESCAPE '\' COLLATE NOCASE OR
+                    tiers.name LIKE ? ESCAPE '\' COLLATE NOCASE
+                )
+                """.trimIndent()
+            val locationPattern = "%${location.escapeLikePattern()}%"
+            repeat(4) { arguments += locationPattern }
+        }
+        addedAfterMillis?.let { after ->
+            conditions += "copies.addedAt >= ?"
+            arguments += after
+        }
+        addedBeforeMillis?.let { before ->
+            conditions += "copies.addedAt < ?"
+            arguments += before
+        }
         // タグはAND条件（選択タグを全て含む作品）。ID等値比較のみでLIKEを使わない。
         normalizedTagIds.sorted().forEach { tagId ->
             conditions +=

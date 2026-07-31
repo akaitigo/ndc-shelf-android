@@ -27,10 +27,13 @@ class LibrarySearchQueryTest {
 
     @Before
     fun setUp() {
-        database = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext<Context>(),
-            AppDatabase::class.java,
-        ).allowMainThreadQueries().build()
+        database =
+            Room
+                .inMemoryDatabaseBuilder(
+                    ApplicationProvider.getApplicationContext<Context>(),
+                    AppDatabase::class.java,
+                ).allowMainThreadQueries()
+                .build()
         dao = database.libraryDao()
     }
 
@@ -38,127 +41,258 @@ class LibrarySearchQueryTest {
     fun tearDown() = database.close()
 
     @Test
-    fun searchesEverySupportedFieldAndTreatsWildcardsLiterally() = runBlocking {
-        insertBooks(
-            listOf(
-                sample(0, title = "郷土%資料", status = ReadingStatus.READING),
-                sample(1, author = "地域著者"),
-                sample(2, isbn = "9784820418078"),
-                sample(3, ndc = "014.45"),
-                sample(4, location = "書庫特別棚"),
-            ),
-        )
-
-        assertEquals(listOf("copy-0"), search("郷土%").map(LibraryBookRow::copyId))
-        assertEquals(listOf("copy-1"), search("地域著者").map(LibraryBookRow::copyId))
-        assertEquals(listOf("copy-2"), search("18078").map(LibraryBookRow::copyId))
-        assertEquals(listOf("copy-3"), search("014.45").map(LibraryBookRow::copyId))
-        assertEquals(listOf("copy-4"), search("特別棚").map(LibraryBookRow::copyId))
-        assertEquals(
-            listOf("copy-1", "copy-0"),
-            search(criteria = LibrarySearchCriteria(readingStatus = ReadingStatus.READING))
-                .map(LibraryBookRow::copyId),
-        )
-    }
-
-    @Test
-    fun appliesEverySupportedSortWithStableTieBreakers() = runBlocking {
-        insertBooks(
-            listOf(
-                sample(0, title = "Beta", author = "Alice", ndc = null, addedAt = 30),
-                sample(1, title = "Alpha", author = "Carol", ndc = "913", addedAt = 20),
-                sample(2, title = "Gamma", author = "Bob", ndc = "014", addedAt = 10),
-            ),
-        )
-
-        assertEquals(listOf("copy-0", "copy-1", "copy-2"), ids(LibrarySort.ADDED_NEWEST))
-        assertEquals(listOf("copy-1", "copy-0", "copy-2"), ids(LibrarySort.TITLE))
-        assertEquals(listOf("copy-0", "copy-2", "copy-1"), ids(LibrarySort.AUTHOR))
-        assertEquals(listOf("copy-2", "copy-1", "copy-0"), ids(LibrarySort.NDC))
-        assertEquals(listOf("copy-2", "copy-1", "copy-0"), ids(LibrarySort.SHELF))
-    }
-
-    @Test
-    fun selectedEditionModeRejectsUnknownIdsAndIncludesEveryEditionCopy() = runBlocking {
-        val first = sample(0)
-        insertBooks(listOf(first, sample(1)))
-        dao.insertCopy(
-            OwnedCopyEntity(
-                id = "copy-extra",
-                editionId = first.editionId,
-                mediaType = "PHYSICAL",
-                location = "別の棚",
-                readingStatus = "READ",
-                addedAt = 2,
-                copyLabel = "保存用",
-            ),
-        )
-
-        assertEquals(
-            setOf("copy-0", "copy-extra"),
-            search(criteria = LibrarySearchCriteria(selectedEditionId = first.editionId))
-                .map(LibraryBookRow::copyId)
-                .toSet(),
-        )
-        assertTrue(
-            search(criteria = LibrarySearchCriteria(selectedEditionId = "missing")).isEmpty(),
-        )
-    }
-
-    @Test
-    fun selectedEditionModeIncludesOnlyNeighborsFromItsTiers() = runBlocking {
-        insertBooks(listOf(sample(0), sample(1), sample(2)))
-        val locations = database.locationDao()
-        locations.upsertRooms(listOf(LocationRoomEntity("room", "部屋", 0)))
-        locations.upsertShelves(listOf(LocationShelfEntity("shelf", "room", "棚", 0)))
-        locations.upsertTiers(
-            listOf(
-                LocationTierEntity("tier-selected", "shelf", "上段", 0),
-                LocationTierEntity("tier-unrelated", "shelf", "下段", 1),
-            ),
-        )
-        dao.updateCopy(
-            "copy-0", "部屋 / 棚 / 上段", ReadingStatus.UNREAD.name,
-            "tier-selected", "100", "所蔵本",
-        )
-        dao.updateCopy(
-            "copy-1", "部屋 / 棚 / 下段", ReadingStatus.UNREAD.name,
-            "tier-unrelated", "100", "所蔵本",
-        )
-        dao.updateCopy(
-            "copy-2", "部屋 / 棚 / 上段", ReadingStatus.UNREAD.name,
-            "tier-selected", "200", "所蔵本",
-        )
-
-        assertEquals(
-            setOf("copy-0", "copy-2"),
-            search(criteria = LibrarySearchCriteria(selectedEditionId = "edition-0"))
-                .map(LibraryBookRow::copyId)
-                .toSet(),
-        )
-    }
-
-    @Test
-    fun representativeDatasetsRemainQueryable() = runBlocking {
-        var inserted = 0
-        listOf(1_000, 5_000, 20_000).forEach { size ->
-            insertBooks((inserted until size).map { sample(it) })
-            inserted = size
-            var rows: List<LibraryBookRow> = emptyList()
-            val elapsed = measureTimeMillis { rows = search("郷土") }
-            var allRows: List<LibraryBookRow> = emptyList()
-            val initialElapsed = measureTimeMillis { allRows = search() }
-
-            assertEquals((0 until size).count { it % 97 == 0 }, rows.size)
-            assertEquals(size, allRows.size)
-            assertTrue("$size rows query exceeded smoke budget: ${elapsed}ms", elapsed < 5_000)
-            assertTrue(
-                "$size rows initial query exceeded smoke budget: ${initialElapsed}ms",
-                initialElapsed < 5_000,
+    fun searchesEverySupportedFieldAndTreatsWildcardsLiterally() =
+        runBlocking {
+            insertBooks(
+                listOf(
+                    sample(0, title = "郷土%資料", status = ReadingStatus.READING),
+                    sample(1, author = "地域著者"),
+                    sample(2, isbn = "9784820418078"),
+                    sample(3, ndc = "014.45"),
+                    sample(4, location = "書庫特別棚"),
+                ),
             )
-            println("library-search-room,$size,$elapsed,$initialElapsed,${rows.size}")
+
+            assertEquals(listOf("copy-0"), search("郷土%").map(LibraryBookRow::copyId))
+            assertEquals(listOf("copy-1"), search("地域著者").map(LibraryBookRow::copyId))
+            assertEquals(listOf("copy-2"), search("18078").map(LibraryBookRow::copyId))
+            assertEquals(listOf("copy-3"), search("014.45").map(LibraryBookRow::copyId))
+            assertEquals(listOf("copy-4"), search("特別棚").map(LibraryBookRow::copyId))
+            assertEquals(
+                listOf("copy-1", "copy-0"),
+                search(criteria = LibrarySearchCriteria(readingStatus = ReadingStatus.READING))
+                    .map(LibraryBookRow::copyId),
+            )
         }
-    }
+
+    @Test
+    fun appliesEverySupportedSortWithStableTieBreakers() =
+        runBlocking {
+            insertBooks(
+                listOf(
+                    sample(0, title = "Beta", author = "Alice", ndc = null, addedAt = 30),
+                    sample(1, title = "Alpha", author = "Carol", ndc = "913", addedAt = 20),
+                    sample(2, title = "Gamma", author = "Bob", ndc = "014", addedAt = 10),
+                ),
+            )
+
+            assertEquals(listOf("copy-0", "copy-1", "copy-2"), ids(LibrarySort.ADDED_NEWEST))
+            assertEquals(listOf("copy-1", "copy-0", "copy-2"), ids(LibrarySort.TITLE))
+            assertEquals(listOf("copy-0", "copy-2", "copy-1"), ids(LibrarySort.AUTHOR))
+            assertEquals(listOf("copy-2", "copy-1", "copy-0"), ids(LibrarySort.NDC))
+            assertEquals(listOf("copy-2", "copy-1", "copy-0"), ids(LibrarySort.SHELF))
+        }
+
+    @Test
+    fun selectedEditionModeRejectsUnknownIdsAndIncludesEveryEditionCopy() =
+        runBlocking {
+            val first = sample(0)
+            insertBooks(listOf(first, sample(1)))
+            dao.insertCopy(
+                OwnedCopyEntity(
+                    id = "copy-extra",
+                    editionId = first.editionId,
+                    mediaType = "PHYSICAL",
+                    location = "別の棚",
+                    readingStatus = "READ",
+                    addedAt = 2,
+                    copyLabel = "保存用",
+                ),
+            )
+
+            assertEquals(
+                setOf("copy-0", "copy-extra"),
+                search(criteria = LibrarySearchCriteria(selectedEditionId = first.editionId))
+                    .map(LibraryBookRow::copyId)
+                    .toSet(),
+            )
+            assertTrue(
+                search(criteria = LibrarySearchCriteria(selectedEditionId = "missing")).isEmpty(),
+            )
+        }
+
+    @Test
+    fun selectedEditionModeIncludesOnlyNeighborsFromItsTiers() =
+        runBlocking {
+            insertBooks(listOf(sample(0), sample(1), sample(2)))
+            val locations = database.locationDao()
+            locations.upsertRooms(listOf(LocationRoomEntity("room", "部屋", 0)))
+            locations.upsertShelves(listOf(LocationShelfEntity("shelf", "room", "棚", 0)))
+            locations.upsertTiers(
+                listOf(
+                    LocationTierEntity("tier-selected", "shelf", "上段", 0),
+                    LocationTierEntity("tier-unrelated", "shelf", "下段", 1),
+                ),
+            )
+            dao.updateCopy(
+                "copy-0",
+                "部屋 / 棚 / 上段",
+                ReadingStatus.UNREAD.name,
+                "tier-selected",
+                "100",
+                "所蔵本",
+            )
+            dao.updateCopy(
+                "copy-1",
+                "部屋 / 棚 / 下段",
+                ReadingStatus.UNREAD.name,
+                "tier-unrelated",
+                "100",
+                "所蔵本",
+            )
+            dao.updateCopy(
+                "copy-2",
+                "部屋 / 棚 / 上段",
+                ReadingStatus.UNREAD.name,
+                "tier-selected",
+                "200",
+                "所蔵本",
+            )
+
+            assertEquals(
+                setOf("copy-0", "copy-2"),
+                search(criteria = LibrarySearchCriteria(selectedEditionId = "edition-0"))
+                    .map(LibraryBookRow::copyId)
+                    .toSet(),
+            )
+        }
+
+    @Test
+    fun filtersByNdcTopClassAsLeadingDigitEquality() =
+        runBlocking {
+            insertBooks(
+                listOf(
+                    sample(0, ndc = "914.6"),
+                    sample(1, ndc = "410.1"),
+                    sample(2, ndc = "007"),
+                    sample(3, ndc = null),
+                ),
+            )
+
+            assertEquals(
+                listOf("copy-0"),
+                search(criteria = LibrarySearchCriteria(ndcTopClass = 9)).map(LibraryBookRow::copyId),
+            )
+            assertEquals(
+                listOf("copy-2"),
+                search(criteria = LibrarySearchCriteria(ndcTopClass = 0)).map(LibraryBookRow::copyId),
+            )
+            assertTrue(search(criteria = LibrarySearchCriteria(ndcTopClass = 5)).isEmpty())
+        }
+
+    @Test
+    fun locationQueryMatchesFreeTextLocationAndHierarchyNamesPartially() =
+        runBlocking {
+            insertBooks(
+                listOf(
+                    sample(0, location = "書斎の窓際"),
+                    sample(1, location = "リビング"),
+                    sample(2, location = "未設定"),
+                ),
+            )
+            val locations = database.locationDao()
+            locations.upsertRooms(listOf(LocationRoomEntity("room", "書斎", 0)))
+            locations.upsertShelves(listOf(LocationShelfEntity("shelf", "room", "本棚A", 0)))
+            locations.upsertTiers(listOf(LocationTierEntity("tier", "shelf", "上段", 0)))
+            dao.updateCopy(
+                "copy-2",
+                "書斎 / 本棚A / 上段",
+                ReadingStatus.UNREAD.name,
+                "tier",
+                "100",
+                "所蔵本",
+            )
+
+            // 自由入力locationと部屋名の両方に部分一致し、ワイルドカードはリテラル扱い。
+            assertEquals(
+                setOf("copy-0", "copy-2"),
+                search(criteria = LibrarySearchCriteria(locationQuery = "書斎"))
+                    .map(LibraryBookRow::copyId)
+                    .toSet(),
+            )
+            assertTrue(
+                search(criteria = LibrarySearchCriteria(locationQuery = "書%"))
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun addedRangeIsInclusiveLowerAndExclusiveUpper() =
+        runBlocking {
+            insertBooks(
+                listOf(
+                    sample(0, addedAt = 100),
+                    sample(1, addedAt = 200),
+                    sample(2, addedAt = 300),
+                ),
+            )
+
+            assertEquals(
+                listOf("copy-1"),
+                search(
+                    criteria =
+                        LibrarySearchCriteria(addedAfterMillis = 200, addedBeforeMillis = 300),
+                ).map(LibraryBookRow::copyId),
+            )
+            assertEquals(
+                setOf("copy-1", "copy-2"),
+                search(criteria = LibrarySearchCriteria(addedAfterMillis = 200))
+                    .map(LibraryBookRow::copyId)
+                    .toSet(),
+            )
+        }
+
+    @Test
+    fun combinesInterpretedConditionsWithPlainQueryAndReadingStatus() =
+        runBlocking {
+            insertBooks(
+                listOf(
+                    sample(0, title = "宇宙の話", ndc = "440", location = "書斎", status = ReadingStatus.UNREAD, addedAt = 150),
+                    sample(1, title = "宇宙の話", ndc = "440", location = "書斎", status = ReadingStatus.READ, addedAt = 150),
+                    sample(2, title = "宇宙の話", ndc = "913", location = "書斎", status = ReadingStatus.UNREAD, addedAt = 150),
+                    sample(3, title = "宇宙の話", ndc = "440", location = "居間", status = ReadingStatus.UNREAD, addedAt = 150),
+                    sample(4, title = "宇宙の話", ndc = "440", location = "書斎", status = ReadingStatus.UNREAD, addedAt = 500),
+                ),
+            )
+
+            assertEquals(
+                listOf("copy-0"),
+                search(
+                    criteria =
+                        LibrarySearchCriteria(
+                            query = "宇宙",
+                            readingStatus = ReadingStatus.UNREAD,
+                            ndcTopClass = 4,
+                            locationQuery = "書斎",
+                            addedAfterMillis = 100,
+                            addedBeforeMillis = 400,
+                        ),
+                ).map(LibraryBookRow::copyId),
+            )
+        }
+
+    @Test
+    fun representativeDatasetsRemainQueryable() =
+        runBlocking {
+            var inserted = 0
+            listOf(1_000, 5_000, 20_000).forEach { size ->
+                insertBooks((inserted until size).map { sample(it) })
+                inserted = size
+                var rows: List<LibraryBookRow> = emptyList()
+                val elapsed = measureTimeMillis { rows = search("郷土") }
+                var allRows: List<LibraryBookRow> = emptyList()
+                val initialElapsed = measureTimeMillis { allRows = search() }
+
+                assertEquals((0 until size).count { it % 97 == 0 }, rows.size)
+                assertEquals(size, allRows.size)
+                assertTrue("$size rows query exceeded smoke budget: ${elapsed}ms", elapsed < 5_000)
+                assertTrue(
+                    "$size rows initial query exceeded smoke budget: ${initialElapsed}ms",
+                    initialElapsed < 5_000,
+                )
+                println("library-search-room,$size,$elapsed,$initialElapsed,${rows.size}")
+            }
+        }
 
     private suspend fun ids(sort: LibrarySort): List<String> =
         search(criteria = LibrarySearchCriteria(sort = sort)).map(LibraryBookRow::copyId)

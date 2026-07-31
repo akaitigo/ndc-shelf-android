@@ -42,7 +42,9 @@ data class LibraryBook(
     }
 }
 
-enum class ReadingStatus(val label: String) {
+enum class ReadingStatus(
+    val label: String,
+) {
     UNREAD("未読"),
     READING("読書中"),
     READ("読了"),
@@ -70,22 +72,24 @@ data class NdcCategory(
     val label: String,
 ) {
     companion object {
-        private val categories = listOf(
-            NdcCategory(0, "総記"),
-            NdcCategory(1, "哲学"),
-            NdcCategory(2, "歴史"),
-            NdcCategory(3, "社会科学"),
-            NdcCategory(4, "自然科学"),
-            NdcCategory(5, "技術"),
-            NdcCategory(6, "産業"),
-            NdcCategory(7, "芸術"),
-            NdcCategory(8, "言語"),
-            NdcCategory(9, "文学"),
-        )
+        /** NDC第1次区分（類）の一覧。digit昇順。 */
+        val all =
+            listOf(
+                NdcCategory(0, "総記"),
+                NdcCategory(1, "哲学"),
+                NdcCategory(2, "歴史"),
+                NdcCategory(3, "社会科学"),
+                NdcCategory(4, "自然科学"),
+                NdcCategory(5, "技術"),
+                NdcCategory(6, "産業"),
+                NdcCategory(7, "芸術"),
+                NdcCategory(8, "言語"),
+                NdcCategory(9, "文学"),
+            )
 
         fun fromCode(code: String?): NdcCategory? {
             val digit = code?.firstOrNull()?.digitToIntOrNull() ?: return null
-            return categories.getOrNull(digit)
+            return all.getOrNull(digit)
         }
     }
 }
