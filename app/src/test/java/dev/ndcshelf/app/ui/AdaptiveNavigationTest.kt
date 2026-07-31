@@ -149,6 +149,8 @@ class AdaptiveNavigationTest {
     }
 
     private fun setAppContent(): TestNavHostController {
+        // ViewModelはcomposable外で生成する（lint: ViewModelConstructorInComposable）。
+        val mainViewModel = MainViewModel(EmptyLibraryRepository, dispatcher, dispatcher)
         lateinit var navController: TestNavHostController
         composeRule.setContent {
             navController =
@@ -157,12 +159,7 @@ class AdaptiveNavigationTest {
                 }
             NdcShelfTheme {
                 NdcShelfApp(
-                    viewModel =
-                        MainViewModel(
-                            EmptyLibraryRepository,
-                            dispatcher,
-                            dispatcher,
-                        ),
+                    viewModel = mainViewModel,
                     navController = navController,
                     onboardingStore = InMemoryOnboardingStore(completed = true),
                 )
