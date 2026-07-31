@@ -600,7 +600,12 @@
     <string name="consent_purpose_series_watch_retention">アプリは端末外へ保存しません（NDLサーチの検索処理にのみ使用されます）</string>
     <string name="consent_purpose_series_watch_third_party">なし（国立国会図書館サーチ以外へ送信しません）</string>
     <string name="consent_purpose_sync_title">複数端末の同期（今後提供予定）</string>
-    <string name="consent_purpose_nl_search_title">自然言語検索のクラウドモード（今後提供予定）</string>
+    <string name="consent_purpose_nl_search_title">自然言語検索のクラウド解釈（今後提供予定）</string>
+    <string name="consent_purpose_nl_search_purpose">クラウド解釈は未提供です。現在の自然言語検索は端末内のルール変換だけで動作し、外部への送信はありません。</string>
+    <string name="consent_purpose_nl_search_destination">未提供（提供時に送信先を明示し、同意なしでは通信しません）</string>
+    <string name="consent_purpose_nl_search_items">提供時は入力した検索文のみを送信します。蔵書データ（タイトル・著者・置き場所・読書状態・タグ）は送信しません。</string>
+    <string name="consent_purpose_nl_search_retention">未提供（提供時に保存期間を明示します）</string>
+    <string name="consent_purpose_nl_search_third_party">なし（提供時も第三者提供は行いません）</string>
     <string name="consent_purpose_ai_title">AI司書（今後提供予定）</string>
     <string name="consent_purpose_not_available">この機能は未提供です。提供時に内容を提示し、同意なしでは通信しません。</string>
     <string name="data_privacy_consent_button">プライバシーと同意を管理</string>
@@ -621,6 +626,10 @@
     <string name="onboarding_action_manual">ISBN・手動で入力する</string>
     <string name="onboarding_action_import">既存データをインポートする</string>
     <string name="info_replay_onboarding">はじめての使い方を見る</string>
+    <string name="nl_search_interpretation_label">検索の解釈（チップの×で解除）</string>
+    <string name="nl_search_chip_dismiss">解釈「%1$s」を解除</string>
+    <string name="nl_search_empty_hint">解釈チップを×で解除するか、別の言い回しを試してください</string>
+
     <string name="library_help_button">本棚のヘルプ</string>
     <string name="library_title">My Library</string>
     <string name="library_subtitle">%1$d冊の本を、ちゃんと見つけられる場所。</string>

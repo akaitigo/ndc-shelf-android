@@ -705,6 +705,8 @@ fun NdcShelfApp(
                         searchIsCurrent = result.criteria == criteria,
                         libraryStats = libraryStats,
                         onQueryChange = viewModel::updateLibraryQuery,
+                        interpretationChips = result.interpretationChips,
+                        onDismissInterpretationChip = viewModel::dismissInterpretationChip,
                         onReadingStatusChange = viewModel::updateLibraryReadingStatus,
                         onSortChange = viewModel::updateLibrarySort,
                         onSelectedEditionChange = viewModel::selectLibraryEdition,

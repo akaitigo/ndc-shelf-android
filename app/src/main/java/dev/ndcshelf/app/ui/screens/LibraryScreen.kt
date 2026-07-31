@@ -48,6 +48,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -103,6 +105,7 @@ import dev.ndcshelf.app.domain.model.SavedSearch
 import dev.ndcshelf.app.domain.model.TagNameRules
 import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
+import dev.ndcshelf.app.domain.search.SearchInterpretationChip
 import dev.ndcshelf.app.ui.components.BookCover
 import java.text.DateFormat
 import java.util.Date
@@ -115,6 +118,8 @@ fun LibraryScreen(
     searchIsCurrent: Boolean = true,
     libraryStats: LibraryStats? = null,
     onQueryChange: (String) -> Unit = {},
+    interpretationChips: List<SearchInterpretationChip> = emptyList(),
+    onDismissInterpretationChip: (String) -> Unit = {},
     onReadingStatusChange: (ReadingStatus?) -> Unit = {},
     onSortChange: (LibrarySort) -> Unit = {},
     onSelectedEditionChange: (String?) -> Unit = {},
@@ -323,6 +328,10 @@ fun LibraryScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(18.dp),
                 )
+                InterpretationChipsRow(
+                    chips = interpretationChips,
+                    onDismissChip = onDismissInterpretationChip,
+                )
                 Spacer(Modifier.height(12.dp))
                 LibrarySummary(libraryStats ?: books.toStats())
                 LibrarySearchControls(
@@ -390,6 +399,7 @@ fun LibraryScreen(
             } else if (visibleBooks.isEmpty()) {
                 EmptyLibrary(
                     isSearching = query.isNotBlank(),
+                    hasInterpretation = interpretationChips.isNotEmpty(),
                     modifier =
                         Modifier
                             .fillMaxSize()
@@ -518,6 +528,42 @@ fun LibraryScreen(
     }
 }
 
+/**
+ * 自然言語検索の解釈結果チップ。各チップは×で個別に解除でき、解除した語は
+ * 通常の部分一致検索へ戻る。ラベル（タグ名等を含む）はプレーンテキストとして表示する。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun InterpretationChipsRow(
+    chips: List<SearchInterpretationChip>,
+    onDismissChip: (String) -> Unit,
+) {
+    if (chips.isEmpty()) return
+    Spacer(Modifier.height(8.dp))
+    Text(
+        stringResource(R.string.nl_search_interpretation_label),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        chips.forEach { chip ->
+            InputChip(
+                selected = true,
+                onClick = { onDismissChip(chip.id) },
+                modifier = Modifier.testTag(interpretationChipTag(chip.id)),
+                label = { Text(chip.label) },
+                trailingIcon = {
+                    Icon(
+                        Icons.Rounded.Clear,
+                        contentDescription = stringResource(R.string.nl_search_chip_dismiss, chip.label),
+                        modifier = Modifier.size(InputChipDefaults.IconSize),
+                    )
+                },
+            )
+        }
+    }
+}
+
 /** タグ絞り込みチップと保存済み検索。タグ名は常にプレーンテキストとして表示する。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -641,6 +687,8 @@ private fun BulkTagDialog(
 }
 
 internal const val LIBRARY_SEARCH_PROGRESS_TAG = "library-search-progress"
+
+internal fun interpretationChipTag(chipId: String): String = "nl-search-chip-$chipId"
 
 @Composable
 private fun LibrarySummary(stats: LibraryStats) {
@@ -933,6 +981,7 @@ private fun StatusBadge(status: ReadingStatus) {
 private fun EmptyLibrary(
     isSearching: Boolean,
     modifier: Modifier = Modifier,
+    hasInterpretation: Boolean = false,
 ) {
     Box(
         modifier = modifier,
@@ -961,10 +1010,10 @@ private fun EmptyLibrary(
             )
             Text(
                 text =
-                    if (isSearching) {
-                        "検索条件を変えてみてください"
-                    } else {
-                        "下の「スキャン」から本のバーコードを読み取れます"
+                    when {
+                        hasInterpretation -> stringResource(R.string.nl_search_empty_hint)
+                        isSearching -> "検索条件を変えてみてください"
+                        else -> "下の「スキャン」から本のバーコードを読み取れます"
                     },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
