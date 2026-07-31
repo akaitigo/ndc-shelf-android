@@ -11,8 +11,10 @@ current_apk="${2:?usage: verify-update-install.sh <baseline.apk> <current.apk>}"
 marker="files/update-install-marker.txt"
 database="databases/ndc-shelf.db"
 
+# リダイレクトを含むコマンドは、adb shell側の外殻シェルではなく run-as 配下の
+# シェルで解釈させる必要がある。コマンド全体を単一の文字列としてデバイスへ渡す。
 run_as() {
-  adb shell run-as "$package" "$@"
+  adb shell "run-as $package sh -c '$1'"
 }
 
 echo "::group::Install baseline APK"
@@ -24,23 +26,22 @@ echo "::group::Let the baseline app create its database"
 adb shell am start -W -n "$package/.MainActivity"
 # Roomは初回アクセスで作られるため、生成を待ってから存在を確認する。
 for _ in $(seq 1 20); do
-  if run_as ls "$database" >/dev/null 2>&1; then
+  if run_as "ls $database" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-if ! run_as ls "$database" >/dev/null 2>&1; then
+if ! run_as "ls $database" >/dev/null 2>&1; then
   echo "::error::baselineアプリがRoom DBを作成しなかった" >&2
-  run_as ls -R . || true
+  run_as "ls -R ." || true
   exit 1
 fi
 echo "baseline database created"
 echo "::endgroup::"
 
 echo "::group::Create marker data in the baseline install"
-run_as mkdir -p files
-run_as sh -c "printf 'baseline-data' > $marker"
-run_as cat "$marker" | grep -q 'baseline-data'
+run_as "mkdir -p files && printf baseline-data > $marker"
+run_as "cat $marker" | grep -q 'baseline-data'
 echo "::endgroup::"
 
 echo "::group::Update install with the current APK"
@@ -50,11 +51,11 @@ adb install -r "$current_apk"
 echo "::endgroup::"
 
 echo "::group::Verify data survived the update"
-if ! run_as cat "$marker" | grep -q 'baseline-data'; then
+if ! run_as "cat $marker" | grep -q 'baseline-data'; then
   echo "::error::更新インストールでアプリdataが失われた" >&2
   exit 1
 fi
-if ! run_as ls "$database" >/dev/null 2>&1; then
+if ! run_as "ls $database" >/dev/null 2>&1; then
   echo "::error::更新インストールで蔵書DBが失われた" >&2
   exit 1
 fi
