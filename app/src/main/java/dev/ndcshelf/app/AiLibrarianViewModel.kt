@@ -298,10 +298,6 @@ class AiLibrarianViewModel(
         _state.update { current -> current.copy(answer = null, phase = AiLibrarianPhase.EDITING) }
     }
 
-    fun dismissFailure() {
-        _state.update { current -> current.copy(failure = null) }
-    }
-
     fun grantConsent() {
         val repository = consentRepository ?: return
         viewModelScope.launch {

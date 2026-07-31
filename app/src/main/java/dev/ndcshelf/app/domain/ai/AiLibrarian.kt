@@ -63,10 +63,6 @@ enum class AiLibrarianField(
         /** 明示選択しない限り送信しない項目。 */
         val DEFAULT_EXCLUDED: Set<AiLibrarianField>
             get() = entries.filterNot(AiLibrarianField::includedByDefault).toSet()
-
-        /** 利用者がチェックで切り替えられる項目（必須項目を除く）。 */
-        val SELECTABLE: List<AiLibrarianField>
-            get() = entries.filterNot(AiLibrarianField::required)
     }
 }
 
