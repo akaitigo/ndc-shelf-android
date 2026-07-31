@@ -23,10 +23,17 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
   で描画し、`app/roborazzi/` のgoldenと比較する。verifyジョブの
   `verifyRoborazziDebug` が差分で失敗し、`screenshot-diffs` artifactへ比較画像を
   出力する。goldenの更新は `./gradlew recordRoborazziDebug` の結果をレビューして
-  コミットする。日英スクリーンショットは#44（i18n）導入後にlocale軸を追加する。
+  コミットする。大文字は fontScale 1.5 に加え 2.0（library / insights / onboarding）も
+  golden 化し、200%文字での切れ・重なりを検出する。
+  日英スクリーンショットは#44（i18n）導入後にlocale軸を追加する。
 - **エミュレーターinstrumentation**: API 26 / 29 / 35 × pixel_7 で
   `connectedDebugAndroidTest`。画面単位テストに加え、`E2eManualRegistrationTest`
   がオンボーディング→手動登録→本棚表示→Activity再生成の主要フローを実DBで検証する。
+- **アクセシビリティ自動チェック**: `AccessibilityChecksTest` と主要画面テスト
+  （`LibrarySearchScreenTest` / `DataManagementScreenTest` / `ScanSessionPanelTest`）で
+  Accessibility Test Framework（Accessibility Scanner相当）の検査を実行し、ラベル欠落・
+  48dp未満のタップ領域・重複クリック領域をERROR判定で失敗させる。抑制中のチェックと
+  理由は `docs/ACCESSIBILITY_AUDIT.md` の「自動チェックの範囲」を参照する。
 - 検証成果は各リリースのGitHub Actions run URLをリリースチェックリストへ記録する。
 
 - **更新インストール回帰**: `update-install`ジョブがv0.1.2（commit d852975、versionCode 3）の
@@ -46,6 +53,9 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
 4. process death（開発者オプション「アクティビティを保持しない」）と回転
 5. 低容量端末でのbackup失敗時の安全性
 6. 更新インストール（旧versionCode→新versionCode）でのデータ保持
+7. アクセシビリティ実機ゲート（TalkBackスモーク・Switch Access・拡大とコントラスト・
+   モーション低減）。手順は `docs/ACCESSIBILITY_AUDIT.md` の「実機ゲート」に定義し、
+   実走はリリースゲートで実施する。CIのATF自動チェックはこれを代替しない。
 
 結果は表形式（端末・OS・結果・日付・実施者）でチェックリストへ残し、失敗時は
 再試行ではなくIssue化して原因を修正する。

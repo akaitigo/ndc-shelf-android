@@ -35,6 +35,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -75,6 +79,7 @@ fun CameraPreview(
         IsbnBarcodeAnalyzer { isbn -> currentOnIsbnDetected.value(isbn) }
     }
 
+    val previewDescription = stringResource(R.string.camera_preview_label)
     Box(modifier = modifier) {
         AndroidView(
             factory = {
@@ -148,7 +153,16 @@ fun CameraPreview(
                 }
                 previewView
             },
-            modifier = Modifier.fillMaxSize(),
+            // カメラプレビューはタップでのピント合わせとピンチズームを持つが、
+            // View側にはラベルが無いためCompose側で説明とクリックラベルを与える。
+            // カメラを使えない場合の代替経路（ISBN手入力・手動登録）も説明に含める。
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .semantics {
+                        contentDescription = previewDescription
+                        role = Role.Image
+                    },
         )
 
         focusPoint?.let { point ->
