@@ -1,0 +1,229 @@
+{
+  "description": "自然言語検索の日本語クエリ→期待解釈のfixture。nowIso時点・timeZoneで解釈した結果を定義する。interpreted=falseは解釈不能（通常の部分一致検索へフォールバック）を表す。",
+  "nowIso": "2026-07-20T12:00:00+09:00",
+  "timeZone": "Asia/Tokyo",
+  "tags": [
+    { "id": "tag-research", "name": "研究用" },
+    { "id": "tag-unread-name", "name": "未読" },
+    { "id": "tag-paren", "name": "検証(重要)" }
+  ],
+  "cases": [
+    {
+      "name": "読書状態: 未読",
+      "query": "未読の",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "residualQuery": "" }
+    },
+    {
+      "name": "読書状態: 読みかけ",
+      "query": "読みかけ",
+      "expected": { "interpreted": true, "readingStatus": "READING", "residualQuery": "" }
+    },
+    {
+      "name": "読書状態: 読了した（最長一致・ノイズ語の除去）",
+      "query": "読了した本",
+      "expected": { "interpreted": true, "readingStatus": "READ", "residualQuery": "" }
+    },
+    {
+      "name": "読書状態: 読み終わった",
+      "query": "読み終わった",
+      "expected": { "interpreted": true, "readingStatus": "READ", "residualQuery": "" }
+    },
+    {
+      "name": "読書状態: 中断中",
+      "query": "中断中",
+      "expected": { "interpreted": true, "readingStatus": "PAUSED", "residualQuery": "" }
+    },
+    {
+      "name": "読書状態: 積読は未読と解釈",
+      "query": "積読",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "residualQuery": "" }
+    },
+    {
+      "name": "NDC: 自然科学",
+      "query": "自然科学の",
+      "expected": { "interpreted": true, "ndcTopClass": 4, "residualQuery": "" }
+    },
+    {
+      "name": "NDC: 文学",
+      "query": "文学",
+      "expected": { "interpreted": true, "ndcTopClass": 9, "residualQuery": "" }
+    },
+    {
+      "name": "NDC: 社会科学（自然科学と取り違えない）",
+      "query": "社会科学",
+      "expected": { "interpreted": true, "ndcTopClass": 3, "residualQuery": "" }
+    },
+    {
+      "name": "NDC: N類の数字指定",
+      "query": "4類",
+      "expected": { "interpreted": true, "ndcTopClass": 4, "residualQuery": "" }
+    },
+    {
+      "name": "NDC: 全角数字のN類",
+      "query": "７類",
+      "expected": { "interpreted": true, "ndcTopClass": 7, "residualQuery": "" }
+    },
+    {
+      "name": "場所: 書斎にある",
+      "query": "書斎にある",
+      "expected": { "interpreted": true, "locationQuery": "書斎", "residualQuery": "" }
+    },
+    {
+      "name": "場所: リビングに置いてある",
+      "query": "リビングに置いてある",
+      "expected": { "interpreted": true, "locationQuery": "リビング", "residualQuery": "" }
+    },
+    {
+      "name": "追加時期: 去年買った",
+      "query": "去年買った",
+      "expected": {
+        "interpreted": true,
+        "addedAfterIso": "2025-01-01T00:00:00+09:00",
+        "addedBeforeIso": "2026-01-01T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "追加時期: 昨年購入した",
+      "query": "昨年購入した",
+      "expected": {
+        "interpreted": true,
+        "addedAfterIso": "2025-01-01T00:00:00+09:00",
+        "addedBeforeIso": "2026-01-01T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "追加時期: 今月追加した",
+      "query": "今月追加した",
+      "expected": {
+        "interpreted": true,
+        "addedAfterIso": "2026-07-01T00:00:00+09:00",
+        "addedBeforeIso": "2026-08-01T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "追加時期: 先月",
+      "query": "先月",
+      "expected": {
+        "interpreted": true,
+        "addedAfterIso": "2026-06-01T00:00:00+09:00",
+        "addedBeforeIso": "2026-07-01T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "追加時期: 今年",
+      "query": "今年",
+      "expected": {
+        "interpreted": true,
+        "addedAfterIso": "2026-01-01T00:00:00+09:00",
+        "addedBeforeIso": "2027-01-01T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "追加時期: 今日追加",
+      "query": "今日追加",
+      "expected": {
+        "interpreted": true,
+        "addedAfterIso": "2026-07-20T00:00:00+09:00",
+        "addedBeforeIso": "2026-07-21T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "複合: 未読の自然科学",
+      "query": "未読の自然科学",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "ndcTopClass": 4, "residualQuery": "" }
+    },
+    {
+      "name": "複合: 書斎にある未読の本",
+      "query": "書斎にある未読の本",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "locationQuery": "書斎", "residualQuery": "" }
+    },
+    {
+      "name": "複合: 去年買った未読の文学",
+      "query": "去年買った未読の文学",
+      "expected": {
+        "interpreted": true,
+        "readingStatus": "UNREAD",
+        "ndcTopClass": 9,
+        "addedAfterIso": "2025-01-01T00:00:00+09:00",
+        "addedBeforeIso": "2026-01-01T00:00:00+09:00",
+        "residualQuery": ""
+      }
+    },
+    {
+      "name": "タグ: #研究用",
+      "query": "#研究用",
+      "expected": { "interpreted": true, "tagIds": ["tag-research"], "residualQuery": "" }
+    },
+    {
+      "name": "タグ: 研究用タグの",
+      "query": "研究用タグの",
+      "expected": { "interpreted": true, "tagIds": ["tag-research"], "residualQuery": "" }
+    },
+    {
+      "name": "複合: 研究用タグの未読",
+      "query": "研究用タグの未読",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "tagIds": ["tag-research"], "residualQuery": "" }
+    },
+    {
+      "name": "複合: タグ + 残りは通常検索語",
+      "query": "#研究用 村上春樹",
+      "expected": { "interpreted": true, "tagIds": ["tag-research"], "residualQuery": "村上春樹" }
+    },
+    {
+      "name": "優先規則: 裸の「未読」は同名タグがあっても読書状態と解釈",
+      "query": "未読",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "tagIds": [], "residualQuery": "" }
+    },
+    {
+      "name": "優先規則: #未読はタグと解釈（読書状態にしない）",
+      "query": "#未読",
+      "expected": { "interpreted": true, "tagIds": ["tag-unread-name"], "residualQuery": "" }
+    },
+    {
+      "name": "優先規則: 未読タグはタグと解釈",
+      "query": "未読タグ",
+      "expected": { "interpreted": true, "tagIds": ["tag-unread-name"], "residualQuery": "" }
+    },
+    {
+      "name": "インジェクション耐性: 記号入りタグ名も文字列として完全一致",
+      "query": "#検証(重要)",
+      "expected": { "interpreted": true, "tagIds": ["tag-paren"], "residualQuery": "" }
+    },
+    {
+      "name": "存在しないタグ指定は解釈しない（通常検索へフォールバック）",
+      "query": "#存在しない",
+      "expected": { "interpreted": false }
+    },
+    {
+      "name": "非対応: 主観条件は解釈しない",
+      "query": "面白い本",
+      "expected": { "interpreted": false }
+    },
+    {
+      "name": "非対応: 感想ベースの条件は解釈しない",
+      "query": "泣ける話",
+      "expected": { "interpreted": false }
+    },
+    {
+      "name": "非対応: あいまいな推薦要求は解釈しない",
+      "query": "おすすめの本",
+      "expected": { "interpreted": false }
+    },
+    {
+      "name": "場所 + タイトル語の共存",
+      "query": "書斎にあるノルウェイの森",
+      "expected": { "interpreted": true, "locationQuery": "書斎", "residualQuery": "ノルウェイの森" }
+    },
+    {
+      "name": "状態 + タイトル語（助詞をまたぐタイトルを保持）",
+      "query": "未読のノルウェイの森",
+      "expected": { "interpreted": true, "readingStatus": "UNREAD", "residualQuery": "ノルウェイの森" }
+    }
+  ]
+}

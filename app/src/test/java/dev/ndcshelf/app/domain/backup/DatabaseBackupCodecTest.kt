@@ -7,12 +7,15 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ReadingSessionEntity
+import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
 import dev.ndcshelf.app.data.local.SeriesWatchEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
@@ -148,7 +151,7 @@ class DatabaseBackupCodecTest {
                 this["manifest.json"] =
                     requireNotNull(this["manifest.json"])
                         .decodeToString()
-                        .replace("\"formatVersion\":13", "\"formatVersion\":10")
+                        .replace("\"formatVersion\":14", "\"formatVersion\":10")
                         .encodeToByteArray()
             }
         val olderPayload =
@@ -156,14 +159,14 @@ class DatabaseBackupCodecTest {
                 original,
                 requireNotNull(original["database.json"])
                     .decodeToString()
-                    .replace("\"schemaVersion\":13", "\"schemaVersion\":10"),
+                    .replace("\"schemaVersion\":14", "\"schemaVersion\":10"),
             )
         val missingPayloadSchema =
             archiveWithPayload(
                 original,
                 requireNotNull(original["database.json"])
                     .decodeToString()
-                    .replace("\"schemaVersion\":13,", ""),
+                    .replace("\"schemaVersion\":14,", ""),
             )
 
         listOf(zip(olderManifest), olderPayload, missingPayloadSchema).forEach { invalidArchive ->
@@ -183,14 +186,14 @@ class DatabaseBackupCodecTest {
         val oldPayload =
             originalPayload
                 .decodeToString()
-                .replace("\"schemaVersion\":13", "\"schemaVersion\":7")
+                .replace("\"schemaVersion\":14", "\"schemaVersion\":7")
                 .replace(Regex(",\"bibliographicSource\":\"[^\"]+\""), "")
                 .encodeToByteArray()
         entries["database.json"] = oldPayload
         entries["manifest.json"] =
             requireNotNull(entries["manifest.json"])
                 .decodeToString()
-                .replace("\"formatVersion\":13", "\"formatVersion\":7")
+                .replace("\"formatVersion\":14", "\"formatVersion\":7")
                 .replace(originalPayload.sha256(), oldPayload.sha256())
                 .encodeToByteArray()
 
@@ -221,7 +224,7 @@ class DatabaseBackupCodecTest {
         val oldPayload =
             originalPayload
                 .decodeToString()
-                .replace("\"schemaVersion\":13", "\"schemaVersion\":8")
+                .replace("\"schemaVersion\":14", "\"schemaVersion\":8")
                 .replace(",\"series\":[]", "")
                 .replace(",\"seriesMemberships\":[]", "")
                 .encodeToByteArray()
@@ -229,7 +232,7 @@ class DatabaseBackupCodecTest {
         entries["manifest.json"] =
             requireNotNull(entries["manifest.json"])
                 .decodeToString()
-                .replace("\"formatVersion\":13", "\"formatVersion\":8")
+                .replace("\"formatVersion\":14", "\"formatVersion\":8")
                 .replace(",\"seriesCount\":0,\"seriesMembershipCount\":0", "")
                 .replace(originalPayload.sha256(), oldPayload.sha256())
                 .encodeToByteArray()
@@ -381,7 +384,7 @@ class DatabaseBackupCodecTest {
         val payload =
             requireNotNull(entries["database.json"])
                 .decodeToString()
-                .replace("\"schemaVersion\":13", "\"schemaVersion\":10")
+                .replace("\"schemaVersion\":14", "\"schemaVersion\":10")
                 .replace(
                     Regex(",\"workGroups\":\\[.*?],\"workGroupMemberships\":\\[.*?]"),
                     "",
@@ -389,7 +392,7 @@ class DatabaseBackupCodecTest {
         val manifest =
             requireNotNull(entries["manifest.json"])
                 .decodeToString()
-                .replace("\"formatVersion\":13", "\"formatVersion\":10")
+                .replace("\"formatVersion\":14", "\"formatVersion\":10")
                 .replace(Regex(",\"workGroupCount\":\\d+,\"workGroupMembershipCount\":\\d+"), "")
                 .replace(Regex("\"payloadSha256\":\"[0-9a-f]+\""), "\"payloadSha256\":\"${payload.sha256()}\"")
                 .encodeToByteArray()
@@ -409,13 +412,13 @@ class DatabaseBackupCodecTest {
         val payload =
             requireNotNull(entries["database.json"])
                 .decodeToString()
-                .replace("\"schemaVersion\":13", "\"schemaVersion\":12")
+                .replace("\"schemaVersion\":14", "\"schemaVersion\":12")
                 .replace(Regex(",\"readingSessions\":\\[.*?]"), "")
                 .encodeToByteArray()
         val manifest =
             requireNotNull(entries["manifest.json"])
                 .decodeToString()
-                .replace("\"formatVersion\":13", "\"formatVersion\":12")
+                .replace("\"formatVersion\":14", "\"formatVersion\":12")
                 .replace(Regex(",\"readingSessionCount\":\\d+"), "")
                 .replace(Regex("\"payloadSha256\":\"[0-9a-f]+\""), "\"payloadSha256\":\"${payload.sha256()}\"")
                 .encodeToByteArray()
@@ -460,6 +463,75 @@ class DatabaseBackupCodecTest {
                 }
             assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
         }
+    }
+
+    @Test
+    fun `format thirteen backup is restored with zero tags and saved searches`() {
+        val (archive, _) = codec.encode(sampleSnapshot(), "0.4.0", 1)
+        val entries = unzip(archive).toMutableMap()
+        val payload =
+            requireNotNull(entries["database.json"])
+                .decodeToString()
+                .replace("\"schemaVersion\":14", "\"schemaVersion\":13")
+                // savedSearchesは末尾キーで、criteriaJson文字列内の"]"を跨ぐため末尾まで貪欲に一致させる。
+                .replace(Regex(",\"tags\":\\[.*?],\"tagAssignments\":\\[.*?],\"savedSearches\":\\[.*]"), "")
+                .encodeToByteArray()
+        val manifest =
+            requireNotNull(entries["manifest.json"])
+                .decodeToString()
+                .replace("\"formatVersion\":14", "\"formatVersion\":13")
+                .replace(
+                    Regex(",\"tagCount\":\\d+,\"tagAssignmentCount\":\\d+,\"savedSearchCount\":\\d+"),
+                    "",
+                ).replace(Regex("\"payloadSha256\":\"[0-9a-f]+\""), "\"payloadSha256\":\"${payload.sha256()}\"")
+                .encodeToByteArray()
+        entries["database.json"] = payload
+        entries["manifest.json"] = manifest
+
+        val preview = codec.decode(ByteArrayInputStream(zip(entries)))
+
+        assertEquals(emptyList<TagEntity>(), preview.snapshot.tags)
+        assertEquals(emptyList<TagAssignmentEntity>(), preview.snapshot.tagAssignments)
+        assertEquals(emptyList<SavedSearchEntity>(), preview.snapshot.savedSearches)
+        assertEquals(0, preview.metadata.tagCount)
+        assertEquals(sampleSnapshot().readingSessions, preview.snapshot.readingSessions)
+    }
+
+    @Test
+    fun `invalid tags and saved searches are rejected before backup`() {
+        val sample = sampleSnapshot()
+        val orphanAssignment =
+            sample.copy(
+                tagAssignments = sample.tagAssignments.map { it.copy(workId = "missing-work") },
+            )
+        val duplicateName =
+            sample.copy(
+                tags = sample.tags.map { it.copy(name = "同名") },
+            )
+        val badColor =
+            sample.copy(
+                tags = sample.tags.map { it.copy(colorRole = "NEON") },
+            )
+        val controlName =
+            sample.copy(
+                tags = listOf(sample.tags.first().copy(name = "改行\nタグ")),
+                tagAssignments = emptyList(),
+            )
+        val duplicatePair =
+            sample.copy(
+                tagAssignments =
+                    sample.tagAssignments +
+                        sample.tagAssignments.first().copy(id = "backup-assignment-3"),
+            )
+
+        listOf(orphanAssignment, duplicateName, badColor, controlName, duplicatePair)
+            .forEach { invalid ->
+                val error =
+                    assertThrows(BackupCodecException::class.java) {
+                        codec.encode(invalid, "0.4.0", 1)
+                    }
+                assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+            }
     }
 
     @Test
@@ -711,6 +783,27 @@ class DatabaseBackupCodecTest {
                         note = null,
                         createdAt = 3,
                         updatedAt = 3,
+                    ),
+                ),
+            tags =
+                listOf(
+                    TagEntity("backup-tag-1", "SF", "BLUE", 1, 2),
+                    TagEntity("backup-tag-2", "積読", "GRAY", 1, 1),
+                ),
+            tagAssignments =
+                listOf(
+                    TagAssignmentEntity("backup-assignment-1", "backup-tag-1", "work-1", 3),
+                    TagAssignmentEntity("backup-assignment-2", "backup-tag-2", "work-2", 4),
+                ),
+            savedSearches =
+                listOf(
+                    SavedSearchEntity(
+                        id = "backup-saved-search-1",
+                        name = "SFの読書中",
+                        criteriaJson =
+                            """{"query":"","readingStatus":"READING","sort":"ADDED_NEWEST","tagIds":["backup-tag-1"]}""",
+                        createdAt = 1,
+                        updatedAt = 2,
                     ),
                 ),
         )

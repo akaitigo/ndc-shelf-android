@@ -62,6 +62,7 @@ import dev.ndcshelf.app.ReadingSessionUiState
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.SeriesWatchMutationUiState
 import dev.ndcshelf.app.SyncSettingsViewModel
+import dev.ndcshelf.app.TagMutationUiState
 import dev.ndcshelf.app.WorkVariantViewModel
 import dev.ndcshelf.app.data.local.SharedPreferencesOnboardingStore
 import dev.ndcshelf.app.domain.consent.ConsentPurpose
@@ -82,6 +83,7 @@ import dev.ndcshelf.app.ui.navigation.ScanRoute
 import dev.ndcshelf.app.ui.navigation.SeriesGraph
 import dev.ndcshelf.app.ui.navigation.SeriesRoute
 import dev.ndcshelf.app.ui.navigation.SeriesSuggestionRoute
+import dev.ndcshelf.app.ui.navigation.TagManagementRoute
 import dev.ndcshelf.app.ui.navigation.TopLevelDestination
 import dev.ndcshelf.app.ui.navigation.WorkVariantRoute
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
@@ -96,6 +98,7 @@ import dev.ndcshelf.app.ui.screens.ScanScreen
 import dev.ndcshelf.app.ui.screens.SeriesScreen
 import dev.ndcshelf.app.ui.screens.SeriesSuggestionScreen
 import dev.ndcshelf.app.ui.screens.SyncSettingsSection
+import dev.ndcshelf.app.ui.screens.TagManagementScreen
 import dev.ndcshelf.app.ui.screens.WorkVariantScreen
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -131,6 +134,10 @@ fun NdcShelfApp(
     val bookDeleteState by viewModel.bookDeleteState.collectAsStateWithLifecycle()
     val readingSessions by viewModel.readingSessions.collectAsStateWithLifecycle()
     val readingSessionState by viewModel.readingSessionState.collectAsStateWithLifecycle()
+    val tags by viewModel.tags.collectAsStateWithLifecycle()
+    val tagIdsByWork by viewModel.tagIdsByWork.collectAsStateWithLifecycle()
+    val savedSearches by viewModel.savedSearches.collectAsStateWithLifecycle()
+    val tagMutationState by viewModel.tagMutationState.collectAsStateWithLifecycle()
     val databaseBackupState by viewModel.databaseBackupState.collectAsStateWithLifecycle()
     val libraryExportState by viewModel.libraryExportState.collectAsStateWithLifecycle()
     val locations by viewModel.locations.collectAsStateWithLifecycle()
@@ -587,6 +594,23 @@ fun NdcShelfApp(
         }
     }
 
+    LaunchedEffect(tagMutationState) {
+        val message =
+            when (val state = tagMutationState) {
+                TagMutationUiState.Done -> resources.getString(R.string.tag_mutation_done)
+                is TagMutationUiState.Invalid -> state.message
+                TagMutationUiState.Duplicate -> resources.getString(R.string.tag_mutation_duplicate)
+                TagMutationUiState.LimitReached -> resources.getString(R.string.tag_mutation_limit)
+                TagMutationUiState.NotFound -> resources.getString(R.string.tag_mutation_not_found)
+                TagMutationUiState.Error -> resources.getString(R.string.tag_mutation_error)
+                else -> null
+            }
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearTagMutationState()
+        }
+    }
+
     LaunchedEffect(databaseBackupState) {
         when (val state = databaseBackupState) {
             is DatabaseBackupUiState.Created -> {
@@ -683,6 +707,8 @@ fun NdcShelfApp(
                         searchIsCurrent = result.criteria == criteria,
                         libraryStats = libraryStats,
                         onQueryChange = viewModel::updateLibraryQuery,
+                        interpretationChips = result.interpretationChips,
+                        onDismissInterpretationChip = viewModel::dismissInterpretationChip,
                         onReadingStatusChange = viewModel::updateLibraryReadingStatus,
                         onSortChange = viewModel::updateLibrarySort,
                         onSelectedEditionChange = viewModel::selectLibraryEdition,
@@ -725,6 +751,16 @@ fun NdcShelfApp(
                         onUpdateReadingSession = viewModel::updateReadingSession,
                         onDeleteReadingSession = viewModel::deleteReadingSession,
                         onClearReadingSessionState = viewModel::clearReadingSessionState,
+                        tags = tags,
+                        tagIdsByWork = tagIdsByWork,
+                        savedSearches = savedSearches,
+                        onToggleTagFilter = viewModel::toggleLibraryTagFilter,
+                        onSetTagOnWorks = viewModel::setTagOnWorks,
+                        onSaveCurrentSearch = viewModel::saveCurrentSearch,
+                        onApplySavedSearch = viewModel::applySavedSearch,
+                        onOpenTagManager = {
+                            navController.navigate(TagManagementRoute) { launchSingleTop = true }
+                        },
                         contentPadding = contentPadding,
                     )
                 }
@@ -745,6 +781,21 @@ fun NdcShelfApp(
                         onLink = workVariantViewModel::linkVariant,
                         onUnlink = workVariantViewModel::unlinkVariant,
                         onSetSeriesSubstitution = workVariantViewModel::setSeriesSubstitution,
+                        contentPadding = contentPadding,
+                    )
+                }
+
+                composable<TagManagementRoute> {
+                    TagManagementScreen(
+                        tags = tags,
+                        savedSearches = savedSearches,
+                        onBack = { navController.popBackStack() },
+                        onCreateTag = viewModel::createTag,
+                        onUpdateTag = viewModel::updateTag,
+                        onMergeTags = viewModel::mergeTags,
+                        onDeleteTag = viewModel::deleteTag,
+                        onRenameSavedSearch = viewModel::renameSavedSearch,
+                        onDeleteSavedSearch = viewModel::deleteSavedSearch,
                         contentPadding = contentPadding,
                     )
                 }

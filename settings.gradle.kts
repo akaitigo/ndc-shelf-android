@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "NdcShelf"
 include(":app")
+include(":baselineprofile")

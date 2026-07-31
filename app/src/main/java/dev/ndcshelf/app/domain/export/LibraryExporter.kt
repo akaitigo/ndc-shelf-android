@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.domain.export
 
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.Tag
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.io.Writer
@@ -15,19 +16,25 @@ enum class LibraryExportFormat(
 }
 
 object LibraryExporter {
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
     private val utf8Bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
+    /**
+     * v4: JSONへタグ定義（name / colorRole）と各蔵書のタグ名一覧を含める。
+     * CSVは既存18列の互換を守るためタグを含めない（docs/EXPORT_FORMAT.md参照）。
+     */
     fun write(
         books: List<LibraryBook>,
         format: LibraryExportFormat,
         output: OutputStream,
         exportedAt: Long = System.currentTimeMillis(),
+        tags: List<Tag> = emptyList(),
+        tagNamesByWorkId: Map<String, List<String>> = emptyMap(),
     ) {
         if (format == LibraryExportFormat.CSV) output.write(utf8Bom)
         val writer = output.writer(StandardCharsets.UTF_8).buffered()
         when (format) {
-            LibraryExportFormat.JSON -> writer.writeJson(books, exportedAt)
+            LibraryExportFormat.JSON -> writer.writeJson(books, exportedAt, tags, tagNamesByWorkId)
             LibraryExportFormat.CSV -> writer.writeCsv(books)
         }
         writer.flush()
@@ -37,16 +44,42 @@ object LibraryExporter {
         books: List<LibraryBook>,
         format: LibraryExportFormat,
         exportedAt: Long = System.currentTimeMillis(),
-    ): ByteArray = ByteArrayOutputStream().use { output ->
-        write(books, format, output, exportedAt)
-        output.toByteArray()
-    }
+        tags: List<Tag> = emptyList(),
+        tagNamesByWorkId: Map<String, List<String>> = emptyMap(),
+    ): ByteArray =
+        ByteArrayOutputStream().use { output ->
+            write(books, format, output, exportedAt, tags, tagNamesByWorkId)
+            output.toByteArray()
+        }
 
-    private fun Writer.writeJson(books: List<LibraryBook>, exportedAt: Long) {
+    private fun Writer.writeJson(
+        books: List<LibraryBook>,
+        exportedAt: Long,
+        tags: List<Tag>,
+        tagNamesByWorkId: Map<String, List<String>>,
+    ) {
         append("{\n")
         append("  \"schemaVersion\": ").append(SCHEMA_VERSION.toString()).append(",\n")
         append("  \"exportedAt\": ").append(exportedAt.toString()).append(",\n")
         append("  \"bookCount\": ").append(books.size.toString()).append(",\n")
+        append("  \"tags\": ")
+        val sortedTags = tags.sortedBy(Tag::name)
+        if (sortedTags.isEmpty()) {
+            append("[],\n")
+        } else {
+            append("[\n")
+            sortedTags.forEachIndexed { index, tag ->
+                append("    {\n")
+                append("      \"name\": \"")
+                appendEscapedJson(tag.name)
+                append("\",\n")
+                append("      \"colorRole\": \"").append(tag.colorRole.name).append("\"\n")
+                append("    }")
+                if (index != sortedTags.lastIndex) append(',')
+                append('\n')
+            }
+            append("  ],\n")
+        }
         append("  \"books\": ")
         if (books.isEmpty()) {
             append("[]\n")
@@ -72,6 +105,7 @@ object LibraryExporter {
             appendJsonField("location", book.location)
             appendJsonField("readingStatus", book.readingStatus.name)
             appendJsonField("copyLabel", book.copyLabel)
+            appendJsonStringArray("tags", tagNamesByWorkId[book.workId].orEmpty().sorted())
             append("      \"addedAt\": ").append(book.addedAt.toString()).append('\n')
             append("    }")
             if (index != books.lastIndex) append(',')
@@ -81,7 +115,24 @@ object LibraryExporter {
         append('}')
     }
 
-    private fun Writer.appendJsonField(name: String, value: String?) {
+    private fun Writer.appendJsonStringArray(
+        name: String,
+        values: List<String>,
+    ) {
+        append("      \"").append(name).append("\": [")
+        values.forEachIndexed { index, value ->
+            append('"')
+            appendEscapedJson(value)
+            append('"')
+            if (index != values.lastIndex) append(", ")
+        }
+        append("],\n")
+    }
+
+    private fun Writer.appendJsonField(
+        name: String,
+        value: String?,
+    ) {
         append("      \"").append(name).append("\": ")
         if (value == null) {
             append("null")
@@ -93,7 +144,10 @@ object LibraryExporter {
         append(",\n")
     }
 
-    private fun Writer.appendJsonNumber(name: String, value: Int?) {
+    private fun Writer.appendJsonNumber(
+        name: String,
+        value: Int?,
+    ) {
         append("      \"").append(name).append("\": ")
         if (value == null) append("null") else append(value.toString())
         append(",\n")
@@ -102,17 +156,40 @@ object LibraryExporter {
     private fun Writer.appendEscapedJson(value: String) {
         value.forEach { character ->
             when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\b' -> append("\\b")
-                '\u000C' -> append("\\f")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else -> if (character.code < 0x20) {
-                    append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                } else {
-                    append(character)
+                '"' -> {
+                    append("\\\"")
+                }
+
+                '\\' -> {
+                    append("\\\\")
+                }
+
+                '\b' -> {
+                    append("\\b")
+                }
+
+                '\u000C' -> {
+                    append("\\f")
+                }
+
+                '\n' -> {
+                    append("\\n")
+                }
+
+                '\r' -> {
+                    append("\\r")
+                }
+
+                '\t' -> {
+                    append("\\t")
+                }
+
+                else -> {
+                    if (character.code < 0x20) {
+                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
+                    } else {
+                        append(character)
+                    }
                 }
             }
         }
@@ -156,24 +233,25 @@ object LibraryExporter {
 
     private val FORMULA_PREFIXES = setOf('=', '+', '-', '@')
 
-    val CSV_COLUMNS = listOf(
-        "copyId",
-        "workId",
-        "editionId",
-        "title",
-        "primaryAuthor",
-        "isbn13",
-        "publisher",
-        "publishedYear",
-        "coverUrl",
-        "ndcCode",
-        "ndcEdition",
-        "classificationSource",
-        "bibliographicSource",
-        "mediaType",
-        "location",
-        "readingStatus",
-        "copyLabel",
-        "addedAt",
-    )
+    val CSV_COLUMNS =
+        listOf(
+            "copyId",
+            "workId",
+            "editionId",
+            "title",
+            "primaryAuthor",
+            "isbn13",
+            "publisher",
+            "publishedYear",
+            "coverUrl",
+            "ndcCode",
+            "ndcEdition",
+            "classificationSource",
+            "bibliographicSource",
+            "mediaType",
+            "location",
+            "readingStatus",
+            "copyLabel",
+            "addedAt",
+        )
 }

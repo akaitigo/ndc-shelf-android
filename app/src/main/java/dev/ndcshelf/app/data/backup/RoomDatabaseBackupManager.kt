@@ -41,6 +41,7 @@ class RoomDatabaseBackupManager(
     private val workGroupDao = database.workGroupDao()
     private val seriesWatchDao = database.seriesWatchDao()
     private val readingSessionDao = database.readingSessionDao()
+    private val tagDao = database.tagDao()
     private val codec = DatabaseBackupCodec(APP_DATABASE_VERSION)
 
     override suspend fun createBackup(output: OutputStream): DatabaseBackupCreateResult =
@@ -99,6 +100,9 @@ class RoomDatabaseBackupManager(
                 dao.deleteAllScanAttempts()
                 dao.deleteAllScanSessions()
                 readingSessionDao.deleteAll()
+                tagDao.deleteAllSavedSearches()
+                tagDao.deleteAllAssignments()
+                tagDao.deleteAllTags()
                 dao.deleteAllCopies()
                 dao.deleteAllWishlistItems()
                 seriesWatchDao.deleteAllCandidates()
@@ -126,6 +130,9 @@ class RoomDatabaseBackupManager(
                 locationDao.upsertTiers(preview.snapshot.tiers)
                 dao.upsertCopies(preview.snapshot.copies)
                 readingSessionDao.upsertAll(preview.snapshot.readingSessions)
+                tagDao.upsertTags(preview.snapshot.tags)
+                tagDao.upsertAssignments(preview.snapshot.tagAssignments)
+                tagDao.upsertSavedSearches(preview.snapshot.savedSearches)
                 dao.upsertScanSessions(preview.snapshot.scanSessions)
                 dao.upsertScanAttempts(preview.snapshot.scanAttempts)
                 resetSyncStateAfterDomainRestore(database.syncDao(), database.syncKeyDao())
@@ -165,6 +172,9 @@ class RoomDatabaseBackupManager(
             seriesWatches = seriesWatchDao.getAllWatches(),
             seriesReleaseCandidates = seriesWatchDao.getAllCandidates(),
             readingSessions = readingSessionDao.getAll(),
+            tags = tagDao.getAllTags(),
+            tagAssignments = tagDao.getAllAssignments(),
+            savedSearches = tagDao.getAllSavedSearches(),
         )
 
     private fun writeAutomaticBackup(archive: ByteArray): File {

@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 15
+const val APP_DATABASE_VERSION = 16
 
 @Database(
     entities = [
@@ -40,6 +40,9 @@ const val APP_DATABASE_VERSION = 15
         SyncQuarantineEntity::class,
         ConsentRecordEntity::class,
         ReadingSessionEntity::class,
+        TagEntity::class,
+        TagAssignmentEntity::class,
+        SavedSearchEntity::class,
     ],
     version = APP_DATABASE_VERSION,
     exportSchema = true,
@@ -65,6 +68,7 @@ abstract class AppDatabase : RoomDatabase() {
                 MIGRATION_12_13,
                 MIGRATION_13_14,
                 MIGRATION_14_15,
+                MIGRATION_15_16,
             )
     }
 
@@ -86,13 +90,15 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun readingSessionDao(): ReadingSessionDao
 
+    abstract fun tagDao(): TagDao
+
     abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
 
 // Issue #38: E2EE同期の鍵state・device registry cache・招待・quarantineを追加する。
 // 鍵の平文は保存せず、Keystore wrapping keyで暗号化したblobだけを置く。
-private val MIGRATION_14_15 =
-    object : Migration(14, 15) {
+private val MIGRATION_15_16 =
+    object : Migration(15, 16) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 """
@@ -180,6 +186,63 @@ private val MIGRATION_14_15 =
                     receivedAt INTEGER NOT NULL
                 )
                 """.trimIndent(),
+            )
+        }
+    }
+
+// v14→v15 はタグ・タグ付与・保存済み検索の空テーブル追加のみで、既存データを変更しない。
+private val MIGRATION_14_15 =
+    object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS tags (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    colorRole TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_tags_name ON tags(name)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS tag_assignments (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    tagId TEXT NOT NULL,
+                    workId TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    FOREIGN KEY(tagId) REFERENCES tags(id)
+                        ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(workId) REFERENCES book_works(id)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_tag_assignments_tagId ON tag_assignments(tagId)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_tag_assignments_workId ON tag_assignments(workId)",
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_tag_assignments_tagId_workId " +
+                    "ON tag_assignments(tagId, workId)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS saved_searches (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    criteriaJson TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_saved_searches_name ON saved_searches(name)",
             )
         }
     }

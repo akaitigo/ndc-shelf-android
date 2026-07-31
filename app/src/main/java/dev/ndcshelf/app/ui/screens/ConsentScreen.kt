@@ -289,6 +289,7 @@ internal val ConsentPurpose.purposeRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_purpose
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_purpose
+            ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_purpose
             else -> R.string.consent_purpose_not_available
         }
 
@@ -297,6 +298,7 @@ internal val ConsentPurpose.destinationRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_destination
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_destination
+            ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_destination
             else -> R.string.consent_purpose_not_available
         }
 
@@ -305,6 +307,7 @@ internal val ConsentPurpose.itemsRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_items
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_items
+            ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_items
             else -> R.string.consent_purpose_not_available
         }
 
@@ -313,6 +316,7 @@ internal val ConsentPurpose.retentionRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_retention
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_retention
+            ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_retention
             else -> R.string.consent_purpose_not_available
         }
 
@@ -321,6 +325,7 @@ internal val ConsentPurpose.thirdPartyRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_third_party
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_third_party
+            ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_third_party
             else -> R.string.consent_purpose_not_available
         }
 

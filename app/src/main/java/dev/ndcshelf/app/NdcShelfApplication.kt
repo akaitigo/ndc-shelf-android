@@ -27,6 +27,7 @@ import dev.ndcshelf.app.data.repository.RoomLocationRepository
 import dev.ndcshelf.app.data.repository.RoomReadingHistoryRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesWatchRepository
+import dev.ndcshelf.app.data.repository.RoomTagRepository
 import dev.ndcshelf.app.data.repository.RoomWorkGroupRepository
 import dev.ndcshelf.app.data.sync.E2eeSyncCoordinator
 import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
@@ -44,6 +45,7 @@ import dev.ndcshelf.app.domain.repository.ReadingHistoryRepository
 import dev.ndcshelf.app.domain.repository.SeriesRepository
 import dev.ndcshelf.app.domain.repository.SeriesWatchRepository
 import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
+import dev.ndcshelf.app.domain.repository.TagRepository
 import dev.ndcshelf.app.domain.repository.WorkGroupRepository
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
@@ -162,6 +164,8 @@ class AppContainer(
 
     val readingHistoryRepository: ReadingHistoryRepository =
         RoomReadingHistoryRepository(database, syncJournal = syncEngine)
+
+    val tagRepository: TagRepository = RoomTagRepository(database, syncJournal = syncEngine)
 
     val seriesRepository: SeriesRepository = RoomSeriesRepository(database, syncJournal = syncEngine)
 

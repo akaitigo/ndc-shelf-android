@@ -46,9 +46,14 @@ import dev.ndcshelf.app.domain.model.ReadingSession
 import dev.ndcshelf.app.domain.model.ReadingSessionDraft
 import dev.ndcshelf.app.domain.model.ReadingSessionValidationError
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.SavedSearch
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.domain.model.SeriesOverview
 import dev.ndcshelf.app.domain.model.SeriesSuggestion
+import dev.ndcshelf.app.domain.model.TagAssignment
+import dev.ndcshelf.app.domain.model.TagColorRole
+import dev.ndcshelf.app.domain.model.TagNameRules
+import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.domain.repository.AddBookFailure
 import dev.ndcshelf.app.domain.repository.AddBookResult
 import dev.ndcshelf.app.domain.repository.AddReadingSessionResult
@@ -64,6 +69,7 @@ import dev.ndcshelf.app.domain.repository.ManualReconciliationLookupResult
 import dev.ndcshelf.app.domain.repository.ReadingHistoryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.RestoreReadingSessionResult
+import dev.ndcshelf.app.domain.repository.SavedSearchMutationResult
 import dev.ndcshelf.app.domain.repository.ScanUndoResult
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationDraft
 import dev.ndcshelf.app.domain.repository.SeriesConfirmationResult
@@ -74,9 +80,16 @@ import dev.ndcshelf.app.domain.repository.SeriesWatchRepository
 import dev.ndcshelf.app.domain.repository.SeriesWatchScheduler
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
+import dev.ndcshelf.app.domain.repository.TagAssignmentResult
+import dev.ndcshelf.app.domain.repository.TagMutationResult
+import dev.ndcshelf.app.domain.repository.TagRepository
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.repository.UpdateReadingSessionResult
 import dev.ndcshelf.app.domain.sync.LibrarySyncScheduler
+import dev.ndcshelf.app.domain.search.NaturalLanguageInterpretation
+import dev.ndcshelf.app.domain.search.NaturalLanguageQueryParser
+import dev.ndcshelf.app.domain.search.SearchInterpretationChip
+import dev.ndcshelf.app.domain.search.applyInterpretation
 import dev.ndcshelf.app.domain.sync.SyncEngineStatus
 import dev.ndcshelf.app.domain.sync.SyncStatusRepository
 import kotlinx.coroutines.CancellationException
@@ -89,6 +102,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -100,6 +114,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.TimeZone
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class MainViewModel(
@@ -109,6 +124,7 @@ class MainViewModel(
     private val databaseBackupManager: DatabaseBackupManager? = null,
     private val locationRepository: LocationRepository? = null,
     private val readingHistoryRepository: ReadingHistoryRepository? = null,
+    private val tagRepository: TagRepository? = null,
     private val librarySearchSettings: LibrarySearchSettingsStore =
         InMemoryLibrarySearchSettingsStore,
     private val seriesRepository: SeriesRepository? = null,
@@ -117,6 +133,8 @@ class MainViewModel(
     syncStatusRepository: SyncStatusRepository? = null,
     private val consentRepository: ConsentRepository? = null,
     private val librarySyncScheduler: LibrarySyncScheduler? = null,
+    private val nowMillisProvider: () -> Long = System::currentTimeMillis,
+    private val timeZoneProvider: () -> TimeZone = TimeZone::getDefault,
 ) : ViewModel() {
     init {
         if (seriesWatchRepository != null && seriesWatchScheduler != null) {
@@ -140,14 +158,54 @@ class MainViewModel(
             )
     private val _librarySearchCriteria = MutableStateFlow(librarySearchSettings.load())
     val librarySearchCriteria: StateFlow<LibrarySearchCriteria> = _librarySearchCriteria.asStateFlow()
-    val librarySearchResult: StateFlow<LibrarySearchResult> =
-        _librarySearchCriteria
-            .debounce { criteria -> if (criteria.selectedEditionId == null) SEARCH_DEBOUNCE_MILLIS else 0L }
+
+    /** 解釈チップを個別解除した際の解除済みチップID。クエリ文字列が変わるとリセットする。 */
+    private val _dismissedInterpretationChipIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** 自然言語解釈はdebounceで確定したクエリに対して1回だけ実行する（キー入力ごとには走らない）。 */
+    private val interpretedSearch =
+        combine(
+            _librarySearchCriteria
+                .debounce { criteria -> if (criteria.selectedEditionId == null) SEARCH_DEBOUNCE_MILLIS else 0L }
+                .distinctUntilChanged()
+                .onEach { criteria ->
+                    if (criteria.selectedEditionId == null) librarySearchSettings.save(criteria)
+                },
+            (tagRepository?.observeTags() ?: flowOf(emptyList()))
+                .map { entries -> entries.map(TagWithUsage::tag) }
+                .distinctUntilChanged(),
+        ) { criteria, tagList -> criteria to tagList }
             .distinctUntilChanged()
-            .onEach { criteria ->
-                if (criteria.selectedEditionId == null) librarySearchSettings.save(criteria)
-            }.flatMapLatest { criteria ->
-                repository.observeLibrary(criteria).map { books -> LibrarySearchResult(criteria, books) }
+            .map { (criteria, tagList) ->
+                val interpretation =
+                    if (criteria.selectedEditionId == null) {
+                        NaturalLanguageQueryParser.parse(
+                            query = criteria.normalizedQuery,
+                            tags = tagList,
+                            nowMillis = nowMillisProvider(),
+                            timeZone = timeZoneProvider(),
+                        )
+                    } else {
+                        NaturalLanguageInterpretation.NONE
+                    }
+                criteria to interpretation
+            }
+
+    val librarySearchResult: StateFlow<LibrarySearchResult> =
+        combine(
+            interpretedSearch,
+            _dismissedInterpretationChipIds,
+        ) { (criteria, interpretation), dismissedChipIds ->
+            InterpretedLibrarySearch(
+                criteria = criteria,
+                effectiveCriteria = criteria.applyInterpretation(interpretation, dismissedChipIds),
+                chips = interpretation.chips.filterNot { chip -> chip.id in dismissedChipIds },
+            )
+        }.distinctUntilChanged()
+            .flatMapLatest { search ->
+                repository.observeLibrary(search.effectiveCriteria).map { books ->
+                    LibrarySearchResult(search.criteria, books, search.chips)
+                }
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -238,6 +296,26 @@ class MainViewModel(
     private val _readingSessionState =
         MutableStateFlow<ReadingSessionUiState>(ReadingSessionUiState.Idle)
     val readingSessionState: StateFlow<ReadingSessionUiState> = _readingSessionState.asStateFlow()
+
+    val tags: StateFlow<List<TagWithUsage>> =
+        (tagRepository?.observeTags() ?: flowOf(emptyList()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** workId → 付与済みタグIDの集合。詳細画面と一括操作の表示に使う。 */
+    val tagIdsByWork: StateFlow<Map<String, Set<String>>> =
+        (tagRepository?.observeAssignments() ?: flowOf(emptyList()))
+            .map { assignments ->
+                assignments
+                    .groupBy(TagAssignment::workId)
+                    .mapValues { (_, values) -> values.mapTo(hashSetOf(), TagAssignment::tagId) }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    val savedSearches: StateFlow<List<SavedSearch>> =
+        (tagRepository?.observeSavedSearches() ?: flowOf(emptyList()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _tagMutationState = MutableStateFlow<TagMutationUiState>(TagMutationUiState.Idle)
+    val tagMutationState: StateFlow<TagMutationUiState> = _tagMutationState.asStateFlow()
     private val _databaseBackupState = MutableStateFlow<DatabaseBackupUiState>(DatabaseBackupUiState.Idle)
     val databaseBackupState: StateFlow<DatabaseBackupUiState> = _databaseBackupState.asStateFlow()
     private val _libraryExportState = MutableStateFlow<LibraryExportUiState>(LibraryExportUiState.Idle)
@@ -445,7 +523,24 @@ class MainViewModel(
                         withContext(importIoDispatcher) {
                             output.use { stream ->
                                 val snapshot = repository.getLibrarySnapshot()
-                                LibraryExporter.write(snapshot, format, stream)
+                                val exportTags =
+                                    tagRepository?.getTagsSnapshot().orEmpty()
+                                val tagNamesById = exportTags.associate { it.id to it.name }
+                                val tagNamesByWorkId =
+                                    tagRepository
+                                        ?.getAssignmentsSnapshot()
+                                        .orEmpty()
+                                        .groupBy(TagAssignment::workId)
+                                        .mapValues { (_, assignments) ->
+                                            assignments.mapNotNull { tagNamesById[it.tagId] }
+                                        }
+                                LibraryExporter.write(
+                                    books = snapshot,
+                                    format = format,
+                                    output = stream,
+                                    tags = exportTags,
+                                    tagNamesByWorkId = tagNamesByWorkId,
+                                )
                                 snapshot
                             }
                         }
@@ -459,10 +554,18 @@ class MainViewModel(
     }
 
     fun updateLibraryQuery(query: String) {
-        _librarySearchCriteria.value =
-            _librarySearchCriteria.value.copy(
-                query = query.take(MAX_LIBRARY_QUERY_LENGTH),
-            )
+        val current = _librarySearchCriteria.value
+        val nextQuery = query.take(MAX_LIBRARY_QUERY_LENGTH)
+        // クエリ文字列が変わったら解釈をやり直すため、チップの解除状態もリセットする。
+        if (current.query != nextQuery) {
+            _dismissedInterpretationChipIds.value = emptySet()
+        }
+        _librarySearchCriteria.value = current.copy(query = nextQuery)
+    }
+
+    /** 解釈チップを個別に解除する。解除した範囲の語は通常の部分一致検索へ戻る。 */
+    fun dismissInterpretationChip(chipId: String) {
+        _dismissedInterpretationChipIds.value = _dismissedInterpretationChipIds.value + chipId
     }
 
     fun updateLibraryReadingStatus(status: ReadingStatus?) {
@@ -1314,6 +1417,133 @@ class MainViewModel(
         }
     }
 
+    fun toggleLibraryTagFilter(tagId: String) {
+        val current = _librarySearchCriteria.value
+        val next =
+            if (tagId in current.tagIds) {
+                current.tagIds - tagId
+            } else {
+                if (current.tagIds.size >= TagNameRules.MAX_TAG_FILTERS) return
+                current.tagIds + tagId
+            }
+        _librarySearchCriteria.value = current.copy(tagIds = next)
+    }
+
+    fun createTag(
+        name: String,
+        colorRole: TagColorRole,
+    ) = mutateTag { createTag(name, colorRole) }
+
+    fun updateTag(
+        tagId: String,
+        name: String,
+        colorRole: TagColorRole,
+    ) = mutateTag { updateTag(tagId, name, colorRole) }
+
+    fun mergeTags(
+        sourceTagId: String,
+        targetTagId: String,
+    ) = mutateTag { mergeTags(sourceTagId, targetTagId) }
+
+    fun deleteTag(tagId: String) =
+        mutateTag {
+            val result = deleteTag(tagId)
+            if (result is TagMutationResult.Done) {
+                _librarySearchCriteria.value =
+                    _librarySearchCriteria.value.let { criteria ->
+                        criteria.copy(tagIds = criteria.tagIds - tagId)
+                    }
+            }
+            result
+        }
+
+    fun setTagOnWorks(
+        tagId: String,
+        workIds: Set<String>,
+        assigned: Boolean,
+    ) {
+        val source = tagRepository ?: return
+        if (_tagMutationState.value === TagMutationUiState.Working) return
+        viewModelScope.launch {
+            _tagMutationState.value = TagMutationUiState.Working
+            _tagMutationState.value =
+                when (source.setTagOnWorks(tagId, workIds, assigned)) {
+                    is TagAssignmentResult.Applied -> TagMutationUiState.Done
+                    TagAssignmentResult.NotFound -> TagMutationUiState.NotFound
+                    TagAssignmentResult.Failure -> TagMutationUiState.Error
+                }
+        }
+    }
+
+    fun saveCurrentSearch(name: String) {
+        val source = tagRepository ?: return
+        if (_tagMutationState.value === TagMutationUiState.Working) return
+        val criteria = _librarySearchCriteria.value
+        viewModelScope.launch {
+            _tagMutationState.value = TagMutationUiState.Working
+            _tagMutationState.value = source.saveSearch(name, criteria).toUiState()
+        }
+    }
+
+    fun applySavedSearch(savedSearch: SavedSearch) {
+        _dismissedInterpretationChipIds.value = emptySet()
+        _librarySearchCriteria.value = savedSearch.criteria.copy(selectedEditionId = null)
+    }
+
+    fun renameSavedSearch(
+        searchId: String,
+        name: String,
+    ) {
+        val source = tagRepository ?: return
+        if (_tagMutationState.value === TagMutationUiState.Working) return
+        viewModelScope.launch {
+            _tagMutationState.value = TagMutationUiState.Working
+            _tagMutationState.value = source.renameSavedSearch(searchId, name).toUiState()
+        }
+    }
+
+    fun deleteSavedSearch(searchId: String) {
+        val source = tagRepository ?: return
+        if (_tagMutationState.value === TagMutationUiState.Working) return
+        viewModelScope.launch {
+            _tagMutationState.value = TagMutationUiState.Working
+            _tagMutationState.value = source.deleteSavedSearch(searchId).toUiState()
+        }
+    }
+
+    fun clearTagMutationState() {
+        if (_tagMutationState.value !== TagMutationUiState.Working) {
+            _tagMutationState.value = TagMutationUiState.Idle
+        }
+    }
+
+    private fun mutateTag(operation: suspend TagRepository.() -> TagMutationResult) {
+        val source = tagRepository ?: return
+        if (_tagMutationState.value === TagMutationUiState.Working) return
+        viewModelScope.launch {
+            _tagMutationState.value = TagMutationUiState.Working
+            _tagMutationState.value =
+                when (val result = source.operation()) {
+                    is TagMutationResult.Done -> TagMutationUiState.Done
+                    is TagMutationResult.Invalid -> TagMutationUiState.Invalid(result.reason)
+                    TagMutationResult.Duplicate -> TagMutationUiState.Duplicate
+                    TagMutationResult.LimitReached -> TagMutationUiState.LimitReached
+                    TagMutationResult.NotFound -> TagMutationUiState.NotFound
+                    TagMutationResult.Failure -> TagMutationUiState.Error
+                }
+        }
+    }
+
+    private fun SavedSearchMutationResult.toUiState(): TagMutationUiState =
+        when (this) {
+            is SavedSearchMutationResult.Done -> TagMutationUiState.Done
+            is SavedSearchMutationResult.Invalid -> TagMutationUiState.Invalid(reason)
+            SavedSearchMutationResult.Duplicate -> TagMutationUiState.Duplicate
+            SavedSearchMutationResult.LimitReached -> TagMutationUiState.LimitReached
+            SavedSearchMutationResult.NotFound -> TagMutationUiState.NotFound
+            SavedSearchMutationResult.Failure -> TagMutationUiState.Error
+        }
+
     fun loadJsonImport(input: InputStream) {
         importJob?.cancel()
         importBatch = null
@@ -1496,6 +1726,7 @@ class MainViewModel(
             databaseBackupManager: DatabaseBackupManager,
             locationRepository: LocationRepository,
             readingHistoryRepository: ReadingHistoryRepository? = null,
+            tagRepository: TagRepository? = null,
             librarySearchSettings: LibrarySearchSettingsStore = InMemoryLibrarySearchSettingsStore,
             seriesRepository: SeriesRepository? = null,
             seriesWatchRepository: SeriesWatchRepository? = null,
@@ -1513,6 +1744,7 @@ class MainViewModel(
                         databaseBackupManager = databaseBackupManager,
                         locationRepository = locationRepository,
                         readingHistoryRepository = readingHistoryRepository,
+                        tagRepository = tagRepository,
                         librarySearchSettings = librarySearchSettings,
                         seriesRepository = seriesRepository,
                         seriesWatchRepository = seriesWatchRepository,
@@ -1543,6 +1775,15 @@ sealed interface SeriesWatchMutationUiState {
 data class LibrarySearchResult(
     val criteria: LibrarySearchCriteria,
     val books: List<LibraryBook>,
+    /** 実行済み検索へ適用中の自然言語解釈チップ（解除済みは含まない）。 */
+    val interpretationChips: List<SearchInterpretationChip> = emptyList(),
+)
+
+/** debounce済み手動条件 + 解釈適用後の実効条件 + 表示チップのスナップショット。 */
+private data class InterpretedLibrarySearch(
+    val criteria: LibrarySearchCriteria,
+    val effectiveCriteria: LibrarySearchCriteria,
+    val chips: List<SearchInterpretationChip>,
 )
 
 sealed interface SeriesEditorUiState {
@@ -1929,3 +2170,23 @@ enum class ReadingSessionFailure {
 
 internal val ReadingSessionUiState.isBusy: Boolean
     get() = this === ReadingSessionUiState.Working
+
+sealed interface TagMutationUiState {
+    data object Idle : TagMutationUiState
+
+    data object Working : TagMutationUiState
+
+    data object Done : TagMutationUiState
+
+    data class Invalid(
+        val message: String,
+    ) : TagMutationUiState
+
+    data object Duplicate : TagMutationUiState
+
+    data object LimitReached : TagMutationUiState
+
+    data object NotFound : TagMutationUiState
+
+    data object Error : TagMutationUiState
+}

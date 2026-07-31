@@ -1,9 +1,13 @@
 package dev.ndcshelf.app.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,11 +39,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -83,7 +90,11 @@ import dev.ndcshelf.app.domain.model.MoveDirection
 import dev.ndcshelf.app.domain.model.ReadingSession
 import dev.ndcshelf.app.domain.model.ReadingSessionDraft
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.SavedSearch
+import dev.ndcshelf.app.domain.model.TagNameRules
+import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
+import dev.ndcshelf.app.domain.search.SearchInterpretationChip
 import dev.ndcshelf.app.ui.components.BookCover
 import java.text.DateFormat
 import java.util.Date
@@ -96,6 +107,8 @@ fun LibraryScreen(
     searchIsCurrent: Boolean = true,
     libraryStats: LibraryStats? = null,
     onQueryChange: (String) -> Unit = {},
+    interpretationChips: List<SearchInterpretationChip> = emptyList(),
+    onDismissInterpretationChip: (String) -> Unit = {},
     onReadingStatusChange: (ReadingStatus?) -> Unit = {},
     onSortChange: (LibrarySort) -> Unit = {},
     onSelectedEditionChange: (String?) -> Unit = {},
@@ -129,12 +142,23 @@ fun LibraryScreen(
     onUpdateReadingSession: (String, ReadingSessionDraft) -> Unit = { _, _ -> },
     onDeleteReadingSession: (String) -> Unit = {},
     onClearReadingSessionState: () -> Unit = {},
+    tags: List<TagWithUsage> = emptyList(),
+    tagIdsByWork: Map<String, Set<String>> = emptyMap(),
+    savedSearches: List<SavedSearch> = emptyList(),
+    onToggleTagFilter: (String) -> Unit = {},
+    onSetTagOnWorks: (String, Set<String>, Boolean) -> Unit = { _, _, _ -> },
+    onSaveCurrentSearch: (String) -> Unit = {},
+    onApplySavedSearch: (SavedSearch) -> Unit = {},
+    onOpenTagManager: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var localQuery by rememberSaveable { mutableStateOf("") }
     var selectedEditionId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingCopyId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLocationManager by rememberSaveable { mutableStateOf(false) }
+    var bulkSelectedCopyIds by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var showBulkTagDialog by rememberSaveable { mutableStateOf(false) }
+    var showSaveSearchDialog by rememberSaveable { mutableStateOf(false) }
     val query = searchCriteria?.query ?: localQuery
     val visibleBooks =
         remember(books, query, searchCriteria) {
@@ -223,6 +247,9 @@ fun LibraryScreen(
             onUpdateReadingSession = onUpdateReadingSession,
             onDeleteReadingSession = onDeleteReadingSession,
             onClearReadingSessionState = onClearReadingSessionState,
+            tags = tags,
+            tagIdsByWork = tagIdsByWork,
+            onSetTagOnWorks = onSetTagOnWorks,
             contentPadding = contentPadding,
         )
     } else {
@@ -283,6 +310,10 @@ fun LibraryScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(18.dp),
                 )
+                InterpretationChipsRow(
+                    chips = interpretationChips,
+                    onDismissChip = onDismissInterpretationChip,
+                )
                 Spacer(Modifier.height(12.dp))
                 LibrarySummary(libraryStats ?: books.toStats())
                 LibrarySearchControls(
@@ -291,6 +322,14 @@ fun LibraryScreen(
                     onStatusChange = onReadingStatusChange,
                     onSortChange = onSortChange,
                 )
+                LibraryTagFilters(
+                    tags = tags,
+                    selectedTagIds = searchCriteria?.tagIds.orEmpty(),
+                    savedSearches = savedSearches,
+                    onToggleTagFilter = onToggleTagFilter,
+                    onApplySavedSearch = onApplySavedSearch,
+                    onSaveCurrentSearch = { showSaveSearchDialog = true },
+                )
                 TextButton(
                     onClick = { showLocationManager = true },
                     modifier = Modifier.align(Alignment.End),
@@ -298,6 +337,30 @@ fun LibraryScreen(
                     Icon(Icons.Rounded.LocationOn, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.location_manage_action))
+                }
+                TextButton(
+                    onClick = onOpenTagManager,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(stringResource(R.string.tag_manage_action))
+                }
+                if (bulkSelectedCopyIds.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(R.string.tag_bulk_selected_count, bulkSelectedCopyIds.size),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        TextButton(onClick = { showBulkTagDialog = true }) {
+                            Text(stringResource(R.string.tag_bulk_edit_action))
+                        }
+                        TextButton(onClick = { bulkSelectedCopyIds = emptyList() }) {
+                            Text(stringResource(R.string.tag_bulk_clear_action))
+                        }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -314,6 +377,7 @@ fun LibraryScreen(
             } else if (visibleBooks.isEmpty()) {
                 EmptyLibrary(
                     isSearching = query.isNotBlank(),
+                    hasInterpretation = interpretationChips.isNotEmpty(),
                     modifier =
                         Modifier
                             .fillMaxSize()
@@ -338,9 +402,27 @@ fun LibraryScreen(
                         BookCard(
                             book = book,
                             editionCopyCount = editionCounts[book.editionId] ?: 1,
+                            selected = book.copyId in bulkSelectedCopyIds,
                             onClick = {
-                                selectedEditionId = book.editionId
-                                onSelectedEditionChange(book.editionId)
+                                if (bulkSelectedCopyIds.isNotEmpty()) {
+                                    bulkSelectedCopyIds =
+                                        if (book.copyId in bulkSelectedCopyIds) {
+                                            bulkSelectedCopyIds - book.copyId
+                                        } else {
+                                            bulkSelectedCopyIds + book.copyId
+                                        }
+                                } else {
+                                    selectedEditionId = book.editionId
+                                    onSelectedEditionChange(book.editionId)
+                                }
+                            },
+                            onLongClick = {
+                                bulkSelectedCopyIds =
+                                    if (book.copyId in bulkSelectedCopyIds) {
+                                        bulkSelectedCopyIds - book.copyId
+                                    } else {
+                                        bulkSelectedCopyIds + book.copyId
+                                    }
                             },
                         )
                     }
@@ -394,9 +476,182 @@ fun LibraryScreen(
             onClearState = onClearLocationState,
         )
     }
+
+    if (showSaveSearchDialog) {
+        NameInputDialog(
+            title = stringResource(R.string.saved_search_save_title),
+            label = stringResource(R.string.saved_search_name, TagNameRules.MAX_NAME_LENGTH),
+            initialValue = "",
+            onSave = { name ->
+                onSaveCurrentSearch(name)
+                showSaveSearchDialog = false
+            },
+            onDismiss = { showSaveSearchDialog = false },
+        )
+    }
+
+    if (showBulkTagDialog) {
+        val selectedWorkIds =
+            books
+                .filter { it.copyId in bulkSelectedCopyIds }
+                .mapTo(linkedSetOf(), LibraryBook::workId)
+        BulkTagDialog(
+            tags = tags,
+            selectedWorkIds = selectedWorkIds,
+            tagIdsByWork = tagIdsByWork,
+            onSetTagOnWorks = onSetTagOnWorks,
+            onDismiss = { showBulkTagDialog = false },
+        )
+    }
+}
+
+/**
+ * 自然言語検索の解釈結果チップ。各チップは×で個別に解除でき、解除した語は
+ * 通常の部分一致検索へ戻る。ラベル（タグ名等を含む）はプレーンテキストとして表示する。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun InterpretationChipsRow(
+    chips: List<SearchInterpretationChip>,
+    onDismissChip: (String) -> Unit,
+) {
+    if (chips.isEmpty()) return
+    Spacer(Modifier.height(8.dp))
+    Text(
+        stringResource(R.string.nl_search_interpretation_label),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        chips.forEach { chip ->
+            InputChip(
+                selected = true,
+                onClick = { onDismissChip(chip.id) },
+                modifier = Modifier.testTag(interpretationChipTag(chip.id)),
+                label = { Text(chip.label) },
+                trailingIcon = {
+                    Icon(
+                        Icons.Rounded.Clear,
+                        contentDescription = stringResource(R.string.nl_search_chip_dismiss, chip.label),
+                        modifier = Modifier.size(InputChipDefaults.IconSize),
+                    )
+                },
+            )
+        }
+    }
+}
+
+/** タグ絞り込みチップと保存済み検索。タグ名は常にプレーンテキストとして表示する。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LibraryTagFilters(
+    tags: List<TagWithUsage>,
+    selectedTagIds: Set<String>,
+    savedSearches: List<SavedSearch>,
+    onToggleTagFilter: (String) -> Unit,
+    onApplySavedSearch: (SavedSearch) -> Unit,
+    onSaveCurrentSearch: () -> Unit,
+) {
+    if (tags.isNotEmpty()) {
+        Text(
+            stringResource(R.string.tag_filter_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            tags.forEach { tagWithUsage ->
+                FilterChip(
+                    selected = tagWithUsage.tag.id in selectedTagIds,
+                    onClick = { onToggleTagFilter(tagWithUsage.tag.id) },
+                    leadingIcon = { TagColorSwatch(tagWithUsage.tag.colorRole) },
+                    label = { Text(tagWithUsage.tag.name) },
+                )
+            }
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (savedSearches.isNotEmpty()) {
+            Text(
+                stringResource(R.string.saved_search_apply_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onSaveCurrentSearch) {
+            Text(stringResource(R.string.saved_search_save_action))
+        }
+    }
+    if (savedSearches.isNotEmpty()) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            savedSearches.forEach { savedSearch ->
+                FilterChip(
+                    selected = false,
+                    onClick = { onApplySavedSearch(savedSearch) },
+                    label = { Text(savedSearch.name) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BulkTagDialog(
+    tags: List<TagWithUsage>,
+    selectedWorkIds: Set<String>,
+    tagIdsByWork: Map<String, Set<String>>,
+    onSetTagOnWorks: (String, Set<String>, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.tag_bulk_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.tag_bulk_dialog_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (tags.isEmpty()) {
+                    Text(
+                        stringResource(R.string.tag_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                tags.forEach { tagWithUsage ->
+                    val assignedToAll =
+                        selectedWorkIds.isNotEmpty() &&
+                            selectedWorkIds.all { workId ->
+                                tagWithUsage.tag.id in tagIdsByWork[workId].orEmpty()
+                            }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = assignedToAll,
+                            onCheckedChange = { checked ->
+                                onSetTagOnWorks(tagWithUsage.tag.id, selectedWorkIds, checked)
+                            },
+                        )
+                        TagColorSwatch(tagWithUsage.tag.colorRole)
+                        Spacer(Modifier.width(6.dp))
+                        Text(tagWithUsage.tag.name)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.tag_bulk_close))
+            }
+        },
+    )
 }
 
 internal const val LIBRARY_SEARCH_PROGRESS_TAG = "library-search-progress"
+
+internal fun interpretationChipTag(chipId: String): String = "nl-search-chip-$chipId"
 
 @Composable
 private fun LibrarySummary(stats: LibraryStats) {
@@ -502,17 +757,24 @@ private fun SummaryValue(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BookCard(
     book: LibraryBook,
     editionCopyCount: Int,
     onClick: () -> Unit,
+    selected: Boolean = false,
+    onLongClick: () -> Unit = {},
 ) {
     Card(
-        onClick = onClick,
         colors =
             CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                containerColor =
+                    if (selected) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
             ),
         shape = RoundedCornerShape(18.dp),
     ) {
@@ -520,6 +782,7 @@ private fun BookCard(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                     .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -628,6 +891,7 @@ private fun StatusBadge(status: ReadingStatus) {
 private fun EmptyLibrary(
     isSearching: Boolean,
     modifier: Modifier = Modifier,
+    hasInterpretation: Boolean = false,
 ) {
     Box(
         modifier = modifier,
@@ -656,10 +920,10 @@ private fun EmptyLibrary(
             )
             Text(
                 text =
-                    if (isSearching) {
-                        "検索条件を変えてみてください"
-                    } else {
-                        "下の「スキャン」から本のバーコードを読み取れます"
+                    when {
+                        hasInterpretation -> stringResource(R.string.nl_search_empty_hint)
+                        isSearching -> "検索条件を変えてみてください"
+                        else -> "下の「スキャン」から本のバーコードを読み取れます"
                     },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

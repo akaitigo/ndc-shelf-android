@@ -1,0 +1,49 @@
+# テスト行列と証跡
+
+E2E・スクリーンショット・互換性検証の正本。CIで自動化する層と、実機でしか
+検証できない層を分離し、結果をリリースゲート（`docs/releases/`）の証跡へ残す。
+
+## OS行列
+
+| 層 | API / OS | 実行方法 | 対象 |
+| --- | --- | --- | --- |
+| 最小SDK | 23 (Android 6.0) | 手動実機（またはローカルAVD） | 起動、権限、Room、backup |
+| 下位互換 | 26 (Android 8.0) | CIエミュレーター（`android-test`行列） | instrumentation全件 |
+| 中間 | 29 (Android 10) | CIエミュレーター | instrumentation全件 |
+| 最新安定 | 35 (Android 15) | CIエミュレーター | instrumentation全件 |
+| 最新target | 37 | 手動実機（target挙動・権限UI） | スモーク+カメラ |
+
+カメラ・ML Kitは実機依存が強いため、Pixel系1台と別ベンダー1台での手動確認を
+リリースゲート必須項目とする（`docs/SCAN_DEVICE_TESTING.md`参照）。
+
+## 自動化層（CI）
+
+- **JVMスクリーンショット回帰**: `ScreenshotRegressionTest`（Robolectric +
+  Roborazzi）。主要画面のライト・ダーク・大文字（fontScale 1.5）を匿名fixture
+  で描画し、`app/roborazzi/` のgoldenと比較する。verifyジョブの
+  `verifyRoborazziDebug` が差分で失敗し、`screenshot-diffs` artifactへ比較画像を
+  出力する。goldenの更新は `./gradlew recordRoborazziDebug` の結果をレビューして
+  コミットする。日英スクリーンショットは#44（i18n）導入後にlocale軸を追加する。
+- **エミュレーターinstrumentation**: API 26 / 29 / 35 × pixel_7 で
+  `connectedDebugAndroidTest`。画面単位テストに加え、`E2eManualRegistrationTest`
+  がオンボーディング→手動登録→本棚表示→Activity再生成の主要フローを実DBで検証する。
+- 検証成果は各リリースのGitHub Actions run URLをリリースチェックリストへ記録する。
+
+## 手動実機層（リリースゲート証跡）
+
+各リリース前に `docs/releases/V*_RELEASE_CHECKLIST.md` の実機ゲートで実施:
+
+1. カメラスキャン（明所・暗所・小型バーコード）と権限拒否→手入力の代替経路
+2. DocumentProviderの実プロバイダ（Drive等）でexport/import/backup往復
+3. 通知（新刊候補）表示・通知拒否時の挙動
+4. process death（開発者オプション「アクティビティを保持しない」）と回転
+5. 低容量端末でのbackup失敗時の安全性
+6. 更新インストール（旧versionCode→新versionCode）でのデータ保持
+
+結果は表形式（端末・OS・結果・日付・実施者）でチェックリストへ残し、失敗時は
+再試行ではなくIssue化して原因を修正する。
+
+## データ方針
+
+テストデータ・スクリーンショット・証跡に実在ISBN、氏名、実際の棚位置、通知内容を
+含めない。fixtureは「匿名サンプル図書」系の命名だけを使う。

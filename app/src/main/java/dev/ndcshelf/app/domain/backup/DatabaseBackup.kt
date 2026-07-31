@@ -7,12 +7,15 @@ import dev.ndcshelf.app.data.local.LocationShelfEntity
 import dev.ndcshelf.app.data.local.LocationTierEntity
 import dev.ndcshelf.app.data.local.OwnedCopyEntity
 import dev.ndcshelf.app.data.local.ReadingSessionEntity
+import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.ScanAttemptEntity
 import dev.ndcshelf.app.data.local.ScanSessionEntity
 import dev.ndcshelf.app.data.local.SeriesEntity
 import dev.ndcshelf.app.data.local.SeriesMembershipEntity
 import dev.ndcshelf.app.data.local.SeriesReleaseCandidateEntity
 import dev.ndcshelf.app.data.local.SeriesWatchEntity
+import dev.ndcshelf.app.data.local.TagAssignmentEntity
+import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
@@ -34,6 +37,9 @@ data class DatabaseSnapshot(
     val seriesWatches: List<SeriesWatchEntity> = emptyList(),
     val seriesReleaseCandidates: List<SeriesReleaseCandidateEntity> = emptyList(),
     val readingSessions: List<ReadingSessionEntity> = emptyList(),
+    val tags: List<TagEntity> = emptyList(),
+    val tagAssignments: List<TagAssignmentEntity> = emptyList(),
+    val savedSearches: List<SavedSearchEntity> = emptyList(),
 )
 
 data class DatabaseBackupMetadata(
@@ -54,6 +60,9 @@ data class DatabaseBackupMetadata(
     val seriesWatchCount: Int = 0,
     val seriesReleaseCandidateCount: Int = 0,
     val readingSessionCount: Int = 0,
+    val tagCount: Int = 0,
+    val tagAssignmentCount: Int = 0,
+    val savedSearchCount: Int = 0,
 )
 
 class DatabaseBackupPreview internal constructor(

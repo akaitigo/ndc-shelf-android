@@ -1,10 +1,14 @@
 package dev.ndcshelf.app.domain.importer
 
-import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.BibliographicSource
+import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.model.Tag
+import dev.ndcshelf.app.domain.model.TagColorRole
+import dev.ndcshelf.app.domain.model.TagNameRules
+import dev.ndcshelf.app.domain.model.TagNameValidation
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
 import dev.ndcshelf.app.scanner.Isbn
 import java.util.Calendar
@@ -39,11 +43,24 @@ data class UnvalidatedLibraryBook(
     val readingStatus: String?,
     val addedAt: Long?,
     val copyLabel: String? = null,
+    /** JSON v4のタグ名一覧。v3以前とCSVはnull（タグ情報なし）。 */
+    val tags: List<String>? = null,
+)
+
+data class UnvalidatedImportTag(
+    val name: String?,
+    val colorRole: String?,
+)
+
+data class ImportTagDefinition(
+    val name: String,
+    val colorRole: TagColorRole,
 )
 
 data class LibraryImportBatch(
     val sourceSizeBytes: Long,
     val records: List<UnvalidatedLibraryBook>,
+    val tags: List<UnvalidatedImportTag> = emptyList(),
 )
 
 enum class ImportConflictPolicy {
@@ -58,9 +75,13 @@ data class ImportValidationError(
 )
 
 sealed interface ImportPreviewResult {
-    data class Valid(val preview: LibraryImportPreview) : ImportPreviewResult
+    data class Valid(
+        val preview: LibraryImportPreview,
+    ) : ImportPreviewResult
 
-    data class Invalid(val errors: List<ImportValidationError>) : ImportPreviewResult
+    data class Invalid(
+        val errors: List<ImportValidationError>,
+    ) : ImportPreviewResult
 }
 
 class LibraryImportPreview internal constructor(
@@ -69,6 +90,10 @@ class LibraryImportPreview internal constructor(
     val skippedCount: Int,
     val conflictPolicy: ImportConflictPolicy,
     internal val existingSnapshot: List<LibraryBook>,
+    /** インポートで作成・再利用するタグ定義（正規化済み名と色）。 */
+    val tagDefinitions: List<ImportTagDefinition> = emptyList(),
+    /** 追加・更新する各copyIdへ適用するタグ名。スキップしたcopyへは適用しない。 */
+    val tagNamesByCopyId: Map<String, List<String>> = emptyMap(),
 ) {
     val changeCount: Int = additions.size + updates.size
 }
@@ -82,7 +107,9 @@ sealed interface ImportApplyResult {
 
     data object StalePreview : ImportApplyResult
 
-    data class Failure(val message: String) : ImportApplyResult
+    data class Failure(
+        val message: String,
+    ) : ImportApplyResult
 }
 
 class LibraryImportPlanner(
@@ -93,6 +120,7 @@ class LibraryImportPlanner(
         batch: LibraryImportBatch,
         existingBooks: List<LibraryBook>,
         conflictPolicy: ImportConflictPolicy,
+        existingTags: List<Tag> = emptyList(),
     ): ImportPreviewResult {
         val errors = mutableListOf<ImportValidationError>()
         if (batch.sourceSizeBytes < 0) {
@@ -105,9 +133,20 @@ class LibraryImportPlanner(
         }
         if (errors.isNotEmpty()) return ImportPreviewResult.Invalid(errors)
 
-        val normalized = batch.records.mapIndexedNotNull { index, record ->
-            if (errors.size >= MAX_ERRORS) null else normalizeRecord(index + 1, record, errors)
-        }
+        val tagDefinitions = normalizeTagDefinitions(batch.tags, existingTags, errors)
+        val knownTagNames =
+            tagDefinitions.mapTo(hashSetOf(), ImportTagDefinition::name) +
+                existingTags.map(Tag::name)
+        val recordTagNames =
+            batch.records.mapIndexed { index, record ->
+                normalizeRecordTags(index + 1, record.tags, knownTagNames, errors)
+            }
+        if (errors.isNotEmpty()) return ImportPreviewResult.Invalid(errors.take(MAX_ERRORS))
+
+        val normalized =
+            batch.records.mapIndexedNotNull { index, record ->
+                if (errors.size >= MAX_ERRORS) null else normalizeRecord(index + 1, record, errors)
+            }
         validateInputReferences(normalized, errors)
         if (errors.isNotEmpty()) return ImportPreviewResult.Invalid(errors.take(MAX_ERRORS))
 
@@ -115,55 +154,69 @@ class LibraryImportPlanner(
         val updates = mutableListOf<LibraryBook>()
         var skippedCount = 0
         val existingByCopyId = existingBooks.associateBy(LibraryBook::copyId)
-        val existingByIsbn = existingBooks.filter { it.isbn13 != null }
-            .groupBy { requireNotNull(it.isbn13) }
+        val existingByIsbn =
+            existingBooks
+                .filter { it.isbn13 != null }
+                .groupBy { requireNotNull(it.isbn13) }
         val existingByWorkId = existingBooks.groupBy(LibraryBook::workId)
         val existingByEditionId = existingBooks.groupBy(LibraryBook::editionId)
-        val inputEditionByIsbn = normalized.filter { it.isbn13 != null }
-            .groupBy { requireNotNull(it.isbn13) }
-            .mapValues { (_, copies) -> copies.first() }
+        val inputEditionByIsbn =
+            normalized
+                .filter { it.isbn13 != null }
+                .groupBy { requireNotNull(it.isbn13) }
+                .mapValues { (_, copies) -> copies.first() }
 
         normalized.filter { it.isbn13 != null }.groupBy(LibraryBook::isbn13).forEach { (_, copies) ->
             if (copies.map { it.sharedEditionFingerprint() }.distinct().size > 1) {
                 val book = copies.last()
-                errors.addCapped(recordError(
-                    normalized.indexOf(book) + 1,
-                    "isbn13",
-                    "同じISBNに異なる版情報が指定されています",
-                ))
+                errors.addCapped(
+                    recordError(
+                        normalized.indexOf(book) + 1,
+                        "isbn13",
+                        "同じISBNに異なる版情報が指定されています",
+                    ),
+                )
             }
         }
         if (errors.isNotEmpty()) return ImportPreviewResult.Invalid(errors.take(MAX_ERRORS))
 
+        val tagNamesByCopyId = mutableMapOf<String, List<String>>()
         normalized.forEachIndexed { index, rawBook ->
             val byCopyId = existingByCopyId[rawBook.copyId]
             if (byCopyId != null && byCopyId.isbn13 != rawBook.isbn13) {
-                errors.addCapped(recordError(
-                    index + 1,
-                    "isbn13",
-                    "copyIdとISBNが異なる既存蔵書を参照しています",
-                ))
+                errors.addCapped(
+                    recordError(
+                        index + 1,
+                        "isbn13",
+                        "copyIdとISBNが異なる既存蔵書を参照しています",
+                    ),
+                )
                 return@forEachIndexed
             }
 
             val existingEdition = rawBook.isbn13?.let { existingByIsbn[it]?.firstOrNull() }
-            val sharedEdition = existingEdition ?: rawBook.isbn13?.let(inputEditionByIsbn::getValue)
-                ?: rawBook
+            val sharedEdition =
+                existingEdition ?: rawBook.isbn13?.let(inputEditionByIsbn::getValue)
+                    ?: rawBook
             if (byCopyId == null && existingEdition != null &&
                 existingEdition.sharedEditionFingerprint() != rawBook.sharedEditionFingerprint()
             ) {
-                errors.addCapped(recordError(
-                    index + 1,
-                    "isbn13",
-                    "既存ISBNの版情報と一致しません",
-                ))
+                errors.addCapped(
+                    recordError(
+                        index + 1,
+                        "isbn13",
+                        "既存ISBNの版情報と一致しません",
+                    ),
+                )
                 return@forEachIndexed
             }
-            val book = rawBook.copy(
-                workId = sharedEdition.workId,
-                editionId = sharedEdition.editionId,
-            )
+            val book =
+                rawBook.copy(
+                    workId = sharedEdition.workId,
+                    editionId = sharedEdition.editionId,
+                )
 
+            val bookTags = recordTagNames.getOrNull(index).orEmpty()
             if (byCopyId == null) {
                 validateExistingReferences(
                     recordNumber = index + 1,
@@ -173,14 +226,17 @@ class LibraryImportPlanner(
                     errors = errors,
                 )
                 additions += book
+                if (bookTags.isNotEmpty()) tagNamesByCopyId[book.copyId] = bookTags
             } else if (conflictPolicy == ImportConflictPolicy.SKIP_EXISTING) {
                 skippedCount += 1
             } else {
-                updates += book.copy(
-                    copyId = byCopyId.copyId,
-                    workId = byCopyId.workId,
-                    editionId = byCopyId.editionId,
-                )
+                updates +=
+                    book.copy(
+                        copyId = byCopyId.copyId,
+                        workId = byCopyId.workId,
+                        editionId = byCopyId.editionId,
+                    )
+                if (bookTags.isNotEmpty()) tagNamesByCopyId[byCopyId.copyId] = bookTags
             }
         }
 
@@ -194,8 +250,91 @@ class LibraryImportPlanner(
                 skippedCount = skippedCount,
                 conflictPolicy = conflictPolicy,
                 existingSnapshot = existingBooks.toList(),
+                tagDefinitions = tagDefinitions,
+                tagNamesByCopyId = tagNamesByCopyId,
             ),
         )
+    }
+
+    private fun normalizeTagDefinitions(
+        tags: List<UnvalidatedImportTag>,
+        existingTags: List<Tag>,
+        errors: MutableList<ImportValidationError>,
+    ): List<ImportTagDefinition> {
+        if (tags.size > TagNameRules.MAX_TAGS) {
+            errors.addCapped(globalError("タグは${TagNameRules.MAX_TAGS}件以下にしてください"))
+            return emptyList()
+        }
+        val definitions = mutableListOf<ImportTagDefinition>()
+        val seenNames = mutableSetOf<String>()
+        tags.forEachIndexed { index, tag ->
+            val name =
+                when (val validation = TagNameRules.validate(tag.name.orEmpty())) {
+                    is TagNameValidation.Invalid -> {
+                        errors.addCapped(
+                            ImportValidationError(index + 1, "tags.name", validation.reason),
+                        )
+                        return@forEachIndexed
+                    }
+
+                    is TagNameValidation.Valid -> {
+                        validation.normalized
+                    }
+                }
+            if (!seenNames.add(name)) {
+                errors.addCapped(
+                    ImportValidationError(index + 1, "tags.name", "タグ名が重複しています"),
+                )
+                return@forEachIndexed
+            }
+            val colorRole =
+                TagColorRole.entries.firstOrNull {
+                    it.name == tag.colorRole?.trim()?.uppercase(Locale.ROOT)
+                }
+            if (colorRole == null) {
+                errors.addCapped(
+                    ImportValidationError(index + 1, "tags.colorRole", "未知の色ロールです"),
+                )
+                return@forEachIndexed
+            }
+            definitions += ImportTagDefinition(name, colorRole)
+        }
+        val totalTagCount = existingTags.mapTo(hashSetOf(), Tag::name).union(seenNames).size
+        if (totalTagCount > TagNameRules.MAX_TAGS) {
+            errors.addCapped(
+                globalError("タグ数の上限（${TagNameRules.MAX_TAGS}件）を超えるため取り込めません"),
+            )
+        }
+        return definitions
+    }
+
+    private fun normalizeRecordTags(
+        recordNumber: Int,
+        tags: List<String>?,
+        knownTagNames: Set<String>,
+        errors: MutableList<ImportValidationError>,
+    ): List<String> {
+        if (tags == null) return emptyList()
+        val normalized = linkedSetOf<String>()
+        tags.forEach { rawName ->
+            val name =
+                when (val validation = TagNameRules.validate(rawName)) {
+                    is TagNameValidation.Invalid -> {
+                        errors.addCapped(recordError(recordNumber, "tags", validation.reason))
+                        return@forEach
+                    }
+
+                    is TagNameValidation.Valid -> {
+                        validation.normalized
+                    }
+                }
+            if (name !in knownTagNames) {
+                errors.addCapped(recordError(recordNumber, "tags", "未定義のタグ名です"))
+                return@forEach
+            }
+            normalized += name
+        }
+        return normalized.toList()
     }
 
     private fun normalizeRecord(
@@ -206,112 +345,125 @@ class LibraryImportPlanner(
         val before = errors.size
         val copyId = requiredText(recordNumber, "copyId", record.copyId, limits.maxIdLength, errors)
         val workId = requiredText(recordNumber, "workId", record.workId, limits.maxIdLength, errors)
-        val editionId = requiredText(
-            recordNumber,
-            "editionId",
-            record.editionId,
-            limits.maxIdLength,
-            errors,
-        )
+        val editionId =
+            requiredText(
+                recordNumber,
+                "editionId",
+                record.editionId,
+                limits.maxIdLength,
+                errors,
+            )
         validateId(recordNumber, "copyId", copyId, errors)
         validateId(recordNumber, "workId", workId, errors)
         validateId(recordNumber, "editionId", editionId, errors)
         val title = requiredText(recordNumber, "title", record.title, limits.maxTextLength, errors)
-        val author = requiredText(
-            recordNumber,
-            "primaryAuthor",
-            record.primaryAuthor,
-            limits.maxTextLength,
-            errors,
-        )
-        val rawIsbn = optionalText(
-            recordNumber,
-            "isbn13",
-            record.isbn13,
-            ISBN_MAX_LENGTH,
-            errors,
-        )
+        val author =
+            requiredText(
+                recordNumber,
+                "primaryAuthor",
+                record.primaryAuthor,
+                limits.maxTextLength,
+                errors,
+            )
+        val rawIsbn =
+            optionalText(
+                recordNumber,
+                "isbn13",
+                record.isbn13,
+                ISBN_MAX_LENGTH,
+                errors,
+            )
         val isbn13 = rawIsbn?.let(Isbn::normalizeToIsbn13)
         if (rawIsbn != null && isbn13 == null) {
             errors.addCapped(recordError(recordNumber, "isbn13", "ISBNの形式またはチェックデジットが不正です"))
         }
-        val publisher = optionalText(
-            recordNumber,
-            "publisher",
-            record.publisher,
-            limits.maxTextLength,
-            errors,
-        )
-        val coverUrl = optionalText(
-            recordNumber,
-            "coverUrl",
-            record.coverUrl,
-            limits.maxUrlLength,
-            errors,
-        )
+        val publisher =
+            optionalText(
+                recordNumber,
+                "publisher",
+                record.publisher,
+                limits.maxTextLength,
+                errors,
+            )
+        val coverUrl =
+            optionalText(
+                recordNumber,
+                "coverUrl",
+                record.coverUrl,
+                limits.maxUrlLength,
+                errors,
+            )
         if (coverUrl != null && !NdlEndpointPolicy.isAllowedCoverUrl(coverUrl, isbn13)) {
             errors.addCapped(recordError(recordNumber, "coverUrl", "NDL Searchのhttps URLを指定してください"))
         }
-        val ndcCode = optionalText(
-            recordNumber,
-            "ndcCode",
-            record.ndcCode,
-            NDC_CODE_MAX_LENGTH,
-            errors,
-        )
+        val ndcCode =
+            optionalText(
+                recordNumber,
+                "ndcCode",
+                record.ndcCode,
+                NDC_CODE_MAX_LENGTH,
+                errors,
+            )
         if (ndcCode != null && !NDC_CODE_REGEX.matches(ndcCode)) {
             errors.addCapped(recordError(recordNumber, "ndcCode", "NDCコードは3桁と任意の小数部で指定してください"))
         }
-        val ndcEdition = optionalText(
-            recordNumber,
-            "ndcEdition",
-            record.ndcEdition,
-            NDC_EDITION_MAX_LENGTH,
-            errors,
-        )
-        val location = requiredText(
-            recordNumber,
-            "location",
-            record.location,
-            limits.maxLocationLength,
-            errors,
-        )
-        val classificationSource = enumValue<ClassificationSource>(
-            recordNumber,
-            "classificationSource",
-            record.classificationSource,
-            errors,
-        )
-        val bibliographicSource = enumValue<BibliographicSource>(
-            recordNumber,
-            "bibliographicSource",
-            record.bibliographicSource,
-            errors,
-        )
+        val ndcEdition =
+            optionalText(
+                recordNumber,
+                "ndcEdition",
+                record.ndcEdition,
+                NDC_EDITION_MAX_LENGTH,
+                errors,
+            )
+        val location =
+            requiredText(
+                recordNumber,
+                "location",
+                record.location,
+                limits.maxLocationLength,
+                errors,
+            )
+        val classificationSource =
+            enumValue<ClassificationSource>(
+                recordNumber,
+                "classificationSource",
+                record.classificationSource,
+                errors,
+            )
+        val bibliographicSource =
+            enumValue<BibliographicSource>(
+                recordNumber,
+                "bibliographicSource",
+                record.bibliographicSource,
+                errors,
+            )
         if (isbn13 == null && bibliographicSource != BibliographicSource.MANUAL) {
             errors.addCapped(recordError(recordNumber, "isbn13", "ISBNなしは手動書誌だけ登録できます"))
         }
-        val mediaType = enumValue<MediaType>(
-            recordNumber,
-            "mediaType",
-            record.mediaType,
-            errors,
-        )
-        val readingStatus = enumValue<ReadingStatus>(
-            recordNumber,
-            "readingStatus",
-            record.readingStatus,
-            errors,
-        )
+        val mediaType =
+            enumValue<MediaType>(
+                recordNumber,
+                "mediaType",
+                record.mediaType,
+                errors,
+            )
+        val readingStatus =
+            enumValue<ReadingStatus>(
+                recordNumber,
+                "readingStatus",
+                record.readingStatus,
+                errors,
+            )
         val publishedYear = normalizePublishedYear(recordNumber, record.publishedYear, errors)
         val addedAt = normalizeAddedAt(recordNumber, record.addedAt, errors)
-        val copyLabel = requiredText(
-            recordNumber,
-            "copyLabel",
-            record.copyLabel ?: DEFAULT_COPY_LABEL,
-            MAX_COPY_LABEL_LENGTH,
-            errors,
-        )
+        val copyLabel =
+            requiredText(
+                recordNumber,
+                "copyLabel",
+                record.copyLabel ?: DEFAULT_COPY_LABEL,
+                MAX_COPY_LABEL_LENGTH,
+                errors,
+            )
 
         if (errors.size != before) return null
         return LibraryBook(
@@ -344,21 +496,25 @@ class LibraryImportPlanner(
         books.groupBy(LibraryBook::workId).forEach { (_, group) ->
             if (group.map { it.title to it.primaryAuthor }.distinct().size > 1) {
                 val book = group.last()
-                errors.addCapped(recordError(
-                    books.indexOf(book) + 1,
-                    "workId",
-                    "同じworkIdに異なる書誌情報が指定されています",
-                ))
+                errors.addCapped(
+                    recordError(
+                        books.indexOf(book) + 1,
+                        "workId",
+                        "同じworkIdに異なる書誌情報が指定されています",
+                    ),
+                )
             }
         }
         books.groupBy(LibraryBook::editionId).forEach { (_, group) ->
             if (group.map { it.editionFingerprint() }.distinct().size > 1) {
                 val book = group.last()
-                errors.addCapped(recordError(
-                    books.indexOf(book) + 1,
-                    "editionId",
-                    "同じeditionIdに異なる版情報が指定されています",
-                ))
+                errors.addCapped(
+                    recordError(
+                        books.indexOf(book) + 1,
+                        "editionId",
+                        "同じeditionIdに異なる版情報が指定されています",
+                    ),
+                )
             }
         }
     }
@@ -372,20 +528,24 @@ class LibraryImportPlanner(
     ) {
         existingByWorkId[book.workId]?.firstOrNull()?.let { existing ->
             if (existing.title != book.title || existing.primaryAuthor != book.primaryAuthor) {
-                errors.addCapped(recordError(
-                    recordNumber,
-                    "workId",
-                    "既存workIdの書誌情報と一致しません",
-                ))
+                errors.addCapped(
+                    recordError(
+                        recordNumber,
+                        "workId",
+                        "既存workIdの書誌情報と一致しません",
+                    ),
+                )
             }
         }
         existingByEditionId[book.editionId]?.firstOrNull()?.let { existing ->
             if (existing.editionFingerprint() != book.editionFingerprint()) {
-                errors.addCapped(recordError(
-                    recordNumber,
-                    "editionId",
-                    "既存editionIdの版情報と一致しません",
-                ))
+                errors.addCapped(
+                    recordError(
+                        recordNumber,
+                        "editionId",
+                        "既存editionIdの版情報と一致しません",
+                    ),
+                )
             }
         }
     }
@@ -453,16 +613,19 @@ class LibraryImportPlanner(
         errors: MutableList<ImportValidationError>,
     ): Int? {
         if (value == null) return null
-        val maxYear = Calendar.getInstance(TimeZone.getTimeZone("UTC")).run {
-            timeInMillis = nowMillis()
-            get(Calendar.YEAR) + 1
-        }
+        val maxYear =
+            Calendar.getInstance(TimeZone.getTimeZone("UTC")).run {
+                timeInMillis = nowMillis()
+                get(Calendar.YEAR) + 1
+            }
         if (value !in MIN_PUBLISHED_YEAR.toLong()..maxYear.toLong()) {
-            errors.addCapped(recordError(
-                recordNumber,
-                "publishedYear",
-                "${MIN_PUBLISHED_YEAR}〜${maxYear}の範囲で指定してください",
-            ))
+            errors.addCapped(
+                recordError(
+                    recordNumber,
+                    "publishedYear",
+                    "${MIN_PUBLISHED_YEAR}〜${maxYear}の範囲で指定してください",
+                ),
+            )
             return null
         }
         return value.toInt()
@@ -516,33 +679,38 @@ class LibraryImportPlanner(
 
     private fun globalError(reason: String) = ImportValidationError(null, null, reason)
 
-    private fun recordError(record: Int, field: String, reason: String) =
-        ImportValidationError(record, field, reason)
+    private fun recordError(
+        record: Int,
+        field: String,
+        reason: String,
+    ) = ImportValidationError(record, field, reason)
 
-    private fun LibraryBook.editionFingerprint(): List<Any?> = listOf(
-        workId,
-        isbn13,
-        publisher,
-        publishedYear,
-        coverUrl,
-        ndcCode,
-        ndcEdition,
-        classificationSource,
-        bibliographicSource,
-    )
+    private fun LibraryBook.editionFingerprint(): List<Any?> =
+        listOf(
+            workId,
+            isbn13,
+            publisher,
+            publishedYear,
+            coverUrl,
+            ndcCode,
+            ndcEdition,
+            classificationSource,
+            bibliographicSource,
+        )
 
-    private fun LibraryBook.sharedEditionFingerprint(): List<Any?> = listOf(
-        title,
-        primaryAuthor,
-        isbn13,
-        publisher,
-        publishedYear,
-        coverUrl,
-        ndcCode,
-        ndcEdition,
-        classificationSource,
-        bibliographicSource,
-    )
+    private fun LibraryBook.sharedEditionFingerprint(): List<Any?> =
+        listOf(
+            title,
+            primaryAuthor,
+            isbn13,
+            publisher,
+            publishedYear,
+            coverUrl,
+            ndcCode,
+            ndcEdition,
+            classificationSource,
+            bibliographicSource,
+        )
 
     private companion object {
         const val MAX_ERRORS = 100

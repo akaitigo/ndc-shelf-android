@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 15,
-    "identityHash": "8a7f155dc4c7d7405669b076354833d7",
+    "identityHash": "bebfbc9cecd73915b89da354b24216e9",
     "entities": [
       {
         "tableName": "book_works",
@@ -1713,363 +1713,6 @@
         ]
       },
       {
-        "tableName": "sync_identity",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `libraryId` TEXT NOT NULL, `libraryOpaqueId` TEXT NOT NULL, `deviceId` TEXT NOT NULL, `deviceName` TEXT NOT NULL, `epoch` INTEGER NOT NULL, `registryGeneration` INTEGER NOT NULL, `registryHash` TEXT, `headGeneration` INTEGER NOT NULL, `trustedHeadHash` TEXT, `encryptionCounter` INTEGER NOT NULL, `lastUploadedObjectId` TEXT, `backendType` TEXT NOT NULL, `backendConfig` TEXT NOT NULL, `hardwareBackedKeys` INTEGER NOT NULL, `activated` INTEGER NOT NULL, `securityLockout` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "libraryId",
-            "columnName": "libraryId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "libraryOpaqueId",
-            "columnName": "libraryOpaqueId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "deviceId",
-            "columnName": "deviceId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "deviceName",
-            "columnName": "deviceName",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "epoch",
-            "columnName": "epoch",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "registryGeneration",
-            "columnName": "registryGeneration",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "registryHash",
-            "columnName": "registryHash",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "headGeneration",
-            "columnName": "headGeneration",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "trustedHeadHash",
-            "columnName": "trustedHeadHash",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "encryptionCounter",
-            "columnName": "encryptionCounter",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lastUploadedObjectId",
-            "columnName": "lastUploadedObjectId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "backendType",
-            "columnName": "backendType",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "backendConfig",
-            "columnName": "backendConfig",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "hardwareBackedKeys",
-            "columnName": "hardwareBackedKeys",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "activated",
-            "columnName": "activated",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "securityLockout",
-            "columnName": "securityLockout",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        }
-      },
-      {
-        "tableName": "sync_wrapped_keys",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`keyType` TEXT NOT NULL, `keyVersion` INTEGER NOT NULL, `nonce` TEXT NOT NULL, `ciphertext` TEXT NOT NULL, `keyAliasVersion` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`keyType`, `keyVersion`))",
-        "fields": [
-          {
-            "fieldPath": "keyType",
-            "columnName": "keyType",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "keyVersion",
-            "columnName": "keyVersion",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "nonce",
-            "columnName": "nonce",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "ciphertext",
-            "columnName": "ciphertext",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "keyAliasVersion",
-            "columnName": "keyAliasVersion",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "keyType",
-            "keyVersion"
-          ]
-        }
-      },
-      {
-        "tableName": "sync_peer_devices",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`deviceId` TEXT NOT NULL, `name` TEXT NOT NULL, `signingPublicKey` TEXT NOT NULL, `hpkePublicKey` TEXT NOT NULL, `addedAtGeneration` INTEGER NOT NULL, `revokedAtGeneration` INTEGER, `lastSyncAt` INTEGER, `lastObjectId` TEXT, `lastEncryptionCounter` INTEGER NOT NULL, `isSelf` INTEGER NOT NULL, PRIMARY KEY(`deviceId`))",
-        "fields": [
-          {
-            "fieldPath": "deviceId",
-            "columnName": "deviceId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "name",
-            "columnName": "name",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "signingPublicKey",
-            "columnName": "signingPublicKey",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "hpkePublicKey",
-            "columnName": "hpkePublicKey",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "addedAtGeneration",
-            "columnName": "addedAtGeneration",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "revokedAtGeneration",
-            "columnName": "revokedAtGeneration",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "lastSyncAt",
-            "columnName": "lastSyncAt",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "lastObjectId",
-            "columnName": "lastObjectId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "lastEncryptionCounter",
-            "columnName": "lastEncryptionCounter",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isSelf",
-            "columnName": "isSelf",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "deviceId"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_sync_peer_devices_isSelf",
-            "unique": false,
-            "columnNames": [
-              "isSelf"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_peer_devices_isSelf` ON `${TABLE_NAME}` (`isSelf`)"
-          }
-        ]
-      },
-      {
-        "tableName": "sync_invites",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`nonce` TEXT NOT NULL, `secret` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `expiresAt` INTEGER NOT NULL, `consumedAt` INTEGER, PRIMARY KEY(`nonce`))",
-        "fields": [
-          {
-            "fieldPath": "nonce",
-            "columnName": "nonce",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "secret",
-            "columnName": "secret",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "expiresAt",
-            "columnName": "expiresAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "consumedAt",
-            "columnName": "consumedAt",
-            "affinity": "INTEGER"
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "nonce"
-          ]
-        }
-      },
-      {
-        "tableName": "sync_processed_envelopes",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`envelopeId` TEXT NOT NULL, `inviteNonce` TEXT NOT NULL, `processedAt` INTEGER NOT NULL, PRIMARY KEY(`envelopeId`))",
-        "fields": [
-          {
-            "fieldPath": "envelopeId",
-            "columnName": "envelopeId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "inviteNonce",
-            "columnName": "inviteNonce",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "processedAt",
-            "columnName": "processedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "envelopeId"
-          ]
-        }
-      },
-      {
-        "tableName": "sync_quarantine",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`objectId` TEXT NOT NULL, `reason` TEXT NOT NULL, `bytes` BLOB, `truncated` INTEGER NOT NULL, `receivedAt` INTEGER NOT NULL, PRIMARY KEY(`objectId`))",
-        "fields": [
-          {
-            "fieldPath": "objectId",
-            "columnName": "objectId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "reason",
-            "columnName": "reason",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "bytes",
-            "columnName": "bytes",
-            "affinity": "BLOB"
-          },
-          {
-            "fieldPath": "truncated",
-            "columnName": "truncated",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "receivedAt",
-            "columnName": "receivedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "objectId"
-          ]
-        }
-      },
-      {
         "tableName": "consent_records",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`purpose` TEXT NOT NULL, `consentedVersion` INTEGER NOT NULL, `grantedAt` INTEGER, `revokedAt` INTEGER, PRIMARY KEY(`purpose`))",
         "fields": [
@@ -2188,11 +1831,207 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `colorRole` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorRole",
+            "columnName": "colorRole",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tags_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tags_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "tag_assignments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `tagId` TEXT NOT NULL, `workId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`tagId`) REFERENCES `tags`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`workId`) REFERENCES `book_works`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tagId",
+            "columnName": "tagId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workId",
+            "columnName": "workId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tag_assignments_tagId",
+            "unique": false,
+            "columnNames": [
+              "tagId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tag_assignments_tagId` ON `${TABLE_NAME}` (`tagId`)"
+          },
+          {
+            "name": "index_tag_assignments_workId",
+            "unique": false,
+            "columnNames": [
+              "workId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tag_assignments_workId` ON `${TABLE_NAME}` (`workId`)"
+          },
+          {
+            "name": "index_tag_assignments_tagId_workId",
+            "unique": true,
+            "columnNames": [
+              "tagId",
+              "workId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tag_assignments_tagId_workId` ON `${TABLE_NAME}` (`tagId`, `workId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tags",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "tagId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "book_works",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "workId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "saved_searches",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `criteriaJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "criteriaJson",
+            "columnName": "criteriaJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_saved_searches_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_saved_searches_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8a7f155dc4c7d7405669b076354833d7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'bebfbc9cecd73915b89da354b24216e9')"
     ]
   }
 }
