@@ -113,6 +113,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.apache.commons.csv)
+    implementation(libs.tink.android)
+    implementation(libs.json.canonicalization)
+    implementation(libs.androidx.documentfile)
     implementation(libs.aboutlibraries.core)
 
     testImplementation(libs.junit)

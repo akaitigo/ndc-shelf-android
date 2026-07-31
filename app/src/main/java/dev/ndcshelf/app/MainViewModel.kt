@@ -76,6 +76,7 @@ import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.repository.UpdateReadingSessionResult
+import dev.ndcshelf.app.domain.sync.LibrarySyncScheduler
 import dev.ndcshelf.app.domain.sync.SyncEngineStatus
 import dev.ndcshelf.app.domain.sync.SyncStatusRepository
 import kotlinx.coroutines.CancellationException
@@ -115,6 +116,7 @@ class MainViewModel(
     private val seriesWatchScheduler: SeriesWatchScheduler? = null,
     syncStatusRepository: SyncStatusRepository? = null,
     private val consentRepository: ConsentRepository? = null,
+    private val librarySyncScheduler: LibrarySyncScheduler? = null,
 ) : ViewModel() {
     init {
         if (seriesWatchRepository != null && seriesWatchScheduler != null) {
@@ -392,6 +394,10 @@ class MainViewModel(
                 source.revoke(purpose)
                 if (purpose == ConsentPurpose.SERIES_RELEASE_WATCH) {
                     seriesWatchScheduler?.reconcile(false)
+                }
+                if (purpose == ConsentPurpose.LIBRARY_SYNC) {
+                    // fail-closed: 撤回後は定期同期workを直ちにcancelする。
+                    librarySyncScheduler?.reconcile(false)
                 }
             }
         }
@@ -1496,6 +1502,7 @@ class MainViewModel(
             seriesWatchScheduler: SeriesWatchScheduler? = null,
             syncStatusRepository: SyncStatusRepository? = null,
             consentRepository: ConsentRepository? = null,
+            librarySyncScheduler: LibrarySyncScheduler? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1512,6 +1519,7 @@ class MainViewModel(
                         seriesWatchScheduler = seriesWatchScheduler,
                         syncStatusRepository = syncStatusRepository,
                         consentRepository = consentRepository,
+                        librarySyncScheduler = librarySyncScheduler,
                     ) as T
                 }
             }

@@ -128,7 +128,7 @@ class RoomDatabaseBackupManager(
                 readingSessionDao.upsertAll(preview.snapshot.readingSessions)
                 dao.upsertScanSessions(preview.snapshot.scanSessions)
                 dao.upsertScanAttempts(preview.snapshot.scanAttempts)
-                resetSyncStateAfterDomainRestore(database.syncDao())
+                resetSyncStateAfterDomainRestore(database.syncDao(), database.syncKeyDao())
 
                 check(readSnapshot() == preview.snapshot) { "Restored snapshot differs" }
             }

@@ -9,6 +9,7 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import dev.ndcshelf.app.background.AndroidLibrarySyncScheduler
 import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
 import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
 import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
@@ -27,9 +28,12 @@ import dev.ndcshelf.app.data.repository.RoomReadingHistoryRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesRepository
 import dev.ndcshelf.app.data.repository.RoomSeriesWatchRepository
 import dev.ndcshelf.app.data.repository.RoomWorkGroupRepository
+import dev.ndcshelf.app.data.sync.E2eeSyncCoordinator
 import dev.ndcshelf.app.data.sync.RoomSyncDomainStore
 import dev.ndcshelf.app.data.sync.RoomSyncEngine
 import dev.ndcshelf.app.data.sync.RoomSyncStatusRepository
+import dev.ndcshelf.app.data.sync.backend.AndroidSyncBackendFactory
+import dev.ndcshelf.app.data.sync.crypto.AndroidKeystoreSyncKeyManager
 import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
 import dev.ndcshelf.app.domain.insights.InsightsExclusionStore
@@ -126,6 +130,19 @@ class AppContainer(
         )
 
     val syncStatusRepository = RoomSyncStatusRepository(database)
+
+    val librarySyncScheduler = AndroidLibrarySyncScheduler(application)
+
+    val syncCoordinator by lazy {
+        E2eeSyncCoordinator(
+            database = database,
+            engine = syncEngine,
+            keyManager = AndroidKeystoreSyncKeyManager(),
+            backendFactory = AndroidSyncBackendFactory(application),
+            consentRepository = consentRepository,
+            scheduler = librarySyncScheduler,
+        )
+    }
 
     val diagnosticsLogger: DiagnosticsLogger =
         FileDiagnosticsLogger(application.noBackupFilesDir.resolve("diagnostics"))
