@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -49,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -114,7 +117,12 @@ internal fun BookDetailScreen(
         val workId = copies.first().workId
         AlertDialog(
             onDismissRequest = { tagAssignVisible = false },
-            title = { Text(stringResource(R.string.tag_detail_edit)) },
+            title = {
+                Text(
+                    stringResource(R.string.tag_detail_edit),
+                    modifier = Modifier.semantics { heading() },
+                )
+            },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -122,13 +130,22 @@ internal fun BookDetailScreen(
                 ) {
                     tags.forEach { tagWithUsage ->
                         val assigned = tagWithUsage.tag.id in tagIdsByWork[workId].orEmpty()
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = assigned,
-                                onCheckedChange = { checked ->
-                                    onSetTagOnWorks(tagWithUsage.tag.id, setOf(workId), checked)
-                                },
-                            )
+                        // Checkbox単体ではどのタグか読み上げられないため、行全体を
+                        // toggleableにしてタグ名とチェック状態を1ノードへ統合する。
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(
+                                        value = assigned,
+                                        role = Role.Checkbox,
+                                        onValueChange = { checked ->
+                                            onSetTagOnWorks(tagWithUsage.tag.id, setOf(workId), checked)
+                                        },
+                                    ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = assigned, onCheckedChange = null)
                             TagColorSwatch(tagWithUsage.tag.colorRole)
                             Spacer(Modifier.width(6.dp))
                             Text(tagWithUsage.tag.name)
@@ -472,6 +489,7 @@ private fun ReadingSessionCard(
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(
+            // 記録内容は1ストップで読み上げ、編集・削除ボタンは個別ノードに残す。
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -481,6 +499,10 @@ private fun ReadingSessionCard(
                 } else {
                     session.status.label
                 }
+            Column(
+                modifier = Modifier.semantics(mergeDescendants = true) {},
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(
                 buildList {
@@ -519,11 +541,18 @@ private fun ReadingSessionCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onEdit) {
+            }
+            // 破壊的操作（削除）への誤タップを避けるため間隔を広げ、
+            // どちらのボタンも48dpのタップ領域を確保する。
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = onEdit,
+                ) {
                     Text(stringResource(R.string.reading_history_edit))
                 }
-                TextButton(onClick = onDelete) {
+                TextButton(
+                    onClick = onDelete,
+                ) {
                     Text(
                         stringResource(R.string.reading_history_delete),
                         color = MaterialTheme.colorScheme.error,
@@ -573,6 +602,7 @@ private fun ReadingSessionEditorDialog(
                         R.string.reading_history_editor_edit_title
                     },
                 ),
+                modifier = Modifier.semantics { heading() },
             )
         },
         text = {
@@ -585,7 +615,11 @@ private fun ReadingSessionEditorDialog(
                         stringResource(R.string.reading_history_editor_copy),
                         style = MaterialTheme.typography.labelMedium,
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // 単一選択グループとして位置情報（N個中M番目）を読み上げさせる。
+                    FlowRow(
+                        modifier = Modifier.selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         sortedCopies.forEach { copy ->
                             FilterChip(
                                 selected = copyId == copy.copyId,
@@ -599,7 +633,10 @@ private fun ReadingSessionEditorDialog(
                     stringResource(R.string.reading_history_editor_status),
                     style = MaterialTheme.typography.labelMedium,
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    modifier = Modifier.selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     ReadingSessionStatus.entries.forEach { candidate ->
                         FilterChip(
                             selected = status == candidate,
@@ -632,7 +669,10 @@ private fun ReadingSessionEditorDialog(
                     stringResource(R.string.reading_history_editor_rating),
                     style = MaterialTheme.typography.labelMedium,
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    modifier = Modifier.selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     FilterChip(
                         selected = rating == null,
                         onClick = { rating = null },
@@ -726,7 +766,8 @@ private fun DetailValue(
     label: String,
     value: String,
 ) {
-    Column {
+    // ラベルと値が分断して読み上げられないよう1ノードへ統合する。
+    Column(modifier = Modifier.semantics(mergeDescendants = true) {}) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyLarge)
     }

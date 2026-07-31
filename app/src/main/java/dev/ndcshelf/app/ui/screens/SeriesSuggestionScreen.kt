@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -107,23 +108,25 @@ private fun SuggestionGroups(
     onBack: () -> Unit,
     contentPadding: PaddingValues,
 ) {
-    val groups = remember(suggestions) {
-        suggestions.groupBy(SeriesSuggestion::proposedSeriesName).mapValues { (_, values) ->
-            values.sortedWith(
-                compareBy<SeriesSuggestion> { it.orderHint == null }
-                    .thenBy { it.orderHint }
-                    .thenBy { it.sourceTitle },
-            )
+    val groups =
+        remember(suggestions) {
+            suggestions.groupBy(SeriesSuggestion::proposedSeriesName).mapValues { (_, values) ->
+                values.sortedWith(
+                    compareBy<SeriesSuggestion> { it.orderHint == null }
+                        .thenBy { it.orderHint }
+                        .thenBy { it.sourceTitle },
+                )
+            }
         }
-    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag(SERIES_SUGGESTIONS_TEST_TAG),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            end = 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 24.dp,
-        ),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                top = contentPadding.calculateTopPadding() + 8.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { EditorHeader(stringResource(R.string.series_suggestions_title), onBack) }
@@ -195,12 +198,13 @@ private fun SuggestionEditor(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag(SERIES_EDITOR_TEST_TAG),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            end = 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 24.dp,
-        ),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                top = contentPadding.calculateTopPadding() + 8.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { EditorHeader(stringResource(R.string.series_editor_title), onBack) }
@@ -264,19 +268,23 @@ private fun SuggestionEditor(
         }
         item {
             Button(
-                enabled = !busy && targetValid && selectedRows.isNotEmpty() &&
-                    selectedRows.all { it.volumeLabel.isNotBlank() },
+                enabled =
+                    !busy && targetValid && selectedRows.isNotEmpty() &&
+                        selectedRows.all { it.volumeLabel.isNotBlank() },
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    val target = if (useExisting) {
-                        SeriesConfirmationTarget.Existing(requireNotNull(existingSeriesId))
-                    } else {
-                        SeriesConfirmationTarget.New(newSeriesName)
-                    }
+                    val target =
+                        if (useExisting) {
+                            SeriesConfirmationTarget.Existing(requireNotNull(existingSeriesId))
+                        } else {
+                            SeriesConfirmationTarget.New(newSeriesName)
+                        }
                     onConfirm(target, selectedRows.map(EditableSuggestion::toDraft))
                 },
             ) {
-                if (busy) CircularProgressIndicator() else {
+                if (busy) {
+                    CircularProgressIndicator()
+                } else {
                     Text(stringResource(R.string.series_confirm_selected, selectedRows.size))
                 }
             }
@@ -299,10 +307,11 @@ private fun EditableSuggestionCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val selectionDescription = stringResource(
-                    R.string.series_candidate_selection,
-                    row.suggestion.sourceTitle,
-                )
+                val selectionDescription =
+                    stringResource(
+                        R.string.series_candidate_selection,
+                        row.suggestion.sourceTitle,
+                    )
                 Checkbox(
                     checked = row.included,
                     onCheckedChange = { onChange(row.copy(included = it)) },
@@ -313,9 +322,12 @@ private fun EditableSuggestionCard(
                     Text(
                         row.suggestion.confidence.label(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (row.suggestion.confidence == SeriesSuggestionConfidence.LOW) {
-                            MaterialTheme.colorScheme.error
-                        } else MaterialTheme.colorScheme.primary,
+                        color =
+                            if (row.suggestion.confidence == SeriesSuggestionConfidence.LOW) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                     )
                 }
                 IconButton(enabled = canMoveUp, onClick = onMoveUp) {
@@ -336,9 +348,10 @@ private fun EditableSuggestionCard(
                 onValueChange = { onChange(row.copy(volumeLabel = it.take(80))) },
                 enabled = row.included,
                 label = { Text(stringResource(R.string.series_volume_label)) },
-                modifier = Modifier.fillMaxWidth().testTag(
-                    SERIES_VOLUME_FIELD_TEST_TAG_PREFIX + row.suggestion.workId,
-                ),
+                modifier =
+                    Modifier.fillMaxWidth().testTag(
+                        SERIES_VOLUME_FIELD_TEST_TAG_PREFIX + row.suggestion.workId,
+                    ),
                 singleLine = true,
             )
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -356,12 +369,20 @@ private fun EditableSuggestionCard(
 }
 
 @Composable
-private fun EditorHeader(title: String, onBack: () -> Unit) {
+private fun EditorHeader(
+    title: String,
+    onBack: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.series_editor_back))
         }
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            title,
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -371,43 +392,50 @@ private data class EditableSuggestion(
     val volumeLabel: String = suggestion.proposedVolumeLabel,
     val type: SeriesMembershipType = suggestion.proposedType,
 ) {
-    fun toDraft() = SeriesConfirmationDraft(
-        workId = suggestion.workId,
-        volumeLabel = volumeLabel,
-        type = type,
-        sourceTitle = suggestion.sourceTitle,
-        origin = if (suggestion.rule == SeriesSuggestionRule.MANUAL_ENTRY) {
-            SeriesMembershipOrigin.MANUAL
-        } else {
-            SeriesMembershipOrigin.TITLE_SUGGESTION
-        },
-    )
+    fun toDraft() =
+        SeriesConfirmationDraft(
+            workId = suggestion.workId,
+            volumeLabel = volumeLabel,
+            type = type,
+            sourceTitle = suggestion.sourceTitle,
+            origin =
+                if (suggestion.rule == SeriesSuggestionRule.MANUAL_ENTRY) {
+                    SeriesMembershipOrigin.MANUAL
+                } else {
+                    SeriesMembershipOrigin.TITLE_SUGGESTION
+                },
+        )
 }
 
-private fun List<EditableSuggestion>.moved(from: Int, to: Int): List<EditableSuggestion> =
-    toMutableList().apply { add(to, removeAt(from)) }
-
-@Composable
-private fun SeriesSuggestionConfidence.label(): String = when (this) {
-    SeriesSuggestionConfidence.HIGH -> stringResource(R.string.series_confidence_high)
-    SeriesSuggestionConfidence.MEDIUM -> stringResource(R.string.series_confidence_medium)
-    SeriesSuggestionConfidence.LOW -> stringResource(R.string.series_confidence_low)
-}
+private fun List<EditableSuggestion>.moved(
+    from: Int,
+    to: Int,
+): List<EditableSuggestion> = toMutableList().apply { add(to, removeAt(from)) }
 
 @Composable
-private fun SeriesMembershipType.label(): String = when (this) {
-    SeriesMembershipType.MAIN_STORY -> stringResource(R.string.series_type_main)
-    SeriesMembershipType.SIDE_STORY -> stringResource(R.string.series_type_side_story)
-    SeriesMembershipType.OMNIBUS -> stringResource(R.string.series_type_omnibus)
-    SeriesMembershipType.OTHER -> stringResource(R.string.series_type_other)
-}
+private fun SeriesSuggestionConfidence.label(): String =
+    when (this) {
+        SeriesSuggestionConfidence.HIGH -> stringResource(R.string.series_confidence_high)
+        SeriesSuggestionConfidence.MEDIUM -> stringResource(R.string.series_confidence_medium)
+        SeriesSuggestionConfidence.LOW -> stringResource(R.string.series_confidence_low)
+    }
 
-private fun SeriesEditorUiState.messageRes(): Int? = when (this) {
-    SeriesEditorUiState.Conflict -> R.string.series_editor_conflict
-    SeriesEditorUiState.Invalid -> R.string.series_editor_invalid
-    SeriesEditorUiState.Error -> R.string.series_editor_error
-    else -> null
-}
+@Composable
+private fun SeriesMembershipType.label(): String =
+    when (this) {
+        SeriesMembershipType.MAIN_STORY -> stringResource(R.string.series_type_main)
+        SeriesMembershipType.SIDE_STORY -> stringResource(R.string.series_type_side_story)
+        SeriesMembershipType.OMNIBUS -> stringResource(R.string.series_type_omnibus)
+        SeriesMembershipType.OTHER -> stringResource(R.string.series_type_other)
+    }
+
+private fun SeriesEditorUiState.messageRes(): Int? =
+    when (this) {
+        SeriesEditorUiState.Conflict -> R.string.series_editor_conflict
+        SeriesEditorUiState.Invalid -> R.string.series_editor_invalid
+        SeriesEditorUiState.Error -> R.string.series_editor_error
+        else -> null
+    }
 
 const val SERIES_SUGGESTIONS_TEST_TAG = "series-suggestions"
 const val SERIES_EDITOR_TEST_TAG = "series-editor"

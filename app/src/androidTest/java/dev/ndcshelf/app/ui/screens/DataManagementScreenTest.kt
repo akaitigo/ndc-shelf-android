@@ -7,21 +7,45 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResult
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils
+import com.google.android.apps.common.testing.accessibility.framework.checks.ImageContrastCheck
+import com.google.android.apps.common.testing.accessibility.framework.checks.TextContrastCheck
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.LibraryImportUiState
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
+import org.hamcrest.Matchers
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class DataManagementScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Before
+    fun enableChecks() {
+        // 操作を伴う既存テストでもAccessibility Test Frameworkの検査を走らせる。
+        // 抑制方針は AccessibilityChecksTest と docs/ACCESSIBILITY_AUDIT.md を参照。
+        composeRule.enableAccessibilityChecks(
+            AccessibilityValidator()
+                .setThrowExceptionFor(AccessibilityCheckResult.AccessibilityCheckResultType.ERROR)
+                .setSuppressingResultMatcher(
+                    Matchers.anyOf(
+                        AccessibilityCheckResultUtils.matchesCheck(TextContrastCheck::class.java),
+                        AccessibilityCheckResultUtils.matchesCheck(ImageContrastCheck::class.java),
+                    ),
+                ),
+        )
+    }
 
     @Test
     fun emptyLibrary_disablesOnlyOperationsThatNeedCurrentData() {

@@ -10,35 +10,36 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CollectionsBookmark
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
@@ -47,9 +48,9 @@ import dev.ndcshelf.app.domain.model.SeriesMembershipType
 import dev.ndcshelf.app.domain.model.SeriesOverview
 import dev.ndcshelf.app.domain.model.SeriesReleaseCandidate
 import dev.ndcshelf.app.domain.model.SeriesReleaseState
-import dev.ndcshelf.app.domain.model.SeriesWatchOverview
 import dev.ndcshelf.app.domain.model.SeriesVolume
 import dev.ndcshelf.app.domain.model.SeriesVolumeState
+import dev.ndcshelf.app.domain.model.SeriesWatchOverview
 import java.text.DateFormat
 import java.util.Date
 
@@ -97,17 +98,19 @@ private fun SeriesCatalog(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag(SERIES_LIST_TEST_TAG),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = contentPadding.calculateTopPadding() + 20.dp,
-            end = 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 24.dp,
-        ),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                top = contentPadding.calculateTopPadding() + 20.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             Text(
                 text = stringResource(R.string.series_title),
+                modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -162,7 +165,10 @@ private fun SeriesEmptyState() {
 }
 
 @Composable
-private fun SeriesCatalogCard(overview: SeriesOverview, onClick: () -> Unit) {
+private fun SeriesCatalogCard(
+    overview: SeriesOverview,
+    onClick: () -> Unit,
+) {
     val latest = overview.latestOwnedVolume?.membership?.volumeLabel
     Card(
         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
@@ -183,37 +189,42 @@ private fun SeriesCatalogCard(overview: SeriesOverview, onClick: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = stringResource(
-                        R.string.series_catalog_counts,
-                        overview.ownedVolumeCount,
-                        overview.knownVolumeCount,
-                        overview.readVolumeCount,
-                    ),
+                    text =
+                        stringResource(
+                            R.string.series_catalog_counts,
+                            overview.ownedVolumeCount,
+                            overview.knownVolumeCount,
+                            overview.readVolumeCount,
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    text = if (latest == null) {
-                        stringResource(R.string.series_latest_owned_none)
-                    } else {
-                        stringResource(R.string.series_latest_owned, latest)
-                    },
+                    text =
+                        if (latest == null) {
+                            stringResource(R.string.series_latest_owned_none)
+                        } else {
+                            stringResource(R.string.series_latest_owned, latest)
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (overview.missingCandidateCount > 0) {
                     Text(
-                        text = stringResource(
-                            R.string.series_missing_candidates,
-                            overview.missingCandidateCount,
-                        ),
+                        text =
+                            stringResource(
+                                R.string.series_missing_candidates,
+                                overview.missingCandidateCount,
+                            ),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             }
+            // カード全体がRole.Buttonのclickableでシリーズ名ごとmergeされるため、
+            // 矢印は装飾扱いにして二重読み上げを避ける。
             Icon(
                 Icons.Rounded.ChevronRight,
-                contentDescription = stringResource(R.string.series_open, overview.series.name),
+                contentDescription = null,
             )
         }
     }
@@ -233,12 +244,13 @@ private fun SeriesDetail(
     val dateFormatter = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag(SERIES_DETAIL_TEST_TAG),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            end = 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 24.dp,
-        ),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                top = contentPadding.calculateTopPadding() + 8.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -252,14 +264,16 @@ private fun SeriesDetail(
                 Column(modifier = Modifier.padding(start = 4.dp)) {
                     Text(
                         text = overview.series.name,
+                        modifier = Modifier.semantics { heading() },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = stringResource(
-                            R.string.series_updated_at,
-                            dateFormatter.format(Date(overview.lastConfirmedAt)),
-                        ),
+                        text =
+                            stringResource(
+                                R.string.series_updated_at,
+                                dateFormatter.format(Date(overview.lastConfirmedAt)),
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -328,7 +342,17 @@ private fun SeriesWatchCard(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Switch単体では対象が読み上げられないため、行全体をtoggleableにして
+            // ラベルと状態を1ノードへ統合する（Switch自身のクリックは無効化）。
+            Row(
+                modifier =
+                    Modifier.toggleable(
+                        value = watch?.watch?.enabled == true,
+                        role = Role.Switch,
+                        onValueChange = { onSetEnabled(overview.series.id, it) },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         stringResource(R.string.series_watch_title),
@@ -343,7 +367,7 @@ private fun SeriesWatchCard(
                 }
                 Switch(
                     checked = watch?.watch?.enabled == true,
-                    onCheckedChange = { onSetEnabled(overview.series.id, it) },
+                    onCheckedChange = null,
                 )
             }
             Text(
@@ -389,7 +413,8 @@ private fun SeriesReleaseCandidateRow(
                 Text(candidate.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     listOfNotNull(candidate.primaryAuthor, candidate.publisher, candidate.publishedDate)
-                        .filter(String::isNotBlank).joinToString(" ・ "),
+                        .filter(String::isNotBlank)
+                        .joinToString(" ・ "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -408,12 +433,13 @@ private fun SeriesReleaseCandidateRow(
     }
 }
 
-private fun SeriesReleaseState.labelResource(): Int = when (this) {
-    SeriesReleaseState.NEW -> R.string.series_watch_state_new
-    SeriesReleaseState.WANTED -> R.string.series_watch_state_wanted
-    SeriesReleaseState.RESERVED -> R.string.series_watch_state_reserved
-    SeriesReleaseState.OWNED -> R.string.series_watch_state_owned
-}
+private fun SeriesReleaseState.labelResource(): Int =
+    when (this) {
+        SeriesReleaseState.NEW -> R.string.series_watch_state_new
+        SeriesReleaseState.WANTED -> R.string.series_watch_state_wanted
+        SeriesReleaseState.RESERVED -> R.string.series_watch_state_reserved
+        SeriesReleaseState.OWNED -> R.string.series_watch_state_owned
+    }
 
 @Composable
 private fun SeriesSummary(overview: SeriesOverview) {
@@ -445,7 +471,11 @@ private fun SeriesSummary(overview: SeriesOverview) {
 }
 
 @Composable
-private fun SeriesMetric(value: String, label: String, modifier: Modifier = Modifier) {
+private fun SeriesMetric(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -470,15 +500,20 @@ private fun SeriesVolumeCard(
 ) {
     val stateLabel = volume.stateDescription()
     var confirmRemoval by remember { mutableStateOf(false) }
+    // 巻タイトル・著者・状態テキストを1ストップで読み上げるためmergeする。
+    // 状態は可視テキスト（stateLabel）として含まれるためstateDescriptionは重ねない。
+    // ボタン類は自身がクリック可能なため個別ノードのまま残る。
     Card(
-        modifier = Modifier.fillMaxWidth().semantics { stateDescription = stateLabel },
-        colors = CardDefaults.cardColors(
-            containerColor = if (volume.isMissingCandidate) {
-                MaterialTheme.colorScheme.errorContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            },
-        ),
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (volume.isMissingCandidate) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    },
+            ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -516,18 +551,24 @@ private fun SeriesVolumeCard(
             Text(
                 text = stateLabel,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (volume.isMissingCandidate) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
+                color =
+                    if (volume.isMissingCandidate) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
             )
             Text(
-                text = when (volume.membership.origin) {
-                    SeriesMembershipOrigin.TITLE_SUGGESTION ->
-                        stringResource(R.string.series_origin_title_suggestion)
-                    SeriesMembershipOrigin.MANUAL -> stringResource(R.string.series_origin_manual)
-                },
+                text =
+                    when (volume.membership.origin) {
+                        SeriesMembershipOrigin.TITLE_SUGGESTION -> {
+                            stringResource(R.string.series_origin_title_suggestion)
+                        }
+
+                        SeriesMembershipOrigin.MANUAL -> {
+                            stringResource(R.string.series_origin_manual)
+                        }
+                    },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -539,23 +580,31 @@ private fun SeriesVolumeCard(
                 )
             }
             when {
-                volume.ownedEditionId != null -> OutlinedButton(
-                    onClick = { onOpenEdition(volume.ownedEditionId) },
-                ) {
-                    Text(stringResource(R.string.series_open_book_detail))
-                    Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+                volume.ownedEditionId != null -> {
+                    OutlinedButton(
+                        onClick = { onOpenEdition(volume.ownedEditionId) },
+                    ) {
+                        Text(stringResource(R.string.series_open_book_detail))
+                        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+                    }
                 }
-                volume.bookstoreIsbn != null -> OutlinedButton(
-                    onClick = { onOpenBookstore(volume.bookstoreIsbn) },
-                ) {
-                    Text(stringResource(R.string.series_open_bookstore))
-                    Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+
+                volume.bookstoreIsbn != null -> {
+                    OutlinedButton(
+                        onClick = { onOpenBookstore(volume.bookstoreIsbn) },
+                    ) {
+                        Text(stringResource(R.string.series_open_bookstore))
+                        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+                    }
                 }
-                else -> Text(
-                    text = stringResource(R.string.series_no_isbn),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+
+                else -> {
+                    Text(
+                        text = stringResource(R.string.series_no_isbn),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             TextButton(onClick = { confirmRemoval = true }) {
                 Text(stringResource(R.string.series_remove_membership))
@@ -583,24 +632,37 @@ private fun SeriesVolumeCard(
 }
 
 @Composable
-private fun SeriesVolume.stateDescription(): String = when (state) {
-    SeriesVolumeState.OWNED -> when {
-        isRead -> stringResource(R.string.series_state_owned_read, ownedCopyCount)
-        readingCopyCount > 0 -> stringResource(R.string.series_state_owned_reading, ownedCopyCount)
-        else -> stringResource(R.string.series_state_owned, ownedCopyCount)
+private fun SeriesVolume.stateDescription(): String =
+    when (state) {
+        SeriesVolumeState.OWNED -> {
+            when {
+                isRead -> stringResource(R.string.series_state_owned_read, ownedCopyCount)
+                readingCopyCount > 0 -> stringResource(R.string.series_state_owned_reading, ownedCopyCount)
+                else -> stringResource(R.string.series_state_owned, ownedCopyCount)
+            }
+        }
+
+        SeriesVolumeState.WANTED -> {
+            stringResource(R.string.series_state_wanted)
+        }
+
+        SeriesVolumeState.RESERVED -> {
+            stringResource(R.string.series_state_reserved)
+        }
+
+        SeriesVolumeState.UNOWNED -> {
+            stringResource(R.string.series_state_unowned)
+        }
     }
-    SeriesVolumeState.WANTED -> stringResource(R.string.series_state_wanted)
-    SeriesVolumeState.RESERVED -> stringResource(R.string.series_state_reserved)
-    SeriesVolumeState.UNOWNED -> stringResource(R.string.series_state_unowned)
-}
 
 @Composable
-private fun SeriesMembershipType.label(): String = when (this) {
-    SeriesMembershipType.MAIN_STORY -> stringResource(R.string.series_type_main)
-    SeriesMembershipType.SIDE_STORY -> stringResource(R.string.series_type_side_story)
-    SeriesMembershipType.OMNIBUS -> stringResource(R.string.series_type_omnibus)
-    SeriesMembershipType.OTHER -> stringResource(R.string.series_type_other)
-}
+private fun SeriesMembershipType.label(): String =
+    when (this) {
+        SeriesMembershipType.MAIN_STORY -> stringResource(R.string.series_type_main)
+        SeriesMembershipType.SIDE_STORY -> stringResource(R.string.series_type_side_story)
+        SeriesMembershipType.OMNIBUS -> stringResource(R.string.series_type_omnibus)
+        SeriesMembershipType.OTHER -> stringResource(R.string.series_type_other)
+    }
 
 const val SERIES_LIST_TEST_TAG = "series-list"
 const val SERIES_DETAIL_TEST_TAG = "series-detail"

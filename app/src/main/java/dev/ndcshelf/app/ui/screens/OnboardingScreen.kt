@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
@@ -122,7 +125,8 @@ fun OnboardingScreen(
                     Text(stringResource(R.string.onboarding_back))
                 }
             } else {
-                Text("", modifier = Modifier.padding(8.dp))
+                // 空のTextは無意味なフォーカス停止点になるためSpacerで場所を確保する。
+                Spacer(Modifier.padding(8.dp))
             }
             if (page < PAGE_COUNT - 1) {
                 Button(onClick = { page += 1 }) {
@@ -140,6 +144,7 @@ private fun OnboardingPage(
 ) {
     Text(
         text = stringResource(titleRes),
+        modifier = Modifier.semantics { heading() },
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
     )

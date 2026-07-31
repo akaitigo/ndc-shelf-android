@@ -71,6 +71,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -222,6 +226,7 @@ fun ScanScreen(
                 text = stringResource(
                     if (mode == ScanMode.LIBRARY) R.string.scan_title else R.string.bookstore_title,
                 ),
+                modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -312,7 +317,12 @@ fun ScanScreen(
                             shape = RoundedCornerShape(12.dp),
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                modifier =
+                                    Modifier
+                                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                                        .semantics(mergeDescendants = true) {
+                                            liveRegion = LiveRegionMode.Polite
+                                        },
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -533,6 +543,8 @@ internal fun ScanSessionPanel(
                         active.attempts.size,
                         active.activeAddedCount,
                     ),
+                    // 読み取りのたびに件数が変わるため自動読み上げする。
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.primary,
@@ -663,7 +675,12 @@ private fun ScanUndoConfirmation(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.scan_session_undo_title)) },
+        title = {
+            Text(
+                stringResource(R.string.scan_session_undo_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = { Text(message) },
         confirmButton = {
             Button(onClick = onConfirm) { Text(stringResource(R.string.scan_session_undo_confirm)) }
@@ -806,7 +823,7 @@ internal fun ScanResultCard(
                     Text(state.title, style = MaterialTheme.typography.bodyMedium)
                 }
                 IconButton(onClick = onClear) {
-                    Icon(Icons.Rounded.Close, contentDescription = "閉じる")
+                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.scan_close))
                 }
             }
         }
@@ -873,7 +890,7 @@ internal fun ScanResultCard(
                         }
                     }
                     IconButton(onClick = onClear) {
-                        Icon(Icons.Rounded.Close, contentDescription = "閉じる")
+                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.scan_close))
                     }
                 }
             }
@@ -900,7 +917,12 @@ private fun ManualRegistrationDialog(
 
     AlertDialog(
         onDismissRequest = { if (state !== ManualRegistrationUiState.Saving) onDismiss() },
-        title = { Text(stringResource(R.string.manual_registration_title)) },
+        title = {
+            Text(
+                stringResource(R.string.manual_registration_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -1267,8 +1289,16 @@ private fun ResultSurface(content: @Composable RowScope.() -> Unit) {
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
+        // スキャン結果（取得中・追加・重複・エラー）はカメラ操作中に非同期で
+        // 切り替わるため、live regionにしてTalkBackへ自動通知する。
+        // 内部のボタンは自身がmergeするノードのため個別フォーカスを保つ。
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier =
+                Modifier
+                    .padding(14.dp)
+                    .semantics(mergeDescendants = true) {
+                        liveRegion = LiveRegionMode.Polite
+                    },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content,

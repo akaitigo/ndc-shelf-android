@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -29,10 +30,12 @@ import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -63,6 +66,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -263,10 +274,10 @@ fun LibraryScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "My Library",
+                        text = stringResource(R.string.library_title),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).semantics { heading() },
                     )
                     IconButton(onClick = { showHelp = true }) {
                         Icon(
@@ -276,7 +287,11 @@ fun LibraryScreen(
                     }
                 }
                 Text(
-                    text = "${libraryStats?.totalCount ?: books.size}冊の本を、ちゃんと見つけられる場所。",
+                    text =
+                        stringResource(
+                            R.string.library_subtitle,
+                            libraryStats?.totalCount ?: books.size,
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -288,7 +303,7 @@ fun LibraryScreen(
                         onQueryChange(value)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("タイトル・著者・ISBN・NDC・棚で検索") },
+                    placeholder = { Text(stringResource(R.string.library_search_placeholder)) },
                     leadingIcon = {
                         Icon(Icons.Rounded.Search, contentDescription = null)
                     },
@@ -298,7 +313,10 @@ fun LibraryScreen(
                                 localQuery = ""
                                 onQueryChange("")
                             }) {
-                                Icon(Icons.Rounded.Clear, contentDescription = "検索をクリア")
+                                Icon(
+                                    Icons.Rounded.Clear,
+                                    contentDescription = stringResource(R.string.library_search_clear),
+                                )
                             }
                         }
                     },
@@ -340,9 +358,13 @@ fun LibraryScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 選択件数は長押しのたびに変わるため、live regionで自動読み上げする。
                         Text(
                             stringResource(R.string.tag_bulk_selected_count, bulkSelectedCopyIds.size),
-                            modifier = Modifier.weight(1f),
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .semantics { liveRegion = LiveRegionMode.Polite },
                             style = MaterialTheme.typography.labelLarge,
                         )
                         TextButton(onClick = { showBulkTagDialog = true }) {
@@ -393,6 +415,7 @@ fun LibraryScreen(
                             book = book,
                             editionCopyCount = editionCounts[book.editionId] ?: 1,
                             selected = book.copyId in bulkSelectedCopyIds,
+                            bulkSelectionActive = bulkSelectedCopyIds.isNotEmpty(),
                             onClick = {
                                 if (bulkSelectedCopyIds.isNotEmpty()) {
                                     bulkSelectedCopyIds =
@@ -558,7 +581,12 @@ private fun BulkTagDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.tag_bulk_dialog_title)) },
+        title = {
+            Text(
+                stringResource(R.string.tag_bulk_dialog_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -581,13 +609,22 @@ private fun BulkTagDialog(
                             selectedWorkIds.all { workId ->
                                 tagWithUsage.tag.id in tagIdsByWork[workId].orEmpty()
                             }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = assignedToAll,
-                            onCheckedChange = { checked ->
-                                onSetTagOnWorks(tagWithUsage.tag.id, selectedWorkIds, checked)
-                            },
-                        )
+                    // Checkbox単体ではどのタグか読み上げられないため、行全体を
+                    // toggleableにしてタグ名とチェック状態を1ノードへ統合する。
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .toggleable(
+                                    value = assignedToAll,
+                                    role = Role.Checkbox,
+                                    onValueChange = { checked ->
+                                        onSetTagOnWorks(tagWithUsage.tag.id, selectedWorkIds, checked)
+                                    },
+                                ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = assignedToAll, onCheckedChange = null)
                         TagColorSwatch(tagWithUsage.tag.colorRole)
                         Spacer(Modifier.width(6.dp))
                         Text(tagWithUsage.tag.name)
@@ -618,9 +655,18 @@ private fun LibrarySummary(stats: LibraryStats) {
                     .padding(horizontal = 18.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            SummaryValue(value = stats.totalCount.toString(), label = "蔵書")
-            SummaryValue(value = stats.classifiedCount.toString(), label = "NDC分類済み")
-            SummaryValue(value = stats.readingCount.toString(), label = "読書中")
+            SummaryValue(
+                value = stats.totalCount.toString(),
+                label = stringResource(R.string.library_summary_total),
+            )
+            SummaryValue(
+                value = stats.classifiedCount.toString(),
+                label = stringResource(R.string.library_summary_classified),
+            )
+            SummaryValue(
+                value = stats.readingCount.toString(),
+                label = stringResource(R.string.library_summary_reading),
+            )
         }
     }
 }
@@ -699,7 +745,15 @@ private fun SummaryValue(
     value: String,
     label: String,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // 値とラベルが別々に読み上げられないよう「蔵書: 12」の形で1ノードへ統合する。
+    val description = stringResource(R.string.library_summary_value, label, value)
+    Column(
+        modifier =
+            Modifier.semantics(mergeDescendants = true) {
+                contentDescription = description
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleLarge,
@@ -716,8 +770,11 @@ private fun BookCard(
     editionCopyCount: Int,
     onClick: () -> Unit,
     selected: Boolean = false,
+    bulkSelectionActive: Boolean = false,
     onLongClick: () -> Unit = {},
 ) {
+    val selectedLabel = stringResource(R.string.book_card_selected)
+    val unselectedLabel = stringResource(R.string.book_card_unselected)
     Card(
         colors =
             CardDefaults.cardColors(
@@ -734,10 +791,41 @@ private fun BookCard(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                    .padding(12.dp),
+                    .combinedClickable(
+                        onClickLabel = stringResource(R.string.book_card_open_label),
+                        onLongClickLabel = stringResource(R.string.book_card_bulk_select_label),
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                    )
+                    // 一括選択の状態は背景色だけで示さず、selected+stateDescriptionで
+                    // スクリーンリーダーへ伝える（可視のチェックアイコンも併記する）。
+                    .semantics {
+                        if (bulkSelectionActive) {
+                            this.selected = selected
+                            stateDescription = if (selected) selectedLabel else unselectedLabel
+                        }
+                    }.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (bulkSelectionActive) {
+                Icon(
+                    imageVector =
+                        if (selected) {
+                            Icons.Rounded.CheckCircle
+                        } else {
+                            Icons.Rounded.RadioButtonUnchecked
+                        },
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint =
+                        if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             BookCover(
                 coverUrl = book.coverUrl,
                 title = book.title,
@@ -796,9 +884,11 @@ private fun BookCard(
                     )
                 }
             }
+            // 行全体のクリックで編集が開くため（onClickLabelで告知済み）、
+            // 鉛筆アイコンは装飾扱いにして読み上げの重複を避ける。
             Icon(
                 imageVector = Icons.Rounded.Edit,
-                contentDescription = "本の情報を編集",
+                contentDescription = null,
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1681,21 +1771,36 @@ private fun LocationItemRow(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
+        // 名称と内訳は1ノードにまとめ、操作ボタンは対象名を含むラベルで区別する。
+        Column(
+            modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {},
+        ) {
             Text(name, fontWeight = FontWeight.SemiBold)
             Text(detail, style = MaterialTheme.typography.labelSmall)
         }
         IconButton(onClick = onUp, enabled = enabled) {
-            Icon(Icons.Rounded.ArrowUpward, contentDescription = stringResource(R.string.location_move_up))
+            Icon(
+                Icons.Rounded.ArrowUpward,
+                contentDescription = stringResource(R.string.location_move_up_target, name),
+            )
         }
         IconButton(onClick = onDown, enabled = enabled) {
-            Icon(Icons.Rounded.ArrowDownward, contentDescription = stringResource(R.string.location_move_down))
+            Icon(
+                Icons.Rounded.ArrowDownward,
+                contentDescription = stringResource(R.string.location_move_down_target, name),
+            )
         }
         IconButton(onClick = onEdit, enabled = enabled) {
-            Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.location_rename))
+            Icon(
+                Icons.Rounded.Edit,
+                contentDescription = stringResource(R.string.location_rename_target, name),
+            )
         }
         IconButton(onClick = onDelete, enabled = enabled) {
-            Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.location_delete))
+            Icon(
+                Icons.Rounded.Delete,
+                contentDescription = stringResource(R.string.location_delete_target, name),
+            )
         }
     }
 }
