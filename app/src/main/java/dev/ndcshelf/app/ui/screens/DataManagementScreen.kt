@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.DatabaseBackupUiState
@@ -109,6 +111,7 @@ fun DataManagementScreen(
                 text = stringResource(R.string.data_management_title),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
             )
             Text(
                 text = stringResource(R.string.data_management_description),
@@ -235,7 +238,10 @@ fun DataManagementScreen(
         item {
             Text(
                 text = stringResource(R.string.data_management_destructive_section),
-                modifier = Modifier.padding(top = 10.dp),
+                modifier =
+                    Modifier
+                        .padding(top = 10.dp)
+                        .semantics { heading() },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error,
@@ -385,7 +391,10 @@ private fun SyncStatusCard(status: SyncEngineStatus) {
         shape = RoundedCornerShape(22.dp),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier =
+                Modifier
+                    .padding(16.dp)
+                    .semantics(mergeDescendants = true) {},
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
@@ -406,7 +415,10 @@ private fun SyncStatusCard(status: SyncEngineStatus) {
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        modifier = Modifier.padding(top = 10.dp),
+        modifier =
+            Modifier
+                .padding(top = 10.dp)
+                .semantics { heading() },
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
     )
@@ -480,7 +492,7 @@ private fun DataProgressDialog(message: String) {
     AlertDialog(
         onDismissRequest = {},
         icon = { CircularProgressIndicator(modifier = Modifier.size(40.dp)) },
-        title = { Text(message) },
+        title = { Text(message, modifier = Modifier.semantics { heading() }) },
         confirmButton = {},
     )
 }
@@ -500,7 +512,12 @@ private fun DatabaseRestorePreviewDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null) },
-        title = { Text(stringResource(R.string.database_restore_preview_title)) },
+        title = {
+            Text(
+                stringResource(R.string.database_restore_preview_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -545,7 +562,12 @@ private fun DatabaseBackupErrorDialog(
         }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.database_backup_error_title)) },
+        title = {
+            Text(
+                stringResource(R.string.database_backup_error_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = { Text(stringResource(message)) },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.import_close)) }
@@ -561,7 +583,7 @@ private fun ImportProgressDialog(
     AlertDialog(
         onDismissRequest = onCancel,
         icon = { CircularProgressIndicator() },
-        title = { Text(message) },
+        title = { Text(message, modifier = Modifier.semantics { heading() }) },
         confirmButton = {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.import_cancel)) }
         },
@@ -575,7 +597,12 @@ private fun ImportErrorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.import_error_title)) },
+        title = {
+            Text(
+                stringResource(R.string.import_error_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(
                 modifier =
@@ -628,7 +655,12 @@ private fun ImportPreviewDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
-        title = { Text(stringResource(R.string.import_preview_title)) },
+        title = {
+            Text(
+                stringResource(R.string.import_preview_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(
                 modifier =

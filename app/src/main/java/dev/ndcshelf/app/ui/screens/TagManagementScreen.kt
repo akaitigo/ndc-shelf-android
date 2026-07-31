@@ -74,6 +74,7 @@ internal fun TagManagementScreen(
     var mergeSourceTagId by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteTagId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameSearchId by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteSearchId by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (editorVisible) {
         val editing = tags.firstOrNull { it.tag.id == editorTagId }?.tag
@@ -121,7 +122,12 @@ internal fun TagManagementScreen(
         } else {
             AlertDialog(
                 onDismissRequest = { deleteTagId = null },
-                title = { Text(stringResource(R.string.tag_delete_confirm_title)) },
+                title = {
+                    Text(
+                        stringResource(R.string.tag_delete_confirm_title),
+                        modifier = Modifier.semantics { heading() },
+                    )
+                },
                 text = {
                     Text(
                         stringResource(
@@ -147,6 +153,45 @@ internal fun TagManagementScreen(
                 dismissButton = {
                     TextButton(onClick = { deleteTagId = null }) {
                         Text(stringResource(R.string.tag_delete_cancel))
+                    }
+                },
+            )
+        }
+    }
+
+    // 保存済み検索の削除はUndo手段がないため、実行前に必ず確認ダイアログを挟む。
+    deleteSearchId?.let { searchId ->
+        val target = savedSearches.firstOrNull { it.id == searchId }
+        if (target == null) {
+            deleteSearchId = null
+        } else {
+            AlertDialog(
+                onDismissRequest = { deleteSearchId = null },
+                title = {
+                    Text(
+                        stringResource(R.string.saved_search_delete_confirm_title),
+                        modifier = Modifier.semantics { heading() },
+                    )
+                },
+                text = {
+                    Text(stringResource(R.string.saved_search_delete_confirm_message, target.name))
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDeleteSavedSearch(searchId)
+                            deleteSearchId = null
+                        },
+                    ) {
+                        Text(
+                            stringResource(R.string.saved_search_delete_confirm),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteSearchId = null }) {
+                        Text(stringResource(R.string.saved_search_delete_cancel))
                     }
                 },
             )
@@ -283,7 +328,7 @@ internal fun TagManagementScreen(
                         TextButton(onClick = { renameSearchId = savedSearch.id }) {
                             Text(stringResource(R.string.saved_search_rename_action))
                         }
-                        TextButton(onClick = { onDeleteSavedSearch(savedSearch.id) }) {
+                        TextButton(onClick = { deleteSearchId = savedSearch.id }) {
                             Text(
                                 stringResource(R.string.saved_search_delete_action),
                                 color = MaterialTheme.colorScheme.error,
@@ -313,7 +358,11 @@ private fun TagRow(
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // タグ名・色ラベル・使用数を1ストップで読み上げるためmergeする。
+            Row(
+                modifier = Modifier.semantics(mergeDescendants = true) {},
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 TagColorSwatch(tagWithUsage.tag.colorRole)
                 Spacer(Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -359,7 +408,7 @@ private fun TagEditorDialog(
     var color by rememberSaveable { mutableStateOf(initialColor) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, modifier = Modifier.semantics { heading() }) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -412,7 +461,12 @@ private fun TagMergeDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.tag_merge_title)) },
+        title = {
+            Text(
+                stringResource(R.string.tag_merge_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -448,7 +502,7 @@ internal fun NameInputDialog(
     var name by rememberSaveable { mutableStateOf(initialValue) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, modifier = Modifier.semantics { heading() }) },
         text = {
             OutlinedTextField(
                 value = name,
