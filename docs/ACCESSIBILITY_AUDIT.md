@@ -115,6 +115,10 @@ WCAG 2.2 AA と Android のアクセシビリティ推奨に沿って、主要�
 - **色以外の状態表現**: タグの色スウォッチ（`TagColorSwatch`）は隣接テキストで必ず
   ラベルを併記する設計。同意状態・エラー表示・欠巻候補も文言で状態を表しており、
   色のみに依存する箇所は見つからなかった。
+- **自然言語検索の解釈チップ**（`LibraryScreen` の `InterpretationChipsRow`、#118 で追加）:
+  `InputChip` 全体が解除操作のクリック対象で、末尾の × アイコンには
+  `nl_search_chip_dismiss` により対象ラベルを含む説明が付く。Material3 の
+  `InputChip` はタッチ領域48dpを満たす（下記実測）。追加対応は不要と判断した。
 - **`Card(onClick = ...)` の自動 merge**: クリッカブルなカードは Compose の既定動作で
   子孫が merge されるため、`AppInfoScreen` のライセンス一覧などは追加対応不要。
 - **既存の Undo パターン**: 本の編集・本の削除・読書履歴削除は
@@ -130,7 +134,7 @@ Material3 1.4.0 のコンポーネントについて、Robolectric 上で `Seman
 
 | コンポーネント | 描画上の高さ | タッチ領域の高さ |
 | --- | --- | --- |
-| `FilterChip` | 36dp | **48dp** |
+| `FilterChip` / `InputChip` | 36dp | **48dp** |
 | `TextButton` | 52dp | **52dp** |
 
 `FilterChip` は描画上 36dp だが、Material3 が内部で最小タッチ領域を確保しており
