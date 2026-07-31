@@ -85,6 +85,10 @@ import dev.ndcshelf.app.domain.repository.TagMutationResult
 import dev.ndcshelf.app.domain.repository.TagRepository
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.repository.UpdateReadingSessionResult
+import dev.ndcshelf.app.domain.search.NaturalLanguageInterpretation
+import dev.ndcshelf.app.domain.search.NaturalLanguageQueryParser
+import dev.ndcshelf.app.domain.search.SearchInterpretationChip
+import dev.ndcshelf.app.domain.search.applyInterpretation
 import dev.ndcshelf.app.domain.sync.SyncEngineStatus
 import dev.ndcshelf.app.domain.sync.SyncStatusRepository
 import kotlinx.coroutines.CancellationException
@@ -97,6 +101,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -108,6 +113,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.TimeZone
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class MainViewModel(
@@ -125,6 +131,8 @@ class MainViewModel(
     private val seriesWatchScheduler: SeriesWatchScheduler? = null,
     syncStatusRepository: SyncStatusRepository? = null,
     private val consentRepository: ConsentRepository? = null,
+    private val nowMillisProvider: () -> Long = System::currentTimeMillis,
+    private val timeZoneProvider: () -> TimeZone = TimeZone::getDefault,
 ) : ViewModel() {
     init {
         if (seriesWatchRepository != null && seriesWatchScheduler != null) {
@@ -148,14 +156,54 @@ class MainViewModel(
             )
     private val _librarySearchCriteria = MutableStateFlow(librarySearchSettings.load())
     val librarySearchCriteria: StateFlow<LibrarySearchCriteria> = _librarySearchCriteria.asStateFlow()
-    val librarySearchResult: StateFlow<LibrarySearchResult> =
-        _librarySearchCriteria
-            .debounce { criteria -> if (criteria.selectedEditionId == null) SEARCH_DEBOUNCE_MILLIS else 0L }
+
+    /** 解釈チップを個別解除した際の解除済みチップID。クエリ文字列が変わるとリセットする。 */
+    private val _dismissedInterpretationChipIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** 自然言語解釈はdebounceで確定したクエリに対して1回だけ実行する（キー入力ごとには走らない）。 */
+    private val interpretedSearch =
+        combine(
+            _librarySearchCriteria
+                .debounce { criteria -> if (criteria.selectedEditionId == null) SEARCH_DEBOUNCE_MILLIS else 0L }
+                .distinctUntilChanged()
+                .onEach { criteria ->
+                    if (criteria.selectedEditionId == null) librarySearchSettings.save(criteria)
+                },
+            (tagRepository?.observeTags() ?: flowOf(emptyList()))
+                .map { entries -> entries.map(TagWithUsage::tag) }
+                .distinctUntilChanged(),
+        ) { criteria, tagList -> criteria to tagList }
             .distinctUntilChanged()
-            .onEach { criteria ->
-                if (criteria.selectedEditionId == null) librarySearchSettings.save(criteria)
-            }.flatMapLatest { criteria ->
-                repository.observeLibrary(criteria).map { books -> LibrarySearchResult(criteria, books) }
+            .map { (criteria, tagList) ->
+                val interpretation =
+                    if (criteria.selectedEditionId == null) {
+                        NaturalLanguageQueryParser.parse(
+                            query = criteria.normalizedQuery,
+                            tags = tagList,
+                            nowMillis = nowMillisProvider(),
+                            timeZone = timeZoneProvider(),
+                        )
+                    } else {
+                        NaturalLanguageInterpretation.NONE
+                    }
+                criteria to interpretation
+            }
+
+    val librarySearchResult: StateFlow<LibrarySearchResult> =
+        combine(
+            interpretedSearch,
+            _dismissedInterpretationChipIds,
+        ) { (criteria, interpretation), dismissedChipIds ->
+            InterpretedLibrarySearch(
+                criteria = criteria,
+                effectiveCriteria = criteria.applyInterpretation(interpretation, dismissedChipIds),
+                chips = interpretation.chips.filterNot { chip -> chip.id in dismissedChipIds },
+            )
+        }.distinctUntilChanged()
+            .flatMapLatest { search ->
+                repository.observeLibrary(search.effectiveCriteria).map { books ->
+                    LibrarySearchResult(search.criteria, books, search.chips)
+                }
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -500,10 +548,18 @@ class MainViewModel(
     }
 
     fun updateLibraryQuery(query: String) {
-        _librarySearchCriteria.value =
-            _librarySearchCriteria.value.copy(
-                query = query.take(MAX_LIBRARY_QUERY_LENGTH),
-            )
+        val current = _librarySearchCriteria.value
+        val nextQuery = query.take(MAX_LIBRARY_QUERY_LENGTH)
+        // クエリ文字列が変わったら解釈をやり直すため、チップの解除状態もリセットする。
+        if (current.query != nextQuery) {
+            _dismissedInterpretationChipIds.value = emptySet()
+        }
+        _librarySearchCriteria.value = current.copy(query = nextQuery)
+    }
+
+    /** 解釈チップを個別に解除する。解除した範囲の語は通常の部分一致検索へ戻る。 */
+    fun dismissInterpretationChip(chipId: String) {
+        _dismissedInterpretationChipIds.value = _dismissedInterpretationChipIds.value + chipId
     }
 
     fun updateLibraryReadingStatus(status: ReadingStatus?) {
@@ -1424,6 +1480,7 @@ class MainViewModel(
     }
 
     fun applySavedSearch(savedSearch: SavedSearch) {
+        _dismissedInterpretationChipIds.value = emptySet()
         _librarySearchCriteria.value = savedSearch.criteria.copy(selectedEditionId = null)
     }
 
@@ -1710,6 +1767,15 @@ sealed interface SeriesWatchMutationUiState {
 data class LibrarySearchResult(
     val criteria: LibrarySearchCriteria,
     val books: List<LibraryBook>,
+    /** 実行済み検索へ適用中の自然言語解釈チップ（解除済みは含まない）。 */
+    val interpretationChips: List<SearchInterpretationChip> = emptyList(),
+)
+
+/** debounce済み手動条件 + 解釈適用後の実効条件 + 表示チップのスナップショット。 */
+private data class InterpretedLibrarySearch(
+    val criteria: LibrarySearchCriteria,
+    val effectiveCriteria: LibrarySearchCriteria,
+    val chips: List<SearchInterpretationChip>,
 )
 
 sealed interface SeriesEditorUiState {
