@@ -101,7 +101,12 @@ class ConsentScreenTest {
 
     /** 同じラベルのボタンが目的ごとに並ぶため、表示順で対象を選ぶ。 */
     private fun grantButtonFor(purpose: ConsentPurpose): SemanticsNodeInteraction {
-        val index = listOf(ConsentPurpose.SERIES_RELEASE_WATCH, ConsentPurpose.AI_LIBRARIAN).indexOf(purpose)
+        val index =
+            listOf(
+                ConsentPurpose.SERIES_RELEASE_WATCH,
+                ConsentPurpose.LIBRARY_SYNC,
+                ConsentPurpose.AI_LIBRARIAN,
+            ).indexOf(purpose)
         return composeRule.onAllNodes(hasText(context.getString(R.string.consent_grant_button)))[index]
     }
 

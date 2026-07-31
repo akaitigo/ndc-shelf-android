@@ -85,6 +85,7 @@ import dev.ndcshelf.app.domain.repository.TagMutationResult
 import dev.ndcshelf.app.domain.repository.TagRepository
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.repository.UpdateReadingSessionResult
+import dev.ndcshelf.app.domain.sync.LibrarySyncScheduler
 import dev.ndcshelf.app.domain.search.NaturalLanguageInterpretation
 import dev.ndcshelf.app.domain.search.NaturalLanguageQueryParser
 import dev.ndcshelf.app.domain.search.SearchInterpretationChip
@@ -131,6 +132,7 @@ class MainViewModel(
     private val seriesWatchScheduler: SeriesWatchScheduler? = null,
     syncStatusRepository: SyncStatusRepository? = null,
     private val consentRepository: ConsentRepository? = null,
+    private val librarySyncScheduler: LibrarySyncScheduler? = null,
     private val nowMillisProvider: () -> Long = System::currentTimeMillis,
     private val timeZoneProvider: () -> TimeZone = TimeZone::getDefault,
 ) : ViewModel() {
@@ -470,6 +472,10 @@ class MainViewModel(
                 source.revoke(purpose)
                 if (purpose == ConsentPurpose.SERIES_RELEASE_WATCH) {
                     seriesWatchScheduler?.reconcile(false)
+                }
+                if (purpose == ConsentPurpose.LIBRARY_SYNC) {
+                    // fail-closed: 撤回後は定期同期workを直ちにcancelする。
+                    librarySyncScheduler?.reconcile(false)
                 }
             }
         }
@@ -1727,6 +1733,7 @@ class MainViewModel(
             seriesWatchScheduler: SeriesWatchScheduler? = null,
             syncStatusRepository: SyncStatusRepository? = null,
             consentRepository: ConsentRepository? = null,
+            librarySyncScheduler: LibrarySyncScheduler? = null,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -1744,6 +1751,7 @@ class MainViewModel(
                         seriesWatchScheduler = seriesWatchScheduler,
                         syncStatusRepository = syncStatusRepository,
                         consentRepository = consentRepository,
+                        librarySyncScheduler = librarySyncScheduler,
                     ) as T
                 }
             }

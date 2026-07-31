@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 15
+const val APP_DATABASE_VERSION = 16
 
 @Database(
     entities = [
@@ -32,6 +32,12 @@ const val APP_DATABASE_VERSION = 15
         SyncAcknowledgementEntity::class,
         SyncConflictEntity::class,
         SyncUnresolvedDependencyEntity::class,
+        SyncIdentityEntity::class,
+        SyncWrappedKeyEntity::class,
+        SyncPeerDeviceEntity::class,
+        SyncInviteEntity::class,
+        SyncProcessedEnvelopeEntity::class,
+        SyncQuarantineEntity::class,
         ConsentRecordEntity::class,
         ReadingSessionEntity::class,
         TagEntity::class,
@@ -62,6 +68,7 @@ abstract class AppDatabase : RoomDatabase() {
                 MIGRATION_12_13,
                 MIGRATION_13_14,
                 MIGRATION_14_15,
+                MIGRATION_15_16,
             )
     }
 
@@ -77,6 +84,8 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun syncDao(): SyncDao
 
+    abstract fun syncKeyDao(): SyncKeyDao
+
     abstract fun consentDao(): ConsentDao
 
     abstract fun readingSessionDao(): ReadingSessionDao
@@ -85,6 +94,101 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
+
+// Issue #38: E2EE同期の鍵state・device registry cache・招待・quarantineを追加する。
+// 鍵の平文は保存せず、Keystore wrapping keyで暗号化したblobだけを置く。
+private val MIGRATION_15_16 =
+    object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_identity (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    libraryId TEXT NOT NULL,
+                    libraryOpaqueId TEXT NOT NULL,
+                    deviceId TEXT NOT NULL,
+                    deviceName TEXT NOT NULL,
+                    epoch INTEGER NOT NULL,
+                    registryGeneration INTEGER NOT NULL,
+                    registryHash TEXT,
+                    headGeneration INTEGER NOT NULL,
+                    trustedHeadHash TEXT,
+                    encryptionCounter INTEGER NOT NULL,
+                    lastUploadedObjectId TEXT,
+                    backendType TEXT NOT NULL,
+                    backendConfig TEXT NOT NULL,
+                    hardwareBackedKeys INTEGER NOT NULL,
+                    activated INTEGER NOT NULL,
+                    securityLockout TEXT,
+                    createdAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_wrapped_keys (
+                    keyType TEXT NOT NULL,
+                    keyVersion INTEGER NOT NULL,
+                    nonce TEXT NOT NULL,
+                    ciphertext TEXT NOT NULL,
+                    keyAliasVersion INTEGER NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    PRIMARY KEY(keyType, keyVersion)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_peer_devices (
+                    deviceId TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    signingPublicKey TEXT NOT NULL,
+                    hpkePublicKey TEXT NOT NULL,
+                    addedAtGeneration INTEGER NOT NULL,
+                    revokedAtGeneration INTEGER,
+                    lastSyncAt INTEGER,
+                    lastObjectId TEXT,
+                    lastEncryptionCounter INTEGER NOT NULL,
+                    isSelf INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_sync_peer_devices_isSelf ON sync_peer_devices(isSelf)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_invites (
+                    nonce TEXT NOT NULL PRIMARY KEY,
+                    secret TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    expiresAt INTEGER NOT NULL,
+                    consumedAt INTEGER
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_processed_envelopes (
+                    envelopeId TEXT NOT NULL PRIMARY KEY,
+                    inviteNonce TEXT NOT NULL,
+                    processedAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_quarantine (
+                    objectId TEXT NOT NULL PRIMARY KEY,
+                    reason TEXT NOT NULL,
+                    bytes BLOB,
+                    truncated INTEGER NOT NULL,
+                    receivedAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+        }
+    }
 
 // v14→v15 はタグ・タグ付与・保存済み検索の空テーブル追加のみで、既存データを変更しない。
 private val MIGRATION_14_15 =
