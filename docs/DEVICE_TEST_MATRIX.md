@@ -26,6 +26,15 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
   コミットする。大文字は fontScale 1.5 に加え 2.0（library / insights / onboarding）も
   golden 化し、200%文字での切れ・重なりを検出する。
   日英スクリーンショットは#44（i18n）導入後にlocale軸を追加する。
+  大画面はwindow qualifiersで medium（w720dp）と expanded（w1280dp）の代表2枚を
+  golden化し、NavigationRailとlist-detail 2ペインの回帰を検出する
+  （方針は `docs/ADAPTIVE_LAYOUT.md`）。
+- **ウィンドウサイズクラス回帰**: `AdaptiveLayoutTest`（breakpoint境界）、
+  `AdaptiveNavigationTest`（qualifiers 411 / 720 / 1280dp でのバー⇔レール切り替え、
+  48dpタップ領域、キーボードのフォーカスとEnter発火）、`AdaptivePaneTest`
+  （2ペイン表示、サイズクラス変更とプロセス再生成での選択・入力・スクロール保持）を
+  JVM層で実行する。折りたたみの物理的な姿勢変更はエミュレーターで再現しないため、
+  下記の手動実機層で確認する。
 - **エミュレーターinstrumentation**: API 26 / 29 / 35 × pixel_7 で
   `connectedDebugAndroidTest`。画面単位テストに加え、`E2eManualRegistrationTest`
   がオンボーディング→手動登録→本棚表示→Activity再生成の主要フローを実DBで検証する。
@@ -56,6 +65,9 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
 7. アクセシビリティ実機ゲート（TalkBackスモーク・Switch Access・拡大とコントラスト・
    モーション低減）。手順は `docs/ACCESSIBILITY_AUDIT.md` の「実機ゲート」に定義し、
    実走はリリースゲートで実施する。CIのATF自動チェックはこれを代替しない。
+8. 大画面・折りたたみゲート（折りたたみの開閉、分割画面の幅変更、タブレット横持ち、
+   物理キーボードのTab移動とEnter発火）。手順は `docs/ADAPTIVE_LAYOUT.md` の
+   「実機での確認（リリースゲート）」に定義する。
 
 結果は表形式（端末・OS・結果・日付・実施者）でチェックリストへ残し、失敗時は
 再試行ではなくIssue化して原因を修正する。
