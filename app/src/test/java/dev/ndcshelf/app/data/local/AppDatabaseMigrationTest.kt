@@ -672,6 +672,59 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version15To16AddsEmptySyncKeyTablesWithoutChangingDomainData() {
+        migrationHelper.createDatabase(V15_DATABASE, 15).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', '同期前の本', '匿名著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition', 'work', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN', 'NDL')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy', 'edition', 'PHYSICAL', '棚', 'READING', 42, NULL, NULL, '保存用')",
+            )
+            close()
+        }
+
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V15_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+
+        // 追加tableは空で作られ、鍵の平文列を持たない。
+        listOf(
+            "sync_identity",
+            "sync_wrapped_keys",
+            "sync_peer_devices",
+            "sync_invites",
+            "sync_processed_envelopes",
+            "sync_quarantine",
+        ).forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+        }
+        // 既存domain dataは変わらない。
+        migrated.query("SELECT title FROM book_works WHERE id = 'work'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("同期前の本", cursor.getString(0))
+        }
+        migrated.assertIndex("sync_peer_devices", "index_sync_peer_devices_isSelf", unique = false)
+        // 鍵はwrap済みblobだけを保持する（平文列を作らない）。
+        val wrappedKeyColumns = migrated.queryNames("PRAGMA table_info(sync_wrapped_keys)", "name")
+        assertEquals(
+            setOf("keyType", "keyVersion", "nonce", "ciphertext", "keyAliasVersion", "createdAt"),
+            wrappedKeyColumns,
+        )
+        migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        migrated.close()
+    }
+
+    @Test
     fun version14To15AddsEmptyTagTablesWithoutChangingDomainData() {
         migrationHelper.createDatabase(V14_DATABASE, 14).apply {
             execSQL("INSERT INTO book_works VALUES ('work', 'タグ前の本', '匿名著者')")
@@ -783,6 +836,7 @@ class AppDatabaseMigrationTest {
         const val V12_DATABASE = "migration-v12"
         const val V13_DATABASE = "migration-v13"
         const val V14_DATABASE = "migration-v14"
+        const val V15_DATABASE = "migration-v15"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 
