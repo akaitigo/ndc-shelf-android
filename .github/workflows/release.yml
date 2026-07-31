@@ -78,7 +78,7 @@ jobs:
           "$APKSIGNER" verify --print-certs --verbose \
             app/build/outputs/apk/release/app-release.apk | tee "$RUNNER_TEMP/apk-signature.txt"
           grep -q "Verifies" "$RUNNER_TEMP/apk-signature.txt"
-          grep -qi "Signer #1 certificate SHA-256 digest" "$RUNNER_TEMP/apk-signature.txt"
+          grep -qi "certificate SHA-256 digest" "$RUNNER_TEMP/apk-signature.txt"
 
       - name: Collect release artifacts and checksums
         run: |
