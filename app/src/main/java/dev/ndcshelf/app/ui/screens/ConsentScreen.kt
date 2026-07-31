@@ -40,7 +40,7 @@ import java.util.Locale
 @Composable
 fun ConsentScreen(
     consents: Map<ConsentPurpose, ConsentRecord>,
-    payloadPreviewItems: List<String>,
+    payloadPreviewItems: Map<ConsentPurpose, List<String>>,
     onGrant: (ConsentPurpose) -> Unit,
     onRevoke: (ConsentPurpose) -> Unit,
     contentPadding: PaddingValues,
@@ -51,7 +51,7 @@ fun ConsentScreen(
     previewPurpose?.let { purpose ->
         ConsentPayloadDialog(
             purpose = purpose,
-            payloadItems = payloadPreviewItems,
+            payloadItems = payloadPreviewItems[purpose].orEmpty(),
             onAccept = {
                 onGrant(purpose)
                 previewPurpose = null
@@ -206,7 +206,7 @@ fun ConsentPayloadDialog(
                 ConsentDetailRow(R.string.consent_detail_retention_label, purpose.retentionRes)
                 ConsentDetailRow(R.string.consent_detail_third_party_label, purpose.thirdPartyRes)
                 if (payloadItems.isEmpty()) {
-                    Text(stringResource(R.string.consent_preview_empty))
+                    Text(stringResource(purpose.previewEmptyRes))
                 } else {
                     Text(stringResource(R.string.consent_preview_description))
                     payloadItems.take(MAX_PREVIEW_ITEMS).forEach { item ->
@@ -269,7 +269,8 @@ private fun consentStatusText(
 private fun formatConsentDate(millis: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(millis))
 
 /** 表示対象は提供済み機能の目的だけ。未提供機能は該当Issueの実装時に追加する。 */
-private val AVAILABLE_PURPOSES = listOf(ConsentPurpose.SERIES_RELEASE_WATCH)
+private val AVAILABLE_PURPOSES =
+    listOf(ConsentPurpose.SERIES_RELEASE_WATCH, ConsentPurpose.AI_LIBRARIAN)
 
 internal val ConsentPurpose.titleRes: Int
     get() =
@@ -285,6 +286,7 @@ internal val ConsentPurpose.purposeRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_purpose
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_purpose
+            ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_purpose
             else -> R.string.consent_purpose_not_available
         }
 
@@ -293,6 +295,7 @@ internal val ConsentPurpose.destinationRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_destination
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_destination
+            ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_destination
             else -> R.string.consent_purpose_not_available
         }
 
@@ -301,6 +304,7 @@ internal val ConsentPurpose.itemsRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_items
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_items
+            ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_items
             else -> R.string.consent_purpose_not_available
         }
 
@@ -309,7 +313,16 @@ internal val ConsentPurpose.retentionRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_retention
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_retention
+            ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_retention
             else -> R.string.consent_purpose_not_available
+        }
+
+/** 送信対象が空のときの説明。目的ごとに「なぜ空か」が異なる。 */
+internal val ConsentPurpose.previewEmptyRes: Int
+    get() =
+        when (this) {
+            ConsentPurpose.AI_LIBRARIAN -> R.string.consent_preview_empty_ai
+            else -> R.string.consent_preview_empty
         }
 
 internal val ConsentPurpose.thirdPartyRes: Int
@@ -317,6 +330,7 @@ internal val ConsentPurpose.thirdPartyRes: Int
         when (this) {
             ConsentPurpose.SERIES_RELEASE_WATCH -> R.string.consent_purpose_series_watch_third_party
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_third_party
+            ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_third_party
             else -> R.string.consent_purpose_not_available
         }
 

@@ -150,6 +150,7 @@ fun LibraryScreen(
     onSaveCurrentSearch: (String) -> Unit = {},
     onApplySavedSearch: (SavedSearch) -> Unit = {},
     onOpenTagManager: () -> Unit = {},
+    onOpenAiLibrarian: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     var localQuery by rememberSaveable { mutableStateOf("") }
@@ -343,6 +344,12 @@ fun LibraryScreen(
                     modifier = Modifier.align(Alignment.End),
                 ) {
                     Text(stringResource(R.string.tag_manage_action))
+                }
+                TextButton(
+                    onClick = onOpenAiLibrarian,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(stringResource(R.string.ai_librarian_open_action))
                 }
                 if (bulkSelectedCopyIds.isNotEmpty()) {
                     Row(

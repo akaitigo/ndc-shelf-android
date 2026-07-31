@@ -44,6 +44,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import dev.ndcshelf.app.AiLibrarianViewModel
 import dev.ndcshelf.app.BookDeleteFailure
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditFailure
@@ -69,6 +70,7 @@ import dev.ndcshelf.app.domain.diagnostics.DiagnosticsSnapshot
 import dev.ndcshelf.app.domain.diagnostics.buildDiagnosticsReport
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.model.OnboardingStore
+import dev.ndcshelf.app.ui.navigation.AiLibrarianRoute
 import dev.ndcshelf.app.ui.navigation.ConsentRoute
 import dev.ndcshelf.app.ui.navigation.DataGraph
 import dev.ndcshelf.app.ui.navigation.DataRoute
@@ -85,6 +87,7 @@ import dev.ndcshelf.app.ui.navigation.SeriesSuggestionRoute
 import dev.ndcshelf.app.ui.navigation.TagManagementRoute
 import dev.ndcshelf.app.ui.navigation.TopLevelDestination
 import dev.ndcshelf.app.ui.navigation.WorkVariantRoute
+import dev.ndcshelf.app.ui.screens.AiLibrarianScreen
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.ConsentPayloadDialog
 import dev.ndcshelf.app.ui.screens.ConsentScreen
@@ -759,6 +762,54 @@ fun NdcShelfApp(
                         onOpenTagManager = {
                             navController.navigate(TagManagementRoute) { launchSingleTop = true }
                         },
+                        onOpenAiLibrarian = {
+                            navController.navigate(AiLibrarianRoute) { launchSingleTop = true }
+                        },
+                        contentPadding = contentPadding,
+                    )
+                }
+
+                composable<AiLibrarianRoute> {
+                    val application = context.applicationContext as NdcShelfApplication
+                    val aiLibrarianViewModel: AiLibrarianViewModel =
+                        viewModel(
+                            factory =
+                                AiLibrarianViewModel.factory(
+                                    libraryRepository = application.container.libraryRepository,
+                                    tagRepository = application.container.tagRepository,
+                                    readingHistoryRepository =
+                                        application.container.readingHistoryRepository,
+                                    consentRepository = application.container.consentRepository,
+                                    provider = application.container.aiLibrarianProvider,
+                                    usageStore = application.container.aiLibrarianUsageStore,
+                                    historyStore = application.container.aiLibrarianHistoryStore,
+                                ),
+                        )
+                    val aiState by aiLibrarianViewModel.state.collectAsStateWithLifecycle()
+                    val searchResult by viewModel.librarySearchResult.collectAsStateWithLifecycle()
+                    LaunchedEffect(searchResult) {
+                        aiLibrarianViewModel.setSearchResultCopyIds(
+                            searchResult.books.mapTo(mutableSetOf()) { book -> book.copyId },
+                        )
+                    }
+                    AiLibrarianScreen(
+                        state = aiState,
+                        onBack = { navController.popBackStack() },
+                        onQuestionChange = aiLibrarianViewModel::updateQuestion,
+                        onSelectScope = aiLibrarianViewModel::selectScope,
+                        onToggleBook = aiLibrarianViewModel::toggleBookSelection,
+                        onClearBookSelection = aiLibrarianViewModel::clearBookSelection,
+                        onSelectTag = aiLibrarianViewModel::selectTag,
+                        onToggleField = aiLibrarianViewModel::toggleField,
+                        onResetFields = aiLibrarianViewModel::resetFieldsToDefault,
+                        onPreview = aiLibrarianViewModel::preparePreview,
+                        onDismissPreview = aiLibrarianViewModel::dismissPreview,
+                        onConfirmAsk = aiLibrarianViewModel::confirmAsk,
+                        onCancelAsk = aiLibrarianViewModel::cancelAsk,
+                        onDismissAnswer = aiLibrarianViewModel::dismissAnswer,
+                        onGrantConsent = aiLibrarianViewModel::grantConsent,
+                        onRevokeConsent = aiLibrarianViewModel::revokeConsent,
+                        onClearHistory = aiLibrarianViewModel::clearHistory,
                         contentPadding = contentPadding,
                     )
                 }
@@ -979,9 +1030,12 @@ fun NdcShelfApp(
                     ConsentScreen(
                         consents = consents,
                         payloadPreviewItems =
-                            seriesWatches
-                                .filter { it.watch.enabled }
-                                .map { it.watch.queryTitle },
+                            mapOf(
+                                ConsentPurpose.SERIES_RELEASE_WATCH to
+                                    seriesWatches
+                                        .filter { it.watch.enabled }
+                                        .map { it.watch.queryTitle },
+                            ),
                         onGrant = viewModel::grantConsent,
                         onRevoke = viewModel::revokeConsent,
                         contentPadding = contentPadding,
