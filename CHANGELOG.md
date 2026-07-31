@@ -31,6 +31,7 @@
 
 ### Changed
 
+- CIへ主要画面のライト・ダーク・大文字スクリーンショット回帰（Roborazzi golden比較）、API 26エミュレーターの互換性行列、手動登録→本棚→Activity再生成のE2Eテストを追加。実機検証との分離と証跡はdocs/DEVICE_TEST_MATRIX.mdへ定義。
 - ランチャーアイコンをadaptive icon（foreground/background/monochrome、安全領域準拠、Android 13テーマアイコン対応）へ移行。
 - リリースビルドでR8によるコード縮小・リソース縮小を有効化し、署名鍵をGitHub release environment secretsから供給する再現可能な署名付きAAB生成（タグ整合検証・mapping/SBOM/checksums添付・承認ゲート付き）を自動化。
 

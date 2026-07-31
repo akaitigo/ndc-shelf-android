@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -205,7 +206,9 @@ fun ScanScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(SCAN_LIST_TAG),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = contentPadding.calculateTopPadding(),
@@ -912,7 +915,9 @@ private fun ManualRegistrationDialog(
                     onValueChange = { title = it },
                     label = { Text(stringResource(R.string.book_edit_book_title)) },
                     isError = invalid?.errors?.any { it.field.name == "TITLE" } == true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(MANUAL_REGISTRATION_TITLE_TAG),
                 )
                 OutlinedTextField(
                     value = author,
@@ -1316,3 +1321,7 @@ private fun ManualIsbnEntry(
         }
     }
 }
+
+
+internal const val MANUAL_REGISTRATION_TITLE_TAG = "manual-registration-title"
+internal const val SCAN_LIST_TAG = "scan-list"
