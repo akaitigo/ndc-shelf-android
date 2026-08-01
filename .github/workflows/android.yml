@@ -14,6 +14,39 @@ permissions:
   contents: read
 
 jobs:
+  # CIスクリプトとワークフローの誤りは「検査対象ゼロで成功」という形で
+  # 静かに漏れる。実際にAction固定検査とOSVスキャンが空振りしていたため、
+  # 静的解析をゲートに入れる。
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint shell scripts
+        run: |
+          if ! command -v shellcheck >/dev/null; then
+            echo "shellcheck is not available on this runner." >&2
+            exit 1
+          fi
+          shellcheck .github/scripts/*.sh
+
+      - name: Lint workflows
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+          ACTIONLINT_SHA256: 023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+        run: |
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar xzf "$archive" actionlint
+          ./actionlint
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -75,13 +108,23 @@ jobs:
       - name: Verify action references are immutable
         run: .github/scripts/verify-action-pins.sh
 
+      # upload-artifact に複数pathを渡すと共通の親ディレクトリが剥がされ、
+      # 参照側のパスが暗黙に決まってしまう。平坦な1ディレクトリへ集約し、
+      # 受け取り側が固定パスで検証できるようにする。
+      - name: Collect release compliance artifacts
+        run: |
+          mkdir -p release-compliance
+          cp app/build/reports/cyclonedx/ndc-shelf.cdx.json release-compliance/
+          cp app/build/reports/licenses/THIRD-PARTY-NOTICES.json release-compliance/
+
+      - name: Verify release compliance artifacts
+        run: .github/scripts/verify-compliance-artifacts.sh release-compliance
+
       - name: Upload release compliance artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-compliance
-          path: |
-            app/build/reports/cyclonedx/ndc-shelf.cdx.json
-            app/build/reports/licenses/THIRD-PARTY-NOTICES.json
+          path: release-compliance/
           if-no-files-found: error
           retention-days: 30
 
@@ -212,6 +255,12 @@ jobs:
           name: release-compliance
           path: release-compliance
 
+      - name: Verify release compliance artifacts
+        run: .github/scripts/verify-compliance-artifacts.sh release-compliance
+
+      # 脆弱性が見つかると非ゼロ終了するため、判定は後段のreporterへ委ねる。
+      # ただし対象ファイルが無い場合も同じく非ゼロで隠れるので、
+      # 直前の検証と直後の出力チェックで空振りを塞ぐ。
       - name: Scan SBOM with OSV
         uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         continue-on-error: true
@@ -219,8 +268,15 @@ jobs:
           scan-args: |-
             --format=json
             --output=osv-results.json
-            -L=release-compliance/app/build/reports/cyclonedx/ndc-shelf.cdx.json
+            -L=release-compliance/ndc-shelf.cdx.json
             --config=osv-scanner.toml
+
+      - name: Verify OSV produced results
+        run: |
+          if [[ ! -s osv-results.json ]]; then
+            echo "OSV scanner produced no results file; the scan did not run." >&2
+            exit 1
+          fi
 
       - name: Enforce vulnerability policy
         uses: google/osv-scanner-action/osv-reporter-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
@@ -258,17 +314,26 @@ jobs:
       contents: write
 
     steps:
+      # 検証スクリプトを使うためにリポジトリが必要。
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Download release compliance artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-compliance
           path: release-compliance
 
+      - name: Verify release compliance artifacts
+        run: .github/scripts/verify-compliance-artifacts.sh release-compliance
+
       - name: Attach SBOM and notices to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release upload "${GITHUB_REF_NAME}"
-          release-compliance/app/build/reports/cyclonedx/ndc-shelf.cdx.json
-          release-compliance/app/build/reports/licenses/THIRD-PARTY-NOTICES.json
+          release-compliance/ndc-shelf.cdx.json
+          release-compliance/THIRD-PARTY-NOTICES.json
           --clobber
