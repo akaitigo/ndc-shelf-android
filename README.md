@@ -36,6 +36,41 @@
 - プライバシー、NDL出典、アプリ情報、OSSライセンスのオフライン表示
 - ライトテーマ、ダークテーマ、Material You
 
+## インストール
+
+**NDC Shelfは無料のオープンソースアプリです。アプリストアでは配布せず、GitHub Releasesで署名付きAPKを提供します。**
+
+1. [Releases](https://github.com/akaitigo/ndc-shelf-android/releases)から最新の `ndc-shelf-vX.Y.Z.apk` をダウンロードする
+2. Androidの設定で、ブラウザまたはファイルアプリに「不明なアプリのインストール」を許可する
+3. ダウンロードしたAPKを開いてインストールする
+
+対応環境はAndroid 6.0（API 23）以降です。
+
+### 配布物の検証（任意）
+
+各Releaseには `SHA256SUMS.txt` と `apk-signature-vX.Y.Z.txt` を添付しています。
+
+```bash
+# 完全性の検証
+sha256sum -c SHA256SUMS.txt
+
+# 配布元の同一性の検証
+apksigner verify --print-certs ndc-shelf-vX.Y.Z.apk
+```
+
+署名証明書のSHA-256は全リリースで次の値になります。異なる値のAPKは、この
+リポジトリが配布したものではありません。
+
+```
+774a57fd47754271720da5a82f3820977f045a1592459e6c3f942e22f109cada
+```
+
+### 更新について
+
+- 自動更新はありません。新版の告知はGitHub Releasesで行います（リポジトリをWatchすると通知を受け取れます）
+- 更新は同じ署名鍵のAPKを上書きインストールするだけで、蔵書データは保持されます
+- アプリ内の「データ」画面から、いつでもJSON / CSVエクスポートと完全バックアップを取得できます
+
 ## スクリーン
 
 | 本棚 | スキャン | シリーズ | 分類 | データ | 情報 |
