@@ -7,7 +7,7 @@ NDC Shelfへの貢献をありがとうございます。
 1. 変更内容に対応するIssueを確認または作成します。
 2. 小さく焦点を絞ったブランチを作ります。
 3. 実装とテストを追加します。
-4. `./gradlew testDebugUnitTest lintDebug` を実行します。
+4. `./gradlew testStandardDebugUnitTest lintStandardDebug` を実行します。
 5. 目的、変更点、確認方法をPull Requestに記載します。
 
 mainへの直接pushは禁止です。Draft PRで作業し、base branchの最新化、必須CI、未解決conversationがないことを確認してからReady for reviewへ変更します。mergeと緊急時の手順は[Repository governance](docs/REPOSITORY_GOVERNANCE.md)を参照してください。

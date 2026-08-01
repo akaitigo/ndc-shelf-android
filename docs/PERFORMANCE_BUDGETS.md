@@ -13,7 +13,7 @@ flakyな時間指標を必須CIへ入れない方針（Issue #48）に従い、�
 
 | 層 | 実行タイミング | 判定 | 対象指標 |
 | --- | --- | --- | --- |
-| 1. CI安定層 | 毎PR（`android.yml` verify）＋リリース（`release.yml`） | 予算超過でCI失敗 | EXPLAIN QUERY PLANの索引使用、DBファイル容量、Migration完走・行数保存、検索結果の正しさ（時間はスモーク上限のみ）、リリースAABサイズ |
+| 1. CI安定層 | 毎PR（`android.yml` verify）＋リリース（`release.yml`） | 予算超過でCI失敗 | EXPLAIN QUERY PLANの索引使用、DBファイル容量、Migration完走・行数保存、検索結果の正しさ（時間はスモーク上限のみ）、リリースAPK／AABサイズ |
 | 2. 準安定層（Macrobenchmark） | `benchmark.yml`（workflow_dispatch）またはローカルのGradle Managed Device | 予算と比較して人が判定・記録 | cold/warm起動時間、Baseline Profile有無の差分 |
 | 3. 実機ラボ層 | リリース前チェックリスト（`docs/releases/`） | 実機実測を記録し予算と比較 | 実機起動時間、主要画面初回表示、スクロールjank、連続スキャンfps・発熱・電池、同期・新刊ウォッチの通信量・wakeup、Play Vitals |
 
@@ -93,60 +93,71 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 
 ## 配布サイズ（層1、release workflowで判定）
 
-| 指標 | 実測（2026-08-01、R8有効・未署名） | 予算 |
-| --- | ---: | ---: |
-| リリースAAB（`app-release.aab`） | 18,450,318 B | 21,000,000 B |
+配布物はフレーバーごとに2つある（`docs/adr/0009-on-device-llm-librarian.md`）。
 
-`:app:verifyReleaseBundleSize` が `bundleRelease` の成果物サイズを予算と比較する。
-`bundleRelease` は毎PRのverifyには重いため必須ジョブへは入れず、
-`release.yml`（リリース時に必ず実行）と `benchmark.yml`（workflow_dispatch）で実行する。
-主なサイズ要因はML Kitバーコードモデルと `libbarhopper_v3.so`（4 ABI）で、
-超過時はABI別配信・依存の見直しを先に検討し、正当な増加であればこの表と
-タスク定数の両方を更新する。
+**利用者が実際にダウンロードするのはAPKである。** ADR 0008でGitHub Releasesの署名付きAPK
+配布へ切り替えたため、端末ごとに分割されるAAB（ストア配布用の予備成果物）のサイズは
+配布サイズを表さない。実測でAPKはAABの約1.4倍になるため、両方を独立に検査する。
 
-参考: 同条件でarm64-v8aだけを同梱すると 11,610,678 B（2026-08-01、#126のmerge前に実測）。
+| 配布物 | applicationId | 端末内LLM | APK実測 | APK予算 | AAB実測 | AAB予算 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `standard`（`ndc-shelf-vX.Y.Z.apk`） | `dev.ndcshelf.app` | 含まない | 25,381,403 B | 27,000,000 B | 18,507,420 B | 21,000,000 B |
+| `ai`（`ndc-shelf-vX.Y.Z-ai.apk`） | `dev.ndcshelf.app.ai` | LiteRT-LM（arm64-v8aのみ） | 31,475,717 B | 34,000,000 B | 22,296,712 B | 24,000,000 B |
 
-## 端末内LLM AI司書（層3、未採用）
+実測は2026-08-01、R8有効・未署名。`standard`はABI splitを行わないuniversal APKで、
+4種すべてのABIのネイティブライブラリを含む（sideloadする利用者にABI選択をさせないため）。
+`ai`は`abiFilters`でarm64-v8aへ限定する。LiteRT-LMがarm64-v8aしか提供せず、
+他ABIへ配っても端末内LLMが動かないためで、これによりAPKを47,025,138 Bから
+31,475,717 Bへ33%削減した。他ABIの端末は`standard`を使う。
 
-`docs/adr/0009-on-device-llm-librarian.md` のとおり、推論runtimeは**未採用**で、
-現行AABへネイティブライブラリは1バイトも入っていない。採用時に必要になる予算枠を先に定義する。
+`:app:verify{Standard,Ai}ReleaseApkSize` がAPKを、`:app:verify{Standard,Ai}ReleaseBundleSize`
+がAABを予算と比較する（`:app:verifyReleaseBundleSize` は4つをまとめて実行する）。
+releaseビルドは毎PRのverifyには重いため必須ジョブへは入れず、`release.yml`
+（リリース時に必ず実行）と `benchmark.yml`（workflow_dispatch）で実行する。
 
-### 配布サイズ（採用時に承認が必要）
+`standard` の主なサイズ要因はML Kitバーコードモデルと `libbarhopper_v3.so`（4 ABI）。
+`ai` の増分はLiteRT-LMの `liblitertlm_jni.so`（arm64-v8a、21,199,264 B）。他ABIは
+フレーバーの `abiFilters` で除外している。超過時はABI別配信・依存の見直しを先に検討し、
+正当な増加であればこの表と `releaseApkBudgets` / `releaseBundleBudgets` の定数を更新する。
 
-| 構成 | アプリABI | LLM native lib ABI | AAB実測（2026-08-01） | 現行予算比 |
-| --- | --- | --- | ---: | ---: |
-| 現行main（LLMなし、#126のmerge前） | 4 ABI | — | 18,409,960 B | 87.7% |
-| `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | 4 ABI | 60,660,835 B | 288.9% |
-| `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | arm64-v8aのみ | 28,691,368 B | 136.6% |
-| `com.google.mediapipe:tasks-genai:0.10.35` | arm64-v8aのみ | arm64-v8aのみ | 21,885,472 B | 104.2% |
-| `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | 4 ABI | arm64-v8a + x86_64 | 39,126,540 B | 186.3% |
-| `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | 4 ABI | arm64-v8aのみ | 28,953,242 B | 137.9% |
+### runtime選定時の実測（2026-08-01、参考）
 
-いずれの構成も21,000,000 B予算に収まらない。最小構成（LLM native libraryをarm64-v8aだけに絞る）でも
-**30,000,000 B以上の予算**が必要になる。runtimeを採用する場合は、実測値と配布影響
-（GitHub Releasesの直接ダウンロード量が約1.6倍になること）を添えて予算引き上げを
-承認したうえで、この表と `verifyReleaseBundleSize` の定数を同時に更新する。
+| 構成 | アプリABI | LLM native lib ABI | AAB実測 |
+| --- | --- | --- | ---: |
+| LLMなし | 4 ABI | — | 18,409,960 B |
+| LLMなし | arm64-v8aのみ | — | 11,610,678 B |
+| `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | 4 ABI | 60,660,835 B |
+| `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | arm64-v8aのみ | 28,691,368 B |
+| `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | 4 ABI | arm64-v8a + x86_64 | 39,126,540 B |
+| `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | 4 ABI | arm64-v8aのみ | 28,953,242 B |
 
-### 実行時予算（採用時に実機で確定する）
+単一の配布物では21,000,000 B予算と両立しないため、フレーバー分割を採用した（ADR 0009）。
 
-runtime採用前は数値を確定できないため、以下は「実機測定で埋める枠」として定義し、
-埋まるまでLLM経路を有効化しない。測定は `docs/SCAN_DEVICE_TESTING.md` と同じ2系統以上の実機で行う。
+## 端末内LLM AI司書（層3）
+
+`ai` フレーバーだけが対象。runtimeはLiteRT-LM 0.15.0、モデルは
+`litert-community/Qwen3-0.6B`（`qwen3_0_6b_mixed_int4.litertlm`、497,664,000 B）。
+モデルはAPKへ同梱せず、利用者の明示操作で取得する。
 
 | 指標 | 予算枠 | 測定 |
 | --- | --- | --- |
-| モデル格納容量 | 台帳の `sizeBytes`（`LlmModelDefinition.MAX_MODEL_BYTES` = 3 GiB以下） | `LlmModelStore` 導入後のファイルサイズ |
-| 導入に必要な空き容量 | 台帳の `requiredFreeBytes`（モデルサイズ以上） | `AndroidLlmDeviceProbe` の `usableSpace` |
-| 必要な物理RAM | 台帳の `minTotalRamBytes`（未達端末はfail-closed） | `ActivityManager.MemoryInfo.totalMem` |
-| 推論中のpeak RSS | 実機測定で確定 | `adb shell dumpsys meminfo` |
-| モデル初期化時間（プロセス初回はSHA-256再検証を含む） | 実機測定で確定 | `LlmInferenceTelemetry.initializationMillis` |
-| first-token latency / 生成速度 | 実機測定で確定 | 同上 + `inferenceMillis` |
+| モデル格納容量 | 497,664,000 B（台帳の `sizeBytes`。上限は3 GiB） | 導入後のファイルサイズ |
+| 導入に必要な空き容量 | 1,100,000,000 B（台帳の `requiredFreeBytes`） | `AndroidLlmDeviceProbe` の `usableSpace` |
+| 必要な物理RAM | 4 GiB（暫定値。未達端末はfail-closed） | `ActivityManager.MemoryInfo.totalMem` |
+| 推論中のpeak RSS | **実機測定で確定** | `adb shell dumpsys meminfo` |
+| モデル初期化時間（プロセス初回はSHA-256再検証を含む） | **実機測定で確定** | `LlmInferenceTelemetry.initializationMillis` |
+| first-token latency / 生成速度 | **実機測定で確定** | 同上 + `inferenceMillis` |
 | 1回の相談の合計時間 | 15,000 ms（`AiLibrarianLimits.REQUEST_TIMEOUT_MILLIS`、超過はTIMEOUT） | ViewModelのtimeout |
-| prompt長 | 12,000 文字以下（`LlmPromptLimits.MAX_PROMPT_CHARS`、超過は組み立て拒否） | JVMテスト |
-| 生成token数 | 512 以下（`LlmPromptLimits.MAX_OUTPUT_TOKENS`） | runtime設定 |
+| prompt長 | 6,000 文字以下（`LlmPromptLimits.MAX_PROMPT_CHARS`、超過は組み立て拒否→規則ベースへ縮退） | JVMテスト |
+| 生成token数 | 512 以下（`LlmPromptLimits.MAX_OUTPUT_TOKENS`） | `ConversationConfig.maxOutputToken` |
+| モデルのcontext長 | 8,192 token（台帳の `contextTokens` → `EngineConfig.maxNumTokens`） | 台帳 |
 | 15分連続利用時の熱状態 | `THERMAL_STATUS_MODERATE` 以下 | `adb shell dumpsys thermalservice` |
-| 15分連続利用時の電池消費 | 実機測定で確定 | `adb shell dumpsys batterystats` |
+| 15分連続利用時の電池消費 | **実機測定で確定** | `adb shell dumpsys batterystats` |
 
-予算超過端末では `LlmCapabilityChecker` が `Unsupported` を返し、取得も起動も行わない（fail-closed）。
+**実機測定で確定**の欄が埋まるまでは、`minTotalRamBytes` を保守的な暫定値（4 GiB）に置いて
+対象端末を狭めておく。測定は `docs/SCAN_DEVICE_TESTING.md` と同じ2系統以上の実機で行い、
+結果を `docs/releases/` のチェックリストへ記録する。予算超過端末では
+`LlmCapabilityChecker` が `Unsupported` を返し、取得も起動も行わない。
 
 ## 連続スキャン（層3）
 
@@ -179,8 +190,8 @@ runtime採用前は数値を確定できないため、以下は「実機測定�
 
 ## CIでの実行まとめ
 
-- 毎PR（`android.yml` verify・変更なしで従来通り）: `testDebugUnitTest` に含まれる
+- 毎PR（`android.yml` verify・変更なしで従来通り）: `testStandardDebugUnitTest` に含まれる
   `QueryPlanIndexUsageTest`・`DatabaseFootprintBudgetTest`・`LibrarySearchQueryTest`
-- リリース（`release.yml`）: 上記＋`:app:verifyReleaseBundleSize`
+- リリース（`release.yml`）: 上記＋`:app:verifyStandardReleaseBundleSize`・`:app:verifyAiReleaseBundleSize`
 - 手動（`benchmark.yml` workflow_dispatch）: Gradle Managed Device（Pixel 7 / API 35 / aosp）での
   `StartupBenchmark` 実行、Baseline Profile再生成、AABサイズ検証

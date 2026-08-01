@@ -2,6 +2,7 @@ package dev.ndcshelf.app.domain.ai.llm
 
 import dev.ndcshelf.app.domain.ai.AI_LIBRARIAN_SYSTEM_INSTRUCTION
 import dev.ndcshelf.app.domain.ai.AiLibrarianField
+import dev.ndcshelf.app.domain.ai.AiLibrarianLimits
 import dev.ndcshelf.app.domain.ai.AiLibrarianItem
 import dev.ndcshelf.app.domain.ai.AiLibrarianRequest
 import kotlinx.serialization.json.Json
@@ -10,6 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -56,15 +58,36 @@ class LlmPromptBuilderTest {
     }
 
     @Test
-    fun `oversized requests are rejected instead of truncated`() {
-        val longTitle = "あ".repeat(120)
-        val items = (1..30).map { index -> item(ref = index.toString(), title = longTitle) }
-        val request = request(items = items)
+    fun `a realistic 30 book request fits inside the prompt budget`() {
+        // 既定項目（書名・著者・出版社・出版年・NDC）で上限の30冊。
+        val items = (1..30).map { index -> item(ref = index.toString(), title = "匿名サンプル図書$index") }
 
-        assertTrue(LlmPromptBuilder.build(request).text.length <= LlmPromptLimits.MAX_PROMPT_CHARS)
+        val prompt = LlmPromptBuilder.build(request(items = items))
 
-        val hugeRequest = request(question = "?".repeat(200), items = items)
-        assertTrue(LlmPromptBuilder.build(hugeRequest).text.length <= LlmPromptLimits.MAX_PROMPT_CHARS)
+        assertTrue(prompt.text.length <= LlmPromptLimits.MAX_PROMPT_CHARS)
+        assertEquals(30, prompt.allowedRefs.size)
+    }
+
+    @Test
+    fun `requests over the prompt budget are rejected instead of truncated`() {
+        // 全項目を最大長で埋めた最悪ケースはmodelのcontext長に収まらないため、
+        // 組み立て自体を拒否して規則ベースの回答へ縮退させる（切り詰めない）。
+        val longValue = "あ".repeat(AiLibrarianLimits.MAX_VALUE_LENGTH)
+        val items =
+            (1..30).map { index ->
+                AiLibrarianItem(
+                    ref = index.toString(),
+                    title = longValue,
+                    author = longValue,
+                    publisher = longValue,
+                    ndcCategory = longValue,
+                    note = longValue,
+                )
+            }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            LlmPromptBuilder.build(request(items = items))
+        }
     }
 
     @Test

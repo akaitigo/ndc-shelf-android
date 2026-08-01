@@ -28,6 +28,7 @@ class OnDeviceLlmLibrarian(
     private val capabilityProvider: () -> LlmCapability,
     private val modelStore: LlmModelStore,
     private val runtime: LlmInferenceRuntime,
+    private val runtimeCacheDir: java.io.File,
     private val telemetry: LlmTelemetrySink = NoOpLlmTelemetrySink,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val nowMillis: () -> Long = System::currentTimeMillis,
@@ -79,6 +80,7 @@ class OnDeviceLlmLibrarian(
                             model = model,
                             modelFile = modelFile,
                             maxTokens = model.contextTokens,
+                            cacheDir = runtimeCacheDir,
                         ),
                     )
                 } catch (cancellation: CancellationException) {
@@ -98,7 +100,7 @@ class OnDeviceLlmLibrarian(
                 val inferenceStart = nowMillis()
                 val raw =
                     try {
-                        session.generate(prompt.text, LlmPromptLimits.MAX_OUTPUT_TOKENS)
+                        session.generate(prompt, LlmPromptLimits.MAX_OUTPUT_TOKENS)
                     } catch (cancellation: CancellationException) {
                         throw cancellation
                     } catch (runtimeError: LlmRuntimeException) {

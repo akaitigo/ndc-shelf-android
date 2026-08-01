@@ -14,24 +14,31 @@
 
 シリーズ候補では明示したシリーズ名以外のタイトル、著者、NDC、読書状態、置き場所、購入状態、他の蔵書は送らない。全経路ともHTTPSのみで、redirectを追従しない。importした表紙URLも、NDL host、既定HTTPS port、`/thumbnail/<同じISBN>.jpg`、query・fragmentなしの全条件を満たす場合だけ通信する。
 
-## 端末内LLMモデルの取得（NDL以外の唯一の経路・現時点では未使用）
+## 端末内LLMモデルの取得（NDL以外の唯一の経路・`ai`フレーバー限定）
 
 | 用途 | 発生タイミング | 送信先 | アプリが送る値 |
 | --- | --- | --- | --- |
 | LLMモデル取得 | 利用者が明示的に「モデルを取得」を実行したときだけ | `GET https://<許可host>/<台帳のpath>` | 台帳（`LlmModelCatalog`）に埋め込んだURLとUser-Agentのみ |
 
 許可hostは `LlmModelUrlPolicy.ALLOWED_HOSTS`（現在は `huggingface.co`）で、
-`LlmModelDefinition` の構築時にHTTPS・許可host・port 443・userInfo無し・fragment無し・
-`..` を含まないことを検査する。条件を満たさないURLは定義自体を作れない（fail-closed）。
+`LlmModelDefinition` の構築時にHTTPS・許可host・port 443・userInfo無し・query無し・
+fragment無し・`..` を含まないことを検査する。条件を満たさないURLは定義自体を作れない（fail-closed）。
 
+- **`ConsentPurpose.MODEL_DOWNLOAD` へ同意し、利用者が「モデルを取得」を押したときだけ発生する。**
+  AI司書の推論（`ConsentPurpose.AI_LIBRARIAN`）とは別目的で、同意も別に取る。
 - 蔵書、質問文、prompt、回答、推論テレメトリ、端末識別子は一切送らない（cookie・認証headerも付けない）。
-- `followRedirects(false)` / `followSslRedirects(false)` / `retryOnConnectionFailure(false)`。3xxは失敗として扱う。
+- OkHttpの自動追従は無効（`followRedirects(false)` / `followSslRedirects(false)` /
+  `retryOnConnectionFailure(false)`）。配布元は署名付きCDNへ302で誘導するため、
+  **許可ドメイン（`hf.co` / `huggingface.co` とそのサブドメイン）内に限って1回だけ**自前で追従する。
+  追従先はscheme・port・userInfo・path traversalを台帳URLと同じ基準で検査し、CDNの署名queryだけを
+  追加で許可する。2回目のリダイレクトと許可外ドメインへの誘導は失敗として扱う。
 - `Content-Length` が台帳の期待サイズと一致しない応答は本文を読まない。読み出し中も期待サイズを超えた時点で中断する。
 - 取り込みはサイズとSHA-256の両方が台帳と一致した場合だけで、一致しないファイルは破棄する。
 - **推論経路はこの通信経路へ依存しない。** `OnDeviceLlmLibrarian` はAndroidのネットワークAPIを使用しない。
 
-**現時点でこの経路は使われない。** ADR 0009のとおり推論runtimeが未採用で
-`LlmModelCatalog.models` が空のため、取得UIも通信も発生しない。
+**`standard` フレーバー（`dev.ndcshelf.app`）ではこの経路は使われない。**
+LiteRT-LMのnative libraryを同梱しないため能力判定が `RUNTIME_UNAVAILABLE` を返し、
+取得UIも通信も発生しない（ADR 0009）。
 
 ## シリーズ候補の障害処理
 

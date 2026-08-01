@@ -17,6 +17,9 @@ android {
         minSdk = 28
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // :app は inference フレーバー（standard / ai）を持つ。ベンチマークと
+        // baseline profile は配布の主体である standard だけを対象にする。
+        missingDimensionStrategy("inference", "standard")
     }
 
     targetProjectPath = ":app"

@@ -241,6 +241,7 @@ class AiLibrarianScreenTest {
                     onGrantConsent = {},
                     onRevokeConsent = {},
                     onClearHistory = onClearHistory,
+                    onOpenModelManagement = {},
                     contentPadding = PaddingValues(),
                 )
             }

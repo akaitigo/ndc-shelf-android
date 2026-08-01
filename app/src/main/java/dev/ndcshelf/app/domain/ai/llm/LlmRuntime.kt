@@ -26,6 +26,8 @@ data class LlmLoadRequest(
     val model: LlmModelDefinition,
     val modelFile: File,
     val maxTokens: Int,
+    /** runtimeが中間表現を置く作業領域。アプリ専用のcache配下だけを渡す。 */
+    val cacheDir: File,
 )
 
 /** 1回の相談で使う推論session。使用後は必ず[close]する。 */
@@ -35,7 +37,7 @@ interface LlmSession : AutoCloseable {
      * 実装は速やかに中断すること。
      */
     suspend fun generate(
-        prompt: String,
+        prompt: LlmPrompt,
         maxOutputTokens: Int,
     ): String
 }

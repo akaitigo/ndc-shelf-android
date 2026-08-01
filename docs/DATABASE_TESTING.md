@@ -12,7 +12,7 @@
 | Room／Repository統合テスト | Robolectric JVM、API 35 | v1 fixture、schema検証、DAO、外部キー・index、Repository transaction、失敗・キャンセル・未知enum |
 | instrumentationテスト | Android端末／エミュレーター | 実Android SQLite、WAL、ファイルI/O、バックアップ復元、Compose UI |
 
-Robolectric層はGitHub Actionsの `testDebugUnitTest` で毎回実行する。高速で安定した必須チェックを優先する一方、ホスト上のSQLite挙動は実端末と完全には同一でないため、既存の `androidTest` を削除せずリリース前の実機行列で補完する。
+Robolectric層はGitHub Actionsの `testStandardDebugUnitTest` で毎回実行する。高速で安定した必須チェックを優先する一方、ホスト上のSQLite挙動は実端末と完全には同一でないため、既存の `androidTest` を削除せずリリース前の実機行列で補完する。
 
 ## 依存の根拠とライセンス
 
@@ -35,7 +35,7 @@ CIはKSP実行後に `git diff --exit-code -- app/schemas` を実行する。DB�
 3. KSPが生成した新しいschema JSONをレビューし、過去fixtureを変更せずコミットする。
 4. 変更前版のfixtureへ代表値と境界値をSQLで入れ、`runMigrationsAndValidate`後に必須列、外部キー、index、値保持、enum変換を検証する。
 5. `everyExportedSchemaHasARegisteredPathToCurrentVersion`が、v1から現行版まで連続したfixtureと各1段Migrationを認識することを確認する。
-6. `testDebugUnitTest`に加え、対象APIのエミュレーターまたは実機でmigration instrumentationテストを実行する。
+6. `testStandardDebugUnitTest`に加え、対象APIのエミュレーターまたは実機でmigration instrumentationテストを実行する。
 7. schema、バックアップ形式、ロールバック方法、既存ユーザーへの影響をPRへ記載する。
 
 ## 現在の回帰ケース
@@ -57,12 +57,12 @@ CIはKSP実行後に `git diff --exit-code -- app/schemas` を実行する。DB�
 ## 実行方法
 
 ```bash
-./gradlew testDebugUnitTest
+./gradlew testStandardDebugUnitTest
 ./gradlew compileDebugAndroidTestKotlin
 ```
 
 実機が利用できる場合は次も実行する。
 
 ```bash
-./gradlew connectedDebugAndroidTest
+./gradlew connectedStandardDebugAndroidTest
 ```

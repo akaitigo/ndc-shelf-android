@@ -134,11 +134,21 @@ AI司書の入口は`domain/ai`の`AiLibrarianProvider`だけで、UI・Room・�
 - **allowlist**: `LlmModelCatalog`に無いモデルは取得も読み込みもできません。定義（`LlmModelDefinition`）は構築時にURLポリシー・SHA-256形式・サイズ上限・必要空き容量を検査します。
 - **能力判定（fail-closed）**: `LlmCapabilityChecker`がAPI level・ABI・物理RAM・空き容量・low-RAM端末・runtimeの有無を検査し、一つでも欠ければ`Unsupported`を返します。取得の可否も同じ条件で判定するため、起動できない端末へ大容量モデルをダウンロードさせません。minSdk 23は維持し、非対応端末では機能そのものを提供しません。
 - **原子的な導入**: `data/local`の`FileLlmModelStore`が`noBackupFilesDir/llm-models`配下の一時領域へ書き出しながらサイズ上限とSHA-256を計算し、両方が一致した場合だけrenameで有効化します。失敗時は一時ファイルだけを消し、直前の検証済みモデルを保持します。旧versionの削除は新versionの有効化確定後です。
-- **通信の分離**: モデル取得だけが`data/remote`の`LlmModelDownloadSource`（OkHttp、redirect拒否）を通ります。推論経路はAndroidのネットワークAPIを使用しません（`docs/NETWORK_BOUNDARY.md`）。
+- **通信の分離**: モデル取得だけが`data/remote`の`LlmModelDownloadSource`を通ります。OkHttpの自動追従は切り、許可ドメイン内で1回だけ自前で追従します。取得は`ConsentPurpose.MODEL_DOWNLOAD`（AI司書の相談とは別目的）へ同意した場合だけ開始します。推論経路はAndroidのネットワークAPIを使用しません（`docs/NETWORK_BOUNDARY.md`）。
 - **データ隔離と出力検証**: `LlmPromptBuilder`が固定の`AI_LIBRARIAN_SYSTEM_INSTRUCTION`と固定の出力形式指示だけを連結し、質問文と書誌はJSONの値としてescapeします。`LlmAnswerParser`は既知のintent/reason、要求内のref、件数・文字数上限をすべて満たす出力だけを受け入れ、一点でも外れれば全体を破棄します（切り詰めません）。
 - **診断**: `data/diagnostics`の`DiagnosticsLlmTelemetrySink`が、失敗分類をallowlistの`DiagnosticCode`（`ON_DEVICE_LLM`カテゴリ）へ記録し、model id/version・hash先頭16桁・runtime版・所要時間・文字数は揮発する端末内バッファにだけ保持します。質問文・書誌・回答は構造上入りません。
 
-推論runtimeとモデルは**未採用**で、`LlmModelCatalog.models`は空、`AppContainer`は`UnavailableLlmRuntime`を渡すため、現時点のAI司書は常にヒューリスティックへ縮退します。採用条件と実測値はADR 0009、台帳運用は[LOCAL_LLM_MODELS.md](LOCAL_LLM_MODELS.md)を正本とします。
+### フレーバー分割
+
+端末内LLMのnative library（LiteRT-LM、arm64-v8aで21 MB）は`ai`フレーバー（`dev.ndcshelf.app.ai`）だけへ入ります。`standard`（`dev.ndcshelf.app`）の配布サイズと端末対応は変わりません。
+
+- `app/src/standard/java/.../PlatformLlmRuntime.kt`: 常に利用不可を返す実装。
+- `app/src/ai/java/.../PlatformLlmRuntime.kt` と `LiteRtLmInferenceRuntime.kt`: LiteRT-LMの束縛。`isAvailable()`はAPI level・ABI・`System.loadLibrary`の可否で判定します。
+- `app/src/ai/AndroidManifest.xml`: LiteRT-LMのminSdk 24を`tools:overrideLibrary`で上書きします。アプリ本体のminSdk 23は維持し、API 23端末では能力判定が起動を抑止します。
+
+CIの通常ジョブは`standard`だけを対象にし（`verifyRoborazziStandardDebug`・`lintStandardDebug`・`assembleStandardDebug`・`connectedStandardDebugAndroidTest`）、`ai`はreleaseとサイズ検証だけでビルドします。サイズ予算はフレーバーごとに`verifyStandardReleaseBundleSize`・`verifyAiReleaseBundleSize`で判定します。
+
+台帳のモデルとruntimeの採用根拠、実測値、日本語品質の扱いはADR 0009、台帳運用は[LOCAL_LLM_MODELS.md](LOCAL_LLM_MODELS.md)を正本とします。
 
 ## 分析（Insights）
 

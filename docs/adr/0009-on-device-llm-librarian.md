@@ -1,6 +1,6 @@
 # ADR 0009: AI司書の端末内LLMは「安全基盤を先に確定し、runtime採用は配布サイズ予算の承認後」とする
 
-- Status: Proposed（runtime/model採用とAABサイズ予算の引き上げにmaintainer承認が必要）
+- Status: Accepted（2026-08-01、maintainerが配布方式・対応端末・runtime/model・同意区分を承認）
 - Date: 2026-08-01
 - Issue: #125
 - Decision owners: repository maintainer
@@ -119,14 +119,54 @@ runtimeを採用する版では、次のいずれかを別途決める必要が�
 
 ## Decision
 
-**Option D**を採用する。Option A〜Cの採否は、以下をmaintainerが承認した時点で後続ADRまたは本ADRの改訂で確定する。
+配布物を2つのフレーバーへ分け、端末内LLMを含む版だけに別予算を与える。runtimeはLiteRT-LM、モデルはApache-2.0の`.litertlm`だけを台帳へ載せる。
 
-### 承認が必要な事項
+### 1. 配布物の分割（Option A/B/Cの「予算を上げる」に代えて採用）
 
-1. **AABサイズ予算の引き上げ**。LiteRT-LM 0.15.0でLLM native libraryをarm64-v8aだけに絞った実測が28,953,242 B（MediaPipeでは28,691,368 B）で、**予算は30,000,000 B以上が必要**（現行21,000,000 Bから+43%）。GitHub Releasesの直接ダウンロード（ADR 0008）では、利用者のダウンロード量がそのまま約1.6倍になる。
-2. **対応端末の縮小**。LLM経路はminSdk 24かつarm64-v8a（LiteRT-LMを採る場合）に限定される。minSdk 23自体は維持し、非対応端末では機能を出さない。
-3. **モデル配布の扱い**。数百MiB〜2.5 GiBのモデルをHugging Faceから利用者の明示操作で取得する。取得は蔵書データを一切送らない別目的の通信として扱う。
-4. **日本語品質の実機評価**。1.5B以下の日本語スコアはベンダー公表値が無く、採用可否は自前評価に依存する。
+配布物はGitHub Releasesの署名付きAPK（ADR 0008）であり、**利用者が実際に
+ダウンロードするのはAPK**である。AABはストア配布へ切り替える場合の予備成果物として
+残すが、端末ごとに分割される前提のサイズなので配布サイズの正本にはしない。
+
+| フレーバー | applicationId | 端末内LLM | APK予算 | APK実測 | AAB予算 | AAB実測 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `standard` | `dev.ndcshelf.app` | 含まない | 27,000,000 B | 25,381,403 B | 21,000,000 B（据え置き） | 18,507,420 B |
+| `ai` | `dev.ndcshelf.app.ai` | LiteRT-LM（arm64-v8aのみ） | 34,000,000 B | 31,475,717 B | 24,000,000 B | 22,296,712 B |
+
+- 既存利用者のダウンロード量は増えない。端末内LLMを使いたい利用者だけが大きい方を選ぶ。
+- **applicationIdが異なるため、2つは別アプリとして扱われる。** 同時インストールでき、相互に上書き更新されない代わりに、**データは共有しない**。乗り換えにはエクスポート→インポートが必要で、この制約はREADMEとリリースノートへ明記する。
+- 署名鍵は同一。`release.yml`は両方の署名を検証し、証明書のSHA-256が一致することも確認する。
+- **`ai`フレーバーは`abiFilters`でarm64-v8aへ限定する。** LiteRT-LM 0.15.0のnative libraryはarm64-v8aとx86_64しか無く、x86_64はエミュレータ専用で実機の対象にならない。加えて、AI版は「Android 7.0以上・64bit Arm」を対象として配布するため、armeabi-v7a・x86のライブラリを積んでも端末内LLMは動かない。限定によりAPKは47,025,138 Bから31,475,717 Bへ**33%減った**。副作用として、arm64-v8a以外の端末では`ai`のインストール自体が失敗する（`INSTALL_FAILED_NO_MATCHING_ABIS`）。端末内LLMが動かない状態でインストールできてしまうより、導入時点で明示される方が誤解が少ない。他ABIの端末は`standard`を使う（アプリ本体の機能に差は無い）。この挙動はREADMEへ明記した。
+- CIの通常ジョブは`standard`を主対象にして実行時間を増やさない（`verifyRoborazziStandardDebug` / `lintStandardDebug` / `assembleStandardDebug` / `connectedStandardDebugAndroidTest`）。ただし`ai`専用のソースセットが未検査のままmainへ入らないよう、`assembleAiDebug`と`lintAiDebug`は毎PRで実行する。releaseビルドとサイズ検証は`release.yml`で行う。
+
+### 2. 対応端末
+
+LLM経路は**API 24以上かつarm64-v8a**に限定する。アプリ本体のminSdk 23は維持し、非対応端末では取得も初期化も行わない（`LlmCapabilityChecker`）。`ai`フレーバーの`AndroidManifest.xml`だけに`tools:overrideLibrary="com.google.ai.edge.litertlm"`を置き、`standard`へは影響させない。
+
+### 3. runtimeとモデル
+
+**runtime: LiteRT-LM `com.google.ai.edge.litertlm:litertlm-android:0.15.0`（Apache-2.0、Google Maven）。**
+MediaPipe LLM Inference APIは公式にmaintenance-onlyで後継がLiteRT-LM、ONNX Runtime GenAIはAndroid artifactが未publish、llama.cppはMaven artifactが存在しない、という比較結果に従う。
+
+**モデル: `litert-community/Qwen3-0.6B` の `qwen3_0_6b_mixed_int4.litertlm`（Apache-2.0、ungated）。**
+
+| 項目 | 値 | 確認方法（2026-08-01実測） |
+| --- | --- | --- |
+| サイズ | 497,664,000 B | HF API `tree/main` の `size` |
+| SHA-256 | `b1baab462f6be49d70eada79d715c2c52cd9ece0cad00bddf6a2c097d23498e9` | 同 `lfs.oid` |
+| ライセンス | apache-2.0 | HF API `cardData.license` |
+| gated | false | HF API `gated` |
+
+**Qwen2.5-0.5B/1.5B-Instructを採らなかった理由**: `litert-community/Qwen2.5-0.5B-Instruct`には`.litertlm`が存在せず（`.task`と`.tflite`のみ）、LiteRT-LMでは読めない。`Qwen2.5-1.5B-Instruct`の`.litertlm`はq8で1,597,931,520 Bあり、0.6Bのint4（497 MB）より端末負担が大きい。
+
+**日本語について**: 配布元・上流いずれのモデルカードにも、日本語品質に関する公式な主張は無い（上流Qwen3は「100+ languages」と記すが日本語を名指ししていない）。日本語を明示的に謳う`.litertlm`は`LFM2.5-1.2B-JP`（非OSIライセンス）と`TinySwallow-1.5B-Instruct`（Gemma Termsが付随）だけで、どちらも本プロジェクトの方針では採用できない。**日本語品質は保証せず、その旨をモデル管理画面と本ADRへ明記する。**
+
+### 4. 同意の区分
+
+`ConsentPurpose.MODEL_DOWNLOAD`を新設し、`AI_LIBRARIAN`（端末内推論・通信なし）とは別目的にする。送信先・送信内容（台帳のモデルURLとUser-Agentのみ）・保存期間・第三者提供を既存の同意画面と同じ様式で表示する。同意していない場合、モデル取得は一度も開始しない。端末内ファイルからの導入は通信を伴わないため、この同意を必要としない。
+
+### 5. リダイレクト（未解決課題の解消）
+
+Hugging Faceの`/resolve/`は署名付きCDNへ302で誘導する（実測の`Location`ホストは`us.aws.cdn.hf.co`）。ホストはリージョンとストレージ方式で変わり得るため、**許可ドメイン（`hf.co` / `huggingface.co`とそのサブドメイン）内に限って1回だけ追従する**実装を採る。追従先はscheme・port・userInfo・path traversalを台帳URLと同じ基準で検査し、CDNの署名queryだけを追加で許可する。2回目のリダイレクトは失敗にする。
 
 ### 本ADRで確定する規範（runtime非依存）
 
@@ -135,32 +175,42 @@ runtimeを採用する版では、次のいずれかを別途決める必要が�
 3. **原子的な導入**: `FileLlmModelStore`は一時領域へ書き出しながらサイズ上限とSHA-256を計算し、両方が台帳と一致した場合だけrenameで有効化する。renameは既存ファイルを不可分に置換するため事前削除しない（renameが失敗しても旧モデルが残る）。検証に失敗した場合は一時ファイルだけを消し、直前の検証済みモデルを保持する。旧versionの削除は新versionの有効化が確定してから行う。
 3-1. **ロード前の再検証**: 導入後にファイルが差し替えられていないことを、`OnDeviceLlmLibrarian`がプロセスごとに1度だけ全バイトのSHA-256で確認する。不一致ならモデルを削除し、`MODEL_CORRUPTED`として縮退する。この所要時間は`initializationMillis`へ含める。
 4. **能力判定（fail-closed）**: `LlmCapabilityChecker`がAPI level・ABI・物理RAM・空き容量・low-RAM端末フラグ・runtimeの有無を検査し、一つでも満たさなければ`Unsupported`を返す。取得の可否も同じ条件で判定し、起動できない端末に数GiBをダウンロードさせない。OOMを例外処理で回復する設計にはしない。
-5. **データ隔離**: `LlmPromptBuilder`は固定の`AI_LIBRARIAN_SYSTEM_INSTRUCTION`と固定の出力形式指示だけを連結し、質問文と書誌はJSONの値としてescapeして埋め込む。ADR 0007の規範4（未選択項目をpayloadへ出さない）はそのまま適用される。
+5. **データ隔離**: `LlmPromptBuilder`は固定の`AI_LIBRARIAN_SYSTEM_INSTRUCTION`と固定の出力形式指示だけを`systemInstruction`へ、質問文と書誌はJSONの値としてescapeした`userMessage`へ入れる。LiteRT-LMの`Conversation`はこの2つを別roleとして扱うため、書誌文字列がsystem roleへ混ざらない。ADR 0007の規範4（未選択項目をpayloadへ出さない）はそのまま適用される。promptが上限（6,000文字）を超える要求は組み立てを拒否し、規則ベースの回答へ縮退する（切り詰めない）。
 6. **出力の厳格検証**: `LlmAnswerParser`は、既知のintent/reason、要求内のrefだけ、entries 1〜5件、1ブロックあたりref 8件以下、summary 400字以下・comment 200字以下・label 60字以下を満たす出力だけを受け入れる。一点でも外れれば全体を破棄し`INVALID_RESPONSE`にする（切り詰めて通さない）。自由文はISO制御文字とU+2028/U+2029を空白へ置換し、全角空白とNBSPを含む連続空白を1つへ畳む。
 7. **縮退**: `FallbackAiLibrarianProvider`はLLM失敗時に`OnDeviceHeuristicLibrarian`の決定的で検証済みの回答へ切り替え、`AiLibrarianAnswer.degradedFrom`で縮退理由を伝える。未検証の部分回答は表示しない。利用者のキャンセルは縮退させずそのまま伝播する。
 8. **診断**: 記録するのはmodel id/version・SHA-256の先頭16桁・runtime id/version・初期化時間・推論時間・prompt文字数・出力文字数・失敗分類だけ。端末内診断ログへ書けるのはallowlistの`DiagnosticCode`（`ON_DEVICE_LLM`カテゴリ）に限られ、質問文・書誌・回答は構造上入らない。モデル導入結果と整合性確認の失敗は`DiagnosticsLoggingLlmModelStore`が、ヒューリスティックへの縮退は`FallbackAiLibrarianProvider`の通知経路が、それぞれ同じallowlistへ記録する。
 9. **削除**: `LlmModelStore.deleteAll()`でモデルとモデル由来ファイルを全削除できる。配置先は`noBackupFilesDir`配下で、OSクラウドbackup・D2D・エクスポート・同期の対象外。
-10. **停止経路**: 台帳が空、能力判定が`Unsupported`、`LlmCapabilityChecker.canAcquire`がfalseのいずれでもLLM経路は起動しない。モデル配布元の停止・ライセンス変更・脆弱性が判明した場合は、台帳から該当versionを外す（または`retiredOn`を設定する）アプリ更新だけでヒューリステックへ戻せる。
+10. **停止経路**: 台帳が空、能力判定が`Unsupported`、`standard`フレーバーのいずれでもLLM経路は起動しない。モデル配布元の停止・ライセンス変更・脆弱性が判明した場合は、台帳から該当versionを外す（または`retiredOn`を設定する）アプリ更新だけでヒューリスティックへ戻せる。runtime側の問題は`ai`フレーバーの`PlatformLlmRuntime`を`UnavailableLlmRuntime`へ差し替えるだけで止められる。
 
 ## Consequences
 
 **Positive**:
 
-- 配布サイズ・端末対応・ライセンス構成・SBOMへ一切影響を与えないまま、供給網・注入・出力検証・縮退・診断・削除の全経路をJVMテストで固定できる。
-- runtime採用時に必要な変更が、台帳へのモデル追加と`LlmInferenceRuntime`実装の差し替えに限定される。
-- 予算・端末条件・モデルライセンスの判断材料が実測値として文書に残る。
+- 既存利用者（`standard`）の配布サイズ・端末対応・ライセンス構成は変わらない。予算21,000,000 Bを据え置ける。
+- 端末内LLMが必要な利用者だけが29 MBの`ai`を選べる。両者は同時インストールでき、片方の不具合がもう片方へ波及しない。
+- runtime差し替えは`ai`フレーバーの`PlatformLlmRuntime`だけ、モデル差し替えは台帳だけで済む。
+- 供給網・注入・出力検証・縮退・診断・削除の全経路をJVMテストで固定できる。
 
 **Negative / trade-offs**:
 
-- この版では自然文の提案は得られない。`AiLibrarianAnswer.summary`・`entry.comment`は常にnullで、UIは従来どおりの表示になる。
-- `UnavailableLlmRuntime`が常に`DEVICE_UNSUPPORTED`を返すため、LLM経路は必ず縮退する。
+- **`standard`と`ai`はapplicationIdが異なる別アプリで、データを共有しない。** 乗り換えにはエクスポート→インポートが必要。この制約を知らずに`ai`を入れると蔵書が空に見える。
+- リリース成果物とCIジョブが増える（APK/AAB/mapping/署名記録が各2つ）。
+- LLM経路はAPI 24以上のarm64-v8a端末に限られる。armeabi-v7a・x86_64端末では`ai`を入れても規則ベースのまま。
+- モデルの取得に約475 MBのダウンロードと約1 GBの空き容量が要る。
 
 **Residual risks**:
 
-- MediaPipeのGenAI経路がmaintenance-onlyであり、LiteRT-LMもversion 0.x系で、APIとサイズが今後も変動する。採用時点で再実測が必要。
-- Hugging Faceのモデル配布は第三者の運用に依存する。台帳のURLとSHA-256は配布元の再アップロードで無効になり得る。
-- モックのfake runtimeで検証できるのは契約・入力上限・出力検証・失敗分類・縮退・保存データ不変までで、実モデルの回答品質・OOM・発熱・電池消費は実機測定でしか確認できない。
+- **日本語品質が未知。** 採用したQwen3-0.6Bは配布元・上流とも日本語について公式の主張が無く、0.6Bという規模から誤答・指示の取りこぼしが起こりやすい。UIとモデル台帳へ明記し、回答には常に参照本と不確実性の注記を添える。
+- LiteRT-LMは0.x系で、APIとnative libraryのサイズが今後も変動し得る。version更新時は再実測が必要。
+- Hugging Faceの配布は第三者の運用に依存する。台帳のURL・サイズ・SHA-256は再アップロードで無効になり得る。CDNのホスト振り分けが`hf.co`ドメイン外へ変わると取得が失敗する（fail-closed）。
+- モデルのSHA-256はHugging Face APIの`lfs.oid`から取得した値で、**開発環境でモデル全体をダウンロードして再計算した値ではない**。不一致の場合は取得が必ず失敗する側へ倒れる。
+- fake runtimeで検証できるのは契約・入力上限・出力検証・失敗分類・縮退・保存データ不変まで。**実モデルの回答品質・OOM・発熱・電池消費・実機の通信監査は実機測定でしか確認できない。**
 
 ## Rollback
 
-`LlmModelCatalog.models`を空に保つ限り、LLM経路は起動しない。`domain/ai/llm`パッケージと`FileLlmModelStore`・`LlmModelDownloadSource`・`AndroidLlmDeviceProbe`・`DiagnosticsLlmTelemetrySink`を削除し、`AppContainer.aiLibrarianProvider`を`OnDeviceHeuristicLibrarian()`へ戻せば、ADR 0007の状態へ完全に戻る。Room schemaと本棚機能へ影響は無い（Room変更を伴わない設計）。導入済みモデルは`noBackupFilesDir/llm-models`配下だけにあり、アプリdataの消去または`deleteAll()`で消える。
+- **モデルだけを止める**: `LlmModelCatalog.models`から定義を外す。`ai`フレーバーでも能力判定が`NO_MODEL_AVAILABLE`になり、規則ベースへ縮退する。
+- **runtimeを止める**: `app/src/ai/.../PlatformLlmRuntime`の`runtime`を`UnavailableLlmRuntime`に、`isAvailable()`を`false`に戻す。
+- **配布を止める**: `ai`フレーバーの成果物をリリースへ添付しない。`standard`は影響を受けない。
+- **全部戻す**: `productFlavors`と`domain/ai/llm`パッケージ、`data/local/FileLlmModelStore`・`data/remote/LlmModelDownloadSource`・`data/local/AndroidLlmDeviceProbe`・`data/diagnostics/DiagnosticsLlmTelemetrySink`・`LlmModelViewModel`・`LlmModelScreen`を削除し、`AppContainer.aiLibrarianProvider`を`OnDeviceHeuristicLibrarian()`へ戻す。Room schemaと本棚機能へ影響は無い（Room変更を伴わない設計）。`ConsentPurpose.MODEL_DOWNLOAD`の記録は残るが、目的が未提供へ戻れば同意画面の一覧から外す。
+
+導入済みモデルは`noBackupFilesDir/llm-models`配下だけにあり、アプリdataの消去または`deleteAll()`で消える。

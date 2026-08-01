@@ -84,18 +84,18 @@ jobs:
       - name: Generate the startup baseline profile
         run: >-
           ./gradlew
-          :app:generateReleaseBaselineProfile
+          :app:generateStandardReleaseBaselineProfile
           -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
           --stacktrace
           --no-configuration-cache
           --console=plain
 
-      # 生成物はPRで app/src/release/generated/baselineProfiles/ へコミットして反映する。
+      # 生成物はPRで app/src/standardRelease/generated/baselineProfiles/ へコミットして反映する。
       - name: Upload generated baseline profile
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: baseline-profile
-          path: app/src/release/generated/baselineProfiles/
+          path: app/src/standardRelease/generated/baselineProfiles/
           if-no-files-found: error
           retention-days: 30
 

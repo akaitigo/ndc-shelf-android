@@ -18,8 +18,17 @@ enum class ConsentPurpose(
     /** 自然言語検索のクラウドモード（#40で有効化）。 */
     NATURAL_LANGUAGE_SEARCH(1),
 
-    /** オプトインAI司書（#42で有効化）。 */
+    /** オプトインAI司書（#42で有効化）。端末内で完結し、外部通信は発生しない。 */
     AI_LIBRARIAN(1),
+
+    /**
+     * 端末内LLMのモデル取得（#125で有効化）。
+     *
+     * AI司書の推論そのものは端末内で完結し通信しないため、[AI_LIBRARIAN]とは
+     * 別の目的として同意を取る。送信するのは台帳のモデルURLとUser-Agentだけで、
+     * 蔵書・質問文・回答は一切送らない。
+     */
+    MODEL_DOWNLOAD(1),
 }
 
 data class ConsentRecord(

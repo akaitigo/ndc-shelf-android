@@ -26,6 +26,6 @@
 
 - アプリ内の主要文面とOSSライセンス本文がネットワークなしで読める。
 - アプリ内、`PRIVACY.md`、README、SECURITY、配布ページ原稿の通信先・報告先・バックアップ説明が一致する。
-- `./gradlew verifyBackupPolicy verifyLicenseReport :app:cyclonedxDirectBom testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest`が成功する。
+- `./gradlew verifyBackupPolicy verifyLicenseReport :app:cyclonedxDirectBom testStandardDebugUnitTest lintStandardDebug assembleStandardDebug assembleStandardDebugAndroidTest`が成功する。
 - CIのDependency ReviewとOSV-Scannerが成功し、SBOMとNOTICE artifactを取得できる。
 - UI変更を実機またはエミュレーターで確認し、情報画面とライセンス詳細のスクリーンショットをPRへ添付する。

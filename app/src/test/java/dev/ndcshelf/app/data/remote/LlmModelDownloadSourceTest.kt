@@ -47,19 +47,61 @@ class LlmModelDownloadSourceTest {
         }
 
     @Test
-    fun `redirects are refused instead of followed`() =
+    fun `a redirect outside the allowlist is refused`() =
         runTest {
             server.enqueue(
                 MockResponse()
                     .setResponseCode(302)
-                    .setHeader("Location", server.url("/elsewhere.bin").toString()),
+                    .setHeader("Location", "https://evil.example.com/model.bin"),
             )
             val source = sourceAgainstServer()
 
             val error = assertThrows(IOException::class.java) { kotlinx.coroutines.runBlocking { source.open() } }
 
-            assertTrue("rejected" in error.message.orEmpty())
+            assertTrue("allowlist" in error.message.orEmpty())
             assertEquals(1, server.requestCount)
+        }
+
+    @Test
+    fun `a single redirect inside the allowlist is followed`() =
+        runTest {
+            // 配布元はCDNの署名付きURLへ302で誘導する。追従先も許可ドメイン内であること。
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(302)
+                    .setHeader(
+                        "Location",
+                        "https://us.aws.cdn.hf.co/xet-bridge-us/abc/def?Expires=1&Signature=2",
+                    ),
+            )
+            server.enqueue(MockResponse().setBody(okio.Buffer().write(payload)))
+            val source = sourceAgainstServer()
+
+            val bytes = source.open().use { stream -> stream.readBytes() }
+
+            assertTrue(payload.contentEquals(bytes))
+            assertEquals(2, server.requestCount)
+        }
+
+    @Test
+    fun `a second redirect is refused`() =
+        runTest {
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(302)
+                    .setHeader("Location", "https://us.aws.cdn.hf.co/first"),
+            )
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(302)
+                    .setHeader("Location", "https://us.aws.cdn.hf.co/second"),
+            )
+            val source = sourceAgainstServer()
+
+            val error = assertThrows(IOException::class.java) { kotlinx.coroutines.runBlocking { source.open() } }
+
+            assertTrue("too many redirects" in error.message.orEmpty())
+            assertEquals(2, server.requestCount)
         }
 
     @Test
@@ -125,8 +167,14 @@ class LlmModelDownloadSourceTest {
                 .build()
         return LlmModelDownloadSource(
             definition = definition(),
+            // 追従先の検査は本番のURLポリシーで行い、実際の接続だけをMockWebServerへ差し替える。
             callFactory = { request: Request ->
-                client.newCall(request.newBuilder().url(target).build())
+                client.newCall(
+                    request
+                        .newBuilder()
+                        .url(target.newBuilder().encodedPath(request.url.encodedPath).build())
+                        .build(),
+                )
             },
         )
     }
