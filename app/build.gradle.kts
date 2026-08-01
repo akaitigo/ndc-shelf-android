@@ -1,3 +1,6 @@
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -344,13 +347,39 @@ val verifyReleaseBundleSizeTasks =
             inputs.file(bundle)
             inputs.property("budgetBytes", budgetBytes)
             doLast {
-                val actualBytes = bundle.get().asFile.length()
+                val bundleFile = bundle.get().asFile
+                val actualBytes = bundleFile.length()
+                // 中身が分からないままでは予算超過を判断できない。実行環境による
+                // 差分（ローカルとCIでネイティブライブラリの構成が食い違う事例が
+                // あった）を、再実行せずに切り分けられるよう常に出力する。
+                println("$flavor release AAB size: $actualBytes bytes (budget: $budgetBytes bytes)")
+                ZipFile(bundleFile).use { zip ->
+                    val all = zip.entries().toList()
+                    fun describe(entry: ZipEntry): String {
+                        val method = if (entry.method == ZipEntry.STORED) "stored" else "deflated"
+                        return "    %,12d bytes (%s from %,d) %s".format(
+                            entry.compressedSize,
+                            method,
+                            entry.size,
+                            entry.name,
+                        )
+                    }
+                    // ネイティブライブラリはABIの取りこぼしが起きやすいので大きさに関わらず全件出す。
+                    val nativeLibraries = all.filter { entry -> entry.name.endsWith(".so") }
+                    println("  native libraries (${nativeLibraries.size}):")
+                    nativeLibraries
+                        .sortedByDescending { entry -> entry.compressedSize }
+                        .forEach { entry -> println(describe(entry)) }
+                    println("  largest entries:")
+                    all.sortedByDescending { entry -> entry.compressedSize }
+                        .take(10)
+                        .forEach { entry -> println(describe(entry)) }
+                }
                 check(actualBytes in 1 until budgetBytes) {
                     "$flavor release AAB is $actualBytes bytes, over the $budgetBytes byte budget. " +
-                        "Investigate the size regression or update docs/PERFORMANCE_BUDGETS.md " +
-                        "with a justified new budget before raising this limit."
+                        "See the entry inventory printed above. Investigate the size regression or " +
+                        "update docs/PERFORMANCE_BUDGETS.md with a justified new budget."
                 }
-                println("$flavor release AAB size: $actualBytes bytes (budget: $budgetBytes bytes)")
             }
         }
     }
