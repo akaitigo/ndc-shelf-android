@@ -105,11 +105,23 @@ interface LibraryRepository {
     suspend fun applyImport(preview: LibraryImportPreview): ImportApplyResult
 }
 
+/**
+ * fake・簡易実装向けの既定フィルタ。`tagIds`は[LibraryBook]が所属タグを保持しないため
+ * ここでは絞り込めず、Roomクエリを持つ実装（[dev.ndcshelf.app.data.repository.DefaultLibraryRepository]）
+ * だけが対応する。
+ */
 private fun List<LibraryBook>.applyLibrarySearch(criteria: LibrarySearchCriteria): List<LibraryBook> {
     if (criteria.selectedEditionId != null) return this
     val filtered = filter { book ->
         (criteria.normalizedQuery.isEmpty() || book.matches(criteria.normalizedQuery)) &&
-            (criteria.readingStatus == null || book.readingStatus == criteria.readingStatus)
+            (criteria.readingStatus == null || book.readingStatus == criteria.readingStatus) &&
+            (criteria.ndcTopClass == null || book.ndcCode?.firstOrNull()?.digitToIntOrNull() == criteria.ndcTopClass) &&
+            (
+                criteria.locationQuery.isNullOrEmpty() ||
+                    book.location.contains(criteria.locationQuery, ignoreCase = true)
+            ) &&
+            (criteria.addedAfterMillis == null || book.addedAt >= criteria.addedAfterMillis) &&
+            (criteria.addedBeforeMillis == null || book.addedAt < criteria.addedBeforeMillis)
     }
     return when (criteria.sort) {
         LibrarySort.ADDED_NEWEST -> filtered.sortedWith(
