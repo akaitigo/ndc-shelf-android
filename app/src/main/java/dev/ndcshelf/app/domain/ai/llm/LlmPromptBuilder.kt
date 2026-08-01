@@ -93,9 +93,6 @@ object LlmPromptBuilder {
         return LlmPrompt(text = text, allowedRefs = request.items.map(AiLibrarianItem::ref).toSet())
     }
 
-    /** 組み立て可能かを事前に判定する（上限超過で例外を投げないための入口）。 */
-    fun fits(request: AiLibrarianRequest): Boolean = runCatching { build(request) }.isSuccess
-
     private fun itemJson(item: AiLibrarianItem): JsonObject =
         buildJsonObject {
             put("ref", JsonPrimitive(item.ref))

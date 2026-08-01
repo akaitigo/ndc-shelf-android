@@ -20,6 +20,7 @@ class FallbackAiLibrarianProvider(
     private val preferred: AiLibrarianProvider,
     private val fallback: AiLibrarianProvider,
     private val preferredEnabled: () -> Boolean = { true },
+    private val onDegraded: (AiLibrarianProviderErrorKind) -> Unit = {},
 ) : AiLibrarianProvider {
     override val id: AiLibrarianProviderId
         get() = if (preferredEnabled()) preferred.id else fallback.id
@@ -41,5 +42,8 @@ class FallbackAiLibrarianProvider(
     private suspend fun fallbackAnswer(
         request: AiLibrarianRequest,
         degradedFrom: AiLibrarianProviderErrorKind,
-    ): AiLibrarianAnswer = fallback.answer(request).copy(degradedFrom = degradedFrom)
+    ): AiLibrarianAnswer {
+        runCatching { onDegraded(degradedFrom) }
+        return fallback.answer(request).copy(degradedFrom = degradedFrom)
+    }
 }

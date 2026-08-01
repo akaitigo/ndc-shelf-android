@@ -16,6 +16,7 @@ import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
 import dev.ndcshelf.app.data.consent.RoomConsentRepository
 import dev.ndcshelf.app.data.diagnostics.DiagnosticsLlmTelemetrySink
 import dev.ndcshelf.app.data.diagnostics.DiagnosticsLoggingBookMetadataService
+import dev.ndcshelf.app.data.diagnostics.DiagnosticsLoggingLlmModelStore
 import dev.ndcshelf.app.data.diagnostics.FileDiagnosticsLogger
 import dev.ndcshelf.app.data.diagnostics.RoomDiagnosticsSnapshotCollector
 import dev.ndcshelf.app.data.local.AndroidLlmDeviceProbe
@@ -51,6 +52,7 @@ import dev.ndcshelf.app.domain.ai.llm.LlmTelemetrySink
 import dev.ndcshelf.app.domain.ai.llm.OnDeviceLlmLibrarian
 import dev.ndcshelf.app.domain.ai.llm.UnavailableLlmRuntime
 import dev.ndcshelf.app.domain.consent.ConsentRepository
+import dev.ndcshelf.app.domain.diagnostics.DiagnosticCode
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
 import dev.ndcshelf.app.domain.insights.InsightsExclusionStore
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
@@ -212,7 +214,10 @@ class AppContainer(
 
     /** 端末内LLMのモデル配置。OSクラウドbackup・D2D対象外のnoBackup領域へ置く。 */
     val llmModelStore: LlmModelStore =
-        FileLlmModelStore(application.noBackupFilesDir.resolve("llm-models"))
+        DiagnosticsLoggingLlmModelStore(
+            delegate = FileLlmModelStore(application.noBackupFilesDir.resolve("llm-models")),
+            logger = diagnosticsLogger,
+        )
 
     private val llmDeviceProbe = AndroidLlmDeviceProbe(application)
 
@@ -253,6 +258,7 @@ class AppContainer(
                     enabled = true,
                 )
             },
+            onDegraded = { diagnosticsLogger.log(DiagnosticCode.LLM_DEGRADED_TO_HEURISTIC) },
         )
 
     private val aiLibrarianStore = SharedPreferencesAiLibrarianStore(application)

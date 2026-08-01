@@ -59,7 +59,9 @@ class FileLlmModelStore(
         onProgress: (bytesWritten: Long, totalBytes: Long) -> Unit,
     ): LlmModelInstallResult {
         val staging = File(root, STAGING_DIRECTORY)
-        if (!staging.isDirectory && !staging.mkdirs()) {
+        // mkdirs()は並行して同じディレクトリが作られた場合もfalseを返すため、結果ではなく実体で判定する。
+        staging.mkdirs()
+        if (!staging.isDirectory) {
             return LlmModelInstallResult.Failed(LlmModelInstallFailure.STORAGE_ERROR)
         }
         val temporary = File(staging, "${UUID.randomUUID()}$STAGING_SUFFIX")
@@ -109,12 +111,13 @@ class FileLlmModelStore(
 
         val target = modelFile(definition)
         val parent = target.parentFile
-        if (parent == null || (!parent.isDirectory && !parent.mkdirs())) {
+        if (parent != null && !parent.isDirectory) parent.mkdirs()
+        if (parent == null || !parent.isDirectory) {
             temporary.delete()
             return LlmModelInstallResult.Failed(LlmModelInstallFailure.STORAGE_ERROR)
         }
-        // 有効化は同一ファイルシステム上のrenameだけで行う（中途半端な状態を作らない）。
-        target.delete()
+        // 有効化は同一ファイルシステム上のrenameだけで行う。Linuxのrename(2)は既存の
+        // 宛先を不可分に置換するため事前削除しない（renameが失敗しても旧モデルが残る）。
         if (!temporary.renameTo(target)) {
             temporary.delete()
             return LlmModelInstallResult.Failed(LlmModelInstallFailure.STORAGE_ERROR)
@@ -131,7 +134,9 @@ class FileLlmModelStore(
                 )
             }.isSuccess
         if (!metaWritten) {
+            // metaが無ければstate()はNotInstalledになる。ロードされない状態で残さず消す。
             target.delete()
+            metaFile(definition).delete()
             return LlmModelInstallResult.Failed(LlmModelInstallFailure.STORAGE_ERROR)
         }
         // 成功が確定してから旧versionを片付ける。
@@ -143,7 +148,7 @@ class FileLlmModelStore(
      * 導入済みモデルのSHA-256を再計算して台帳と照合する。
      * 不一致なら削除し、以後ロードできない状態にする。
      */
-    fun verifyInstalled(definition: LlmModelDefinition): Boolean {
+    override fun verifyInstalled(definition: LlmModelDefinition): Boolean {
         val file = modelFile(definition)
         if (!file.isFile || file.length() != definition.sizeBytes) {
             delete(definition)

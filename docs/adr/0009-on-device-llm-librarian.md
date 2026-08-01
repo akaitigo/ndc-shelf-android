@@ -130,14 +130,15 @@ runtimeを採用する版では、次のいずれかを別途決める必要が�
 
 ### 本ADRで確定する規範（runtime非依存）
 
-1. **台帳（allowlist）**: `LlmModelCatalog`に載っていないモデルは取得も読み込みもできない。定義（`LlmModelDefinition`）はid・version・取得URL・期待サイズ・SHA-256・ライセンス・一次情報URL・確認日・minSdk・必要ABI・必要RAM・必要空き容量・context長・追加日・廃止日・既知の制約を必須で持つ。任意URLや未検証モデルを読み込む汎用プラグイン機構は提供しない。
-2. **取得の境界**: `LlmModelUrlPolicy`がHTTPS・許可host・port 443・userInfo無し・fragment無し・`..`無しだけを許可し、定義の構築時点で不正なURLを弾く。`LlmModelDownloadSource`はredirectを追わず（`followRedirects(false)`・`followSslRedirects(false)`）、`Content-Length`が台帳と一致しない応答は本文を読まない。送信するのは台帳のURLとUser-Agentだけで、蔵書・質問文・回答は送らない。
-3. **原子的な導入**: `FileLlmModelStore`は一時領域へ書き出しながらサイズ上限とSHA-256を計算し、両方が台帳と一致した場合だけrenameで有効化する。検証に失敗した場合は一時ファイルだけを消し、直前の検証済みモデルを保持する。旧versionの削除は新versionの有効化が確定してから行う。
+1. **台帳（allowlist）**: `LlmModelCatalog`に載っていないモデルは取得も読み込みもできない。定義（`LlmModelDefinition`）はid・version・取得URL・期待サイズ・SHA-256・ライセンス・一次情報URL・確認日・minSdk・必要ABI・必要RAM・必要空き容量・context長・追加日・廃止日・既知の制約を必須で持つ。id・version・fileNameは端末内のパス組み立てへ入るため、区切りと親参照を許さない文字集合へ制限する。任意URLや未検証モデルを読み込む汎用プラグイン機構は提供しない。
+2. **取得の境界**: `LlmModelUrlPolicy`がHTTPS・許可host・port 443・userInfo無し・query無し・fragment無し・`..`無しだけを許可し、定義の構築時点で不正なURLを弾く。`LlmModelDownloadSource`はredirectを追わず（`followRedirects(false)`・`followSslRedirects(false)`）、`Content-Length`が台帳と一致しない応答は本文を読まない。送信するのは台帳のURLとUser-Agentだけで、蔵書・質問文・回答は送らない。
+3. **原子的な導入**: `FileLlmModelStore`は一時領域へ書き出しながらサイズ上限とSHA-256を計算し、両方が台帳と一致した場合だけrenameで有効化する。renameは既存ファイルを不可分に置換するため事前削除しない（renameが失敗しても旧モデルが残る）。検証に失敗した場合は一時ファイルだけを消し、直前の検証済みモデルを保持する。旧versionの削除は新versionの有効化が確定してから行う。
+3-1. **ロード前の再検証**: 導入後にファイルが差し替えられていないことを、`OnDeviceLlmLibrarian`がプロセスごとに1度だけ全バイトのSHA-256で確認する。不一致ならモデルを削除し、`MODEL_CORRUPTED`として縮退する。この所要時間は`initializationMillis`へ含める。
 4. **能力判定（fail-closed）**: `LlmCapabilityChecker`がAPI level・ABI・物理RAM・空き容量・low-RAM端末フラグ・runtimeの有無を検査し、一つでも満たさなければ`Unsupported`を返す。取得の可否も同じ条件で判定し、起動できない端末に数GiBをダウンロードさせない。OOMを例外処理で回復する設計にはしない。
 5. **データ隔離**: `LlmPromptBuilder`は固定の`AI_LIBRARIAN_SYSTEM_INSTRUCTION`と固定の出力形式指示だけを連結し、質問文と書誌はJSONの値としてescapeして埋め込む。ADR 0007の規範4（未選択項目をpayloadへ出さない）はそのまま適用される。
-6. **出力の厳格検証**: `LlmAnswerParser`は、既知のintent/reason、要求内のrefだけ、entries 1〜5件、1ブロックあたりref 8件以下、summary 400字以下・comment 200字以下・label 60字以下を満たす出力だけを受け入れる。一点でも外れれば全体を破棄し`INVALID_RESPONSE`にする（切り詰めて通さない）。
+6. **出力の厳格検証**: `LlmAnswerParser`は、既知のintent/reason、要求内のrefだけ、entries 1〜5件、1ブロックあたりref 8件以下、summary 400字以下・comment 200字以下・label 60字以下を満たす出力だけを受け入れる。一点でも外れれば全体を破棄し`INVALID_RESPONSE`にする（切り詰めて通さない）。自由文はISO制御文字とU+2028/U+2029を空白へ置換し、全角空白とNBSPを含む連続空白を1つへ畳む。
 7. **縮退**: `FallbackAiLibrarianProvider`はLLM失敗時に`OnDeviceHeuristicLibrarian`の決定的で検証済みの回答へ切り替え、`AiLibrarianAnswer.degradedFrom`で縮退理由を伝える。未検証の部分回答は表示しない。利用者のキャンセルは縮退させずそのまま伝播する。
-8. **診断**: 記録するのはmodel id/version・SHA-256の先頭16桁・runtime id/version・初期化時間・推論時間・prompt文字数・出力文字数・失敗分類だけ。端末内診断ログへ書けるのはallowlistの`DiagnosticCode`（`ON_DEVICE_LLM`カテゴリ）に限られ、質問文・書誌・回答は構造上入らない。
+8. **診断**: 記録するのはmodel id/version・SHA-256の先頭16桁・runtime id/version・初期化時間・推論時間・prompt文字数・出力文字数・失敗分類だけ。端末内診断ログへ書けるのはallowlistの`DiagnosticCode`（`ON_DEVICE_LLM`カテゴリ）に限られ、質問文・書誌・回答は構造上入らない。モデル導入結果と整合性確認の失敗は`DiagnosticsLoggingLlmModelStore`が、ヒューリスティックへの縮退は`FallbackAiLibrarianProvider`の通知経路が、それぞれ同じallowlistへ記録する。
 9. **削除**: `LlmModelStore.deleteAll()`でモデルとモデル由来ファイルを全削除できる。配置先は`noBackupFilesDir`配下で、OSクラウドbackup・D2D・エクスポート・同期の対象外。
 10. **停止経路**: 台帳が空、能力判定が`Unsupported`、`LlmCapabilityChecker.canAcquire`がfalseのいずれでもLLM経路は起動しない。モデル配布元の停止・ライセンス変更・脆弱性が判明した場合は、台帳から該当versionを外す（または`retiredOn`を設定する）アプリ更新だけでヒューリステックへ戻せる。
 

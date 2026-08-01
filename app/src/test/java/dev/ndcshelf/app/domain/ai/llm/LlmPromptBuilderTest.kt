@@ -61,7 +61,7 @@ class LlmPromptBuilderTest {
         val items = (1..30).map { index -> item(ref = index.toString(), title = longTitle) }
         val request = request(items = items)
 
-        assertTrue(LlmPromptBuilder.fits(request))
+        assertTrue(LlmPromptBuilder.build(request).text.length <= LlmPromptLimits.MAX_PROMPT_CHARS)
 
         val hugeRequest = request(question = "?".repeat(200), items = items)
         assertTrue(LlmPromptBuilder.build(hugeRequest).text.length <= LlmPromptLimits.MAX_PROMPT_CHARS)

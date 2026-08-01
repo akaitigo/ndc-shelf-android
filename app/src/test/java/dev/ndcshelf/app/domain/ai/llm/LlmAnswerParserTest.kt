@@ -123,6 +123,17 @@ class LlmAnswerParserTest {
     }
 
     @Test
+    fun `ideographic space nbsp and unicode separators are folded`() {
+        val raw =
+            "{\"intent\":\"OVERVIEW\",\"summary\":\"前半\u3000\u3000\u00A0\u2028後半\"," +
+                "\"entries\":[{\"reason\":\"LIBRARY_OVERVIEW\",\"refs\":[\"1\"]}]}"
+
+        val answer = (LlmAnswerParser.parse(raw, allowedRefs) as LlmAnswerParseResult.Valid).answer
+
+        assertEquals("前半 後半", answer.summary)
+    }
+
+    @Test
     fun `non object and malformed output is rejected`() {
         listOf("", "見つかりませんでした", "[1,2,3]", "{", """{"intent":"OVERVIEW"}""").forEach { raw ->
             assertEquals("raw=$raw", LlmAnswerParseResult.Invalid, LlmAnswerParser.parse(raw, allowedRefs))

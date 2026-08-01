@@ -18,6 +18,13 @@ interface LlmModelStore {
     fun installedFile(definition: LlmModelDefinition): File?
 
     /**
+     * 導入済みモデルの全バイトを再ハッシュして台帳と照合する。不一致なら削除し、
+     * 以後[installedFile]がnullを返すようにする。数百MiB〜数GiBを読むため
+     * main threadから呼ばず、ロード前に1度だけ実行する。
+     */
+    fun verifyInstalled(definition: LlmModelDefinition): Boolean
+
+    /**
      * [source]から読み出して検証し、成功した場合だけ有効化する。
      * 呼び出し側はmain threadで呼ばない。cancelはcoroutineのキャンセルで行う。
      */
@@ -43,12 +50,6 @@ fun interface LlmModelSource {
 sealed interface LlmModelState {
     data object NotInstalled : LlmModelState
 
-    /** 導入中（一時ファイルが存在する）。有効なモデルとしては扱わない。 */
-    data class Installing(
-        val bytesWritten: Long,
-        val totalBytes: Long,
-    ) : LlmModelState
-
     data class Installed(
         val definition: LlmModelDefinition,
         val fileSizeBytes: Long,
@@ -67,19 +68,16 @@ sealed interface LlmModelInstallResult {
     ) : LlmModelInstallResult
 }
 
-/** 導入失敗の分類。UI文言はstrings.xmlで対応付ける。 */
+/**
+ * 導入失敗の分類。UI文言はstrings.xmlで対応付ける。
+ *
+ * 端末条件と空き容量の不足は導入を開始する前に[LlmCapabilityChecker]が弾くため、
+ * ここには現れない。利用者のキャンセルは[kotlinx.coroutines.CancellationException]
+ * として伝播し、失敗としては扱わない。
+ */
 enum class LlmModelInstallFailure {
-    /** 端末条件を満たさない。 */
-    DEVICE_UNSUPPORTED,
-
-    /** 空き容量不足。 */
-    INSUFFICIENT_STORAGE,
-
-    /** 取得元へ到達できない・通信失敗。 */
+    /** 取得元へ到達できない・通信失敗・許可外URLの拒否。 */
     TRANSPORT,
-
-    /** 許可外のURL・redirect・不正なhost。 */
-    BLOCKED_SOURCE,
 
     /** 期待サイズと異なる（上限超過を含む）。 */
     SIZE_MISMATCH,
@@ -89,7 +87,4 @@ enum class LlmModelInstallFailure {
 
     /** 端末内への書き込みに失敗。 */
     STORAGE_ERROR,
-
-    /** 利用者によるキャンセル。 */
-    CANCELLED,
 }

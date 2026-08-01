@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
  * - ネットワークAPIを使用しない。モデル取得は[LlmModelStore]の別経路に限る。
  * - 推論をmain threadで実行しない（[dispatcher]は既定でDispatchers.Default）。
  * - 端末能力・モデル状態を毎回検査し、条件を満たさなければ推論を始めない。
+ * - モデルはプロセスごとに1度、全バイトのSHA-256を再照合してからロードする。
  * - 出力は[LlmAnswerParser]の検証を通ったものだけを返す。未検証の部分回答を返さない。
  * - 診断へはmodel version/runtime/hash先頭/所要時間/失敗分類だけを記録する。
  */
@@ -34,6 +35,9 @@ class OnDeviceLlmLibrarian(
     override val id: AiLibrarianProviderId = AiLibrarianProviderId.ON_DEVICE_LLM
 
     override val sendsDataOffDevice: Boolean = false
+
+    /** プロセス内で整合性を再確認済みのモデル（"id@version"）。 */
+    private val verifiedModels = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     override suspend fun answer(request: AiLibrarianRequest): AiLibrarianAnswer {
         val capability = capabilityProvider()
@@ -55,6 +59,19 @@ class OnDeviceLlmLibrarian(
         return withContext(dispatcher) {
             currentCoroutineContext().ensureActive()
             val initStart = nowMillis()
+            // 導入後にファイルが差し替えられていないことを、プロセスごとに1度だけ全バイトで確認する。
+            val modelKey = "${model.id}@${model.version}"
+            if (modelKey !in verifiedModels) {
+                if (!modelStore.verifyInstalled(model)) {
+                    throw failAndReport(
+                        model,
+                        LlmFailureKind.MODEL_CORRUPTED,
+                        AiLibrarianProviderErrorKind.UNAVAILABLE,
+                        nowMillis() - initStart,
+                    )
+                }
+                verifiedModels += modelKey
+            }
             val session =
                 try {
                     runtime.open(

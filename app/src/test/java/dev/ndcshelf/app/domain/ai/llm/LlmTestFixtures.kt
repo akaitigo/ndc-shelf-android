@@ -102,6 +102,7 @@ internal class FakeLlmRuntime(
 /** 常に導入済みを返すテスト用store。 */
 internal class FakeLlmModelStore(
     private val file: File?,
+    private val verifyResult: Boolean = true,
 ) : LlmModelStore {
     override fun state(definition: LlmModelDefinition): LlmModelState =
         file?.let { value ->
@@ -109,6 +110,14 @@ internal class FakeLlmModelStore(
         } ?: LlmModelState.NotInstalled
 
     override fun installedFile(definition: LlmModelDefinition): File? = file
+
+    var verifyCount: Int = 0
+        private set
+
+    override fun verifyInstalled(definition: LlmModelDefinition): Boolean {
+        verifyCount += 1
+        return verifyResult
+    }
 
     override suspend fun install(
         definition: LlmModelDefinition,

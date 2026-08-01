@@ -63,12 +63,16 @@ data class LlmModelDefinition(
     val knownLimitations: List<String> = emptyList(),
 ) {
     init {
-        require(id.isNotBlank()) { "model id must not be blank" }
         require(SHA256_HEX.matches(sha256)) { "sha256 must be 64 lowercase hex characters" }
         require(sizeBytes in 1..MAX_MODEL_BYTES) { "sizeBytes must be within the model size budget" }
         require(requiredFreeBytes >= sizeBytes) { "requiredFreeBytes must cover the model itself" }
         require(requiredAbis.isNotEmpty()) { "requiredAbis must not be empty" }
         require(LlmModelUrlPolicy.isAllowed(downloadUrl)) { "downloadUrl must be an allowed HTTPS URL" }
+        // idとversionとfileNameは端末内のパス組み立てへ入るため、区切りと親参照を許さない。
+        listOf(id, version, fileName).forEach { segment ->
+            require(segment.isNotBlank()) { "path segments must not be blank" }
+            require(PATH_SEGMENT.matches(segment)) { "path segments must not contain separators or '..'" }
+        }
     }
 
     companion object {
@@ -76,6 +80,9 @@ data class LlmModelDefinition(
         const val MAX_MODEL_BYTES: Long = 3L * 1024 * 1024 * 1024
 
         private val SHA256_HEX = Regex("[0-9a-f]{64}")
+
+        /** 端末内パスへ使える文字。区切り・親参照・制御文字を許さない。 */
+        private val PATH_SEGMENT = Regex("[A-Za-z0-9][A-Za-z0-9._-]*")
     }
 }
 
@@ -94,6 +101,7 @@ object LlmModelUrlPolicy {
                 uri.host?.lowercase(java.util.Locale.ROOT) in ALLOWED_HOSTS &&
                 uri.userInfo == null &&
                 uri.port in ALLOWED_PORTS &&
+                uri.rawQuery == null &&
                 uri.rawFragment == null &&
                 !uri.rawPath.isNullOrBlank() &&
                 ".." !in uri.rawPath

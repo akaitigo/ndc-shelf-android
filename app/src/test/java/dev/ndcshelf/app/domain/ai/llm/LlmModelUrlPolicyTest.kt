@@ -32,6 +32,7 @@ class LlmModelUrlPolicyTest {
             "https://user:pass@huggingface.co/org/model/model.bin",
             "https://huggingface.co:8443/org/model/model.bin",
             "https://huggingface.co/org/model/model.bin#fragment",
+            "https://huggingface.co/org/model/model.bin?download=true",
             "https://huggingface.co/../../etc/passwd",
             "https://huggingface.co",
         ).forEach { url ->
@@ -61,6 +62,18 @@ class LlmModelUrlPolicyTest {
             testModelDefinition(sizeBytes = 100, requiredFreeBytes = 10)
         }
         assertThrows(IllegalArgumentException::class.java) { testModelDefinition(requiredAbis = emptySet()) }
+    }
+
+    @Test
+    fun `path segments used for on device storage reject separators and traversal`() {
+        listOf("../evil", "a/b", "", " ", ".").forEach { segment ->
+            assertThrows(segment, IllegalArgumentException::class.java) {
+                testModelDefinition(id = segment)
+            }
+            assertThrows(segment, IllegalArgumentException::class.java) {
+                testModelDefinition(version = segment)
+            }
+        }
     }
 
     @Test

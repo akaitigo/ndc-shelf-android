@@ -117,6 +117,22 @@ class FallbackAiLibrarianProviderTest {
         }
 
     @Test
+    fun `degrading notifies the diagnostics hook exactly once`() =
+        runTest {
+            val degraded = mutableListOf<AiLibrarianProviderErrorKind>()
+            val provider =
+                FallbackAiLibrarianProvider(
+                    preferred = alwaysFails(AiLibrarianProviderErrorKind.INVALID_RESPONSE),
+                    fallback = heuristic,
+                    onDegraded = { kind -> degraded += kind },
+                )
+
+            provider.answer(request())
+
+            assertEquals(listOf(AiLibrarianProviderErrorKind.INVALID_RESPONSE), degraded)
+        }
+
+    @Test
     fun `composite never sends data off device`() {
         val provider = FallbackAiLibrarianProvider(preferred = alwaysAnswers(), fallback = heuristic)
 

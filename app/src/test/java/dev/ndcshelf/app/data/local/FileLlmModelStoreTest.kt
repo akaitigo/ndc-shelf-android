@@ -164,6 +164,19 @@ class FileLlmModelStoreTest {
         }
 
     @Test
+    fun `reinstalling the same version replaces the file without an intermediate gap`() =
+        runTest {
+            val definition = definition()
+            store.install(definition, source(payload))
+
+            val result = store.install(definition, source(payload))
+
+            assertTrue(result is LlmModelInstallResult.Installed)
+            assertTrue(payload.contentEquals(store.installedFile(definition)?.readBytes()))
+            assertNoStagingLeftovers()
+        }
+
+    @Test
     fun `verifyInstalled removes a tampered model`() =
         runTest {
             val definition = definition()

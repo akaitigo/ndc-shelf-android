@@ -95,7 +95,7 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 
 | 指標 | 実測（2026-08-01、R8有効・未署名） | 予算 |
 | --- | ---: | ---: |
-| リリースAAB（`app-release.aab`） | 18,451,644 B | 21,000,000 B |
+| リリースAAB（`app-release.aab`） | 18,450,318 B | 21,000,000 B |
 
 `:app:verifyReleaseBundleSize` が `bundleRelease` の成果物サイズを予算と比較する。
 `bundleRelease` は毎PRのverifyには重いため必須ジョブへは入れず、
@@ -138,7 +138,7 @@ runtime採用前は数値を確定できないため、以下は「実機測定�
 | 導入に必要な空き容量 | 台帳の `requiredFreeBytes`（モデルサイズ以上） | `AndroidLlmDeviceProbe` の `usableSpace` |
 | 必要な物理RAM | 台帳の `minTotalRamBytes`（未達端末はfail-closed） | `ActivityManager.MemoryInfo.totalMem` |
 | 推論中のpeak RSS | 実機測定で確定 | `adb shell dumpsys meminfo` |
-| モデル初期化時間 | 実機測定で確定 | `LlmInferenceTelemetry.initializationMillis` |
+| モデル初期化時間（プロセス初回はSHA-256再検証を含む） | 実機測定で確定 | `LlmInferenceTelemetry.initializationMillis` |
 | first-token latency / 生成速度 | 実機測定で確定 | 同上 + `inferenceMillis` |
 | 1回の相談の合計時間 | 15,000 ms（`AiLibrarianLimits.REQUEST_TIMEOUT_MILLIS`、超過はTIMEOUT） | ViewModelのtimeout |
 | prompt長 | 12,000 文字以下（`LlmPromptLimits.MAX_PROMPT_CHARS`、超過は組み立て拒否） | JVMテスト |

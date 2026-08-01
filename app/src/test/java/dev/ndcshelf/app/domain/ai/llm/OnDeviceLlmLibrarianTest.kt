@@ -123,6 +123,51 @@ class OnDeviceLlmLibrarianTest {
         }
 
     @Test
+    fun `model integrity is re-verified once per process before loading`() =
+        runTest {
+            val store = FakeLlmModelStore(modelFile())
+            val runtime =
+                FakeLlmRuntime(
+                    response = { """{"intent":"OVERVIEW","entries":[{"reason":"LIBRARY_OVERVIEW","refs":["1"]}]}""" },
+                )
+            val provider =
+                OnDeviceLlmLibrarian(
+                    capabilityProvider = { LlmCapability.Supported(model) },
+                    modelStore = store,
+                    runtime = runtime,
+                    dispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+                )
+
+            provider.answer(request())
+            provider.answer(request())
+
+            assertEquals(1, store.verifyCount)
+            assertEquals(2, runtime.openCount)
+        }
+
+    @Test
+    fun `tampered model is refused before the runtime is opened`() =
+        runTest {
+            val telemetry = InMemoryLlmTelemetrySink()
+            val store = FakeLlmModelStore(modelFile(), verifyResult = false)
+            val runtime = FakeLlmRuntime()
+            val provider =
+                OnDeviceLlmLibrarian(
+                    capabilityProvider = { LlmCapability.Supported(model) },
+                    modelStore = store,
+                    runtime = runtime,
+                    telemetry = telemetry,
+                    dispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+                )
+
+            val error = assertThrows(AiLibrarianProviderException::class.java) { runBlockingAnswer(provider) }
+
+            assertEquals(AiLibrarianProviderErrorKind.UNAVAILABLE, error.kind)
+            assertEquals(LlmFailureKind.MODEL_CORRUPTED, telemetry.recent().single().failure)
+            assertEquals(0, runtime.openCount)
+        }
+
+    @Test
     fun `initialization failure is classified and recorded`() =
         runTest {
             val telemetry = InMemoryLlmTelemetrySink()

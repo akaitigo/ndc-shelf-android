@@ -141,7 +141,7 @@ object LlmAnswerParser {
     ): String? {
         val withoutControls =
             buildString(value.length) {
-                value.forEach { char -> append(if (char.isISOControl()) ' ' else char) }
+                value.forEach { char -> append(if (char.isISOControl() || char in SEPARATORS) ' ' else char) }
             }
         val cleaned = withoutControls.replace(WHITESPACE_RUN, " ").trim()
         return when {
@@ -151,7 +151,11 @@ object LlmAnswerParser {
         }
     }
 
-    private val WHITESPACE_RUN = Regex("\\s+")
+    /** LINE SEPARATOR / PARAGRAPH SEPARATORはisISOControlの対象外なので明示して潰す。 */
+    private val SEPARATORS = charArrayOf('\u2028', '\u2029')
+
+    /** JavaのRegexの\sは全角空白とNBSPを含まないため明示して畳む。 */
+    private val WHITESPACE_RUN = Regex("[\\s\u3000\u00A0]+")
 }
 
 sealed interface LlmAnswerParseResult {
