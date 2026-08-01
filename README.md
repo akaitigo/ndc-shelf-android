@@ -74,11 +74,22 @@ apksigner verify --print-certs ndc-shelf-vX.Y.Z.apk
 
 ## スクリーン
 
+<img src="docs/images/demo.gif" alt="初回案内から本棚の自然言語検索、NDC分類、データ管理までを操作するデモ" width="320">
+
+初回案内（カメラは任意・送信範囲の説明）→ 本棚で「未読の自然科学」と入力すると解釈がチップで表示される → 分類 → データ管理、までの操作です。
+
 | 本棚 | スキャン | シリーズ | 分類 | データ | 情報 |
 | --- | --- | --- | --- | --- | --- |
 | 蔵書の検索と編集 | バーコード連続登録 | 所有巻・欠巻候補・読了状況 | NDC別の蔵書マップ | 移行・バックアップ・復元 | プライバシー・出典・ライセンス |
 
-スクリーンショットは最初の実機ビルド後に追加予定です。
+| ライト | ダーク |
+| --- | --- |
+| <img src="app/roborazzi/library_light.png" alt="ライトテーマの本棚画面。蔵書数・NDC分類済み・読書中の件数と、匿名サンプル図書の一覧" width="240"> | <img src="app/roborazzi/library_dark.png" alt="ダークテーマの本棚画面。同じ内容を暗い配色で表示" width="240"> |
+| <img src="app/roborazzi/insights_light.png" alt="ライトテーマの分類画面。NDC類別の蔵書分布と読書傾向" width="240"> | <img src="app/roborazzi/insights_dark.png" alt="ダークテーマの分類画面" width="240"> |
+| <img src="app/roborazzi/series_light.png" alt="ライトテーマのシリーズ画面。所有3/既知4・読了1・欠巻候補1件を表示" width="240"> | <img src="app/roborazzi/series_dark.png" alt="ダークテーマのシリーズ画面" width="240"> |
+| <img src="app/roborazzi/scan_light.png" alt="ライトテーマのスキャン画面。カメラ権限の説明と、手入力・手動登録の代替経路" width="240"> | <img src="app/roborazzi/scan_dark.png" alt="ダークテーマのスキャン画面" width="240"> |
+
+画像はすべて匿名fixtureで、実在するISBN・氏名・置き場所を含みません。スクリーンショットは`ScreenshotRegressionTest`がCIで検証しているため、UIの変更に追随します。デモGIFの作り直しは`tools/build_demo_gif.py`の手順に従います。
 
 ## 対応言語
 
