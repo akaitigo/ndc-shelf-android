@@ -1021,8 +1021,9 @@
     <string name="ai_librarian_open_action">AI司書に相談</string>
     <string name="ai_librarian_title">AI司書に相談</string>
     <string name="ai_librarian_description">質問ごとに対象の本と送信する項目を選び、送信内容を確認してから相談します。AI司書は提案するだけで、蔵書データを書き換えることはありません。</string>
-    <string name="ai_librarian_provider_notice">クラウドのAIプロバイダは未接続です。接続機能は将来の版で、料金と送信内容を明示したうえで追加します。現在の回答は端末内だけで組み立てられ、外部送信は発生しません。</string>
+    <string name="ai_librarian_provider_notice">クラウドのAIプロバイダは未接続です。接続機能は将来の版で、料金と送信内容を明示したうえで追加します。自然文で提案する端末内LLMも、推論エンジンとモデルを同梱していないため現在は利用できません。現在の回答は端末内だけで組み立てられ、外部送信は発生しません。</string>
     <string name="ai_librarian_destination_on_device">端末内のAI司書（ネットワーク通信なし）</string>
+    <string name="ai_librarian_destination_on_device_llm">端末内のAI司書（端末内LLM・ネットワーク通信なし）</string>
     <string name="ai_librarian_examples_title">相談できることの例</string>
     <string name="ai_librarian_example_pick_next">この棚から次に読む本を選ぶ</string>
     <string name="ai_librarian_example_organize">未読の中からテーマ別に整理案を出す</string>

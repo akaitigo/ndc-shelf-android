@@ -93,9 +93,9 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 
 ## 配布サイズ（層1、release workflowで判定）
 
-| 指標 | 実測（2026-07-29、R8有効・未署名） | 予算 |
+| 指標 | 実測（2026-08-01、R8有効・未署名） | 予算 |
 | --- | ---: | ---: |
-| リリースAAB（`app-release.aab`） | 17,590,996 B | 21,000,000 B |
+| リリースAAB（`app-release.aab`） | 18,450,318 B | 21,000,000 B |
 
 `:app:verifyReleaseBundleSize` が `bundleRelease` の成果物サイズを予算と比較する。
 `bundleRelease` は毎PRのverifyには重いため必須ジョブへは入れず、
@@ -103,6 +103,50 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 主なサイズ要因はML Kitバーコードモデルと `libbarhopper_v3.so`（4 ABI）で、
 超過時はABI別配信・依存の見直しを先に検討し、正当な増加であればこの表と
 タスク定数の両方を更新する。
+
+参考: 同条件でarm64-v8aだけを同梱すると 11,610,678 B（2026-08-01、#126のmerge前に実測）。
+
+## 端末内LLM AI司書（層3、未採用）
+
+`docs/adr/0009-on-device-llm-librarian.md` のとおり、推論runtimeは**未採用**で、
+現行AABへネイティブライブラリは1バイトも入っていない。採用時に必要になる予算枠を先に定義する。
+
+### 配布サイズ（採用時に承認が必要）
+
+| 構成 | アプリABI | LLM native lib ABI | AAB実測（2026-08-01） | 現行予算比 |
+| --- | --- | --- | ---: | ---: |
+| 現行main（LLMなし、#126のmerge前） | 4 ABI | — | 18,409,960 B | 87.7% |
+| `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | 4 ABI | 60,660,835 B | 288.9% |
+| `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | arm64-v8aのみ | 28,691,368 B | 136.6% |
+| `com.google.mediapipe:tasks-genai:0.10.35` | arm64-v8aのみ | arm64-v8aのみ | 21,885,472 B | 104.2% |
+| `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | 4 ABI | arm64-v8a + x86_64 | 39,126,540 B | 186.3% |
+| `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | 4 ABI | arm64-v8aのみ | 28,953,242 B | 137.9% |
+
+いずれの構成も21,000,000 B予算に収まらない。最小構成（LLM native libraryをarm64-v8aだけに絞る）でも
+**30,000,000 B以上の予算**が必要になる。runtimeを採用する場合は、実測値と配布影響
+（GitHub Releasesの直接ダウンロード量が約1.6倍になること）を添えて予算引き上げを
+承認したうえで、この表と `verifyReleaseBundleSize` の定数を同時に更新する。
+
+### 実行時予算（採用時に実機で確定する）
+
+runtime採用前は数値を確定できないため、以下は「実機測定で埋める枠」として定義し、
+埋まるまでLLM経路を有効化しない。測定は `docs/SCAN_DEVICE_TESTING.md` と同じ2系統以上の実機で行う。
+
+| 指標 | 予算枠 | 測定 |
+| --- | --- | --- |
+| モデル格納容量 | 台帳の `sizeBytes`（`LlmModelDefinition.MAX_MODEL_BYTES` = 3 GiB以下） | `LlmModelStore` 導入後のファイルサイズ |
+| 導入に必要な空き容量 | 台帳の `requiredFreeBytes`（モデルサイズ以上） | `AndroidLlmDeviceProbe` の `usableSpace` |
+| 必要な物理RAM | 台帳の `minTotalRamBytes`（未達端末はfail-closed） | `ActivityManager.MemoryInfo.totalMem` |
+| 推論中のpeak RSS | 実機測定で確定 | `adb shell dumpsys meminfo` |
+| モデル初期化時間（プロセス初回はSHA-256再検証を含む） | 実機測定で確定 | `LlmInferenceTelemetry.initializationMillis` |
+| first-token latency / 生成速度 | 実機測定で確定 | 同上 + `inferenceMillis` |
+| 1回の相談の合計時間 | 15,000 ms（`AiLibrarianLimits.REQUEST_TIMEOUT_MILLIS`、超過はTIMEOUT） | ViewModelのtimeout |
+| prompt長 | 12,000 文字以下（`LlmPromptLimits.MAX_PROMPT_CHARS`、超過は組み立て拒否） | JVMテスト |
+| 生成token数 | 512 以下（`LlmPromptLimits.MAX_OUTPUT_TOKENS`） | runtime設定 |
+| 15分連続利用時の熱状態 | `THERMAL_STATUS_MODERATE` 以下 | `adb shell dumpsys thermalservice` |
+| 15分連続利用時の電池消費 | 実機測定で確定 | `adb shell dumpsys batterystats` |
+
+予算超過端末では `LlmCapabilityChecker` が `Unsupported` を返し、取得も起動も行わない（fail-closed）。
 
 ## 連続スキャン（層3）
 

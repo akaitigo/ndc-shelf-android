@@ -14,6 +14,25 @@
 
 シリーズ候補では明示したシリーズ名以外のタイトル、著者、NDC、読書状態、置き場所、購入状態、他の蔵書は送らない。全経路ともHTTPSのみで、redirectを追従しない。importした表紙URLも、NDL host、既定HTTPS port、`/thumbnail/<同じISBN>.jpg`、query・fragmentなしの全条件を満たす場合だけ通信する。
 
+## 端末内LLMモデルの取得（NDL以外の唯一の経路・現時点では未使用）
+
+| 用途 | 発生タイミング | 送信先 | アプリが送る値 |
+| --- | --- | --- | --- |
+| LLMモデル取得 | 利用者が明示的に「モデルを取得」を実行したときだけ | `GET https://<許可host>/<台帳のpath>` | 台帳（`LlmModelCatalog`）に埋め込んだURLとUser-Agentのみ |
+
+許可hostは `LlmModelUrlPolicy.ALLOWED_HOSTS`（現在は `huggingface.co`）で、
+`LlmModelDefinition` の構築時にHTTPS・許可host・port 443・userInfo無し・fragment無し・
+`..` を含まないことを検査する。条件を満たさないURLは定義自体を作れない（fail-closed）。
+
+- 蔵書、質問文、prompt、回答、推論テレメトリ、端末識別子は一切送らない（cookie・認証headerも付けない）。
+- `followRedirects(false)` / `followSslRedirects(false)` / `retryOnConnectionFailure(false)`。3xxは失敗として扱う。
+- `Content-Length` が台帳の期待サイズと一致しない応答は本文を読まない。読み出し中も期待サイズを超えた時点で中断する。
+- 取り込みはサイズとSHA-256の両方が台帳と一致した場合だけで、一致しないファイルは破棄する。
+- **推論経路はこの通信経路へ依存しない。** `OnDeviceLlmLibrarian` はAndroidのネットワークAPIを使用しない。
+
+**現時点でこの経路は使われない。** ADR 0009のとおり推論runtimeが未採用で
+`LlmModelCatalog.models` が空のため、取得UIも通信も発生しない。
+
 ## シリーズ候補の障害処理
 
 周期処理はネットワーク接続とbattery-not-lowを必須とし、一時的なDNS・timeout・HTTP 429・5xx・I/O失敗ではWorkManagerへretryを返す。指数バックオフは1時間から開始し、同じ7日間に成功済みのシリーズはretry時に再照会しない。4xx（429以外）、不正XML、2MiB超のbody、タイトル不一致は再試行しない。外部障害時も保存済み候補と蔵書機能は利用できる。候補IDと通知済み時刻をRoomへ保存し、通知成功後だけ通知済みにする。

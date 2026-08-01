@@ -1064,8 +1064,9 @@
     <string name="ai_librarian_open_action">Ask the AI librarian</string>
     <string name="ai_librarian_title">Ask the AI librarian</string>
     <string name="ai_librarian_description">For each question you pick the books and the fields to send, and you review the payload before asking. The AI librarian only suggests; it never changes your library data.</string>
-    <string name="ai_librarian_provider_notice">No cloud AI provider is connected. Connectivity will be added in a future version, with the cost and exactly what is sent stated up front. Today\'s answers are assembled entirely on this device, and nothing is sent outside.</string>
+    <string name="ai_librarian_provider_notice">No cloud AI provider is connected. Connectivity will be added in a future version, with the cost and exactly what is sent stated up front. The on-device LLM that would write suggestions in natural language is also unavailable right now, because neither the inference engine nor a model ships with the app. Today\'s answers are assembled entirely on this device, and nothing is sent outside.</string>
     <string name="ai_librarian_destination_on_device">On-device AI librarian (no network traffic)</string>
+    <string name="ai_librarian_destination_on_device_llm">On-device AI librarian (on-device LLM, no network traffic)</string>
     <string name="ai_librarian_examples_title">Examples of what you can ask</string>
     <string name="ai_librarian_example_pick_next">Pick what to read next from this shelf</string>
     <string name="ai_librarian_example_organize">Suggest a way to group my unread books by theme</string>
