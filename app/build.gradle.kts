@@ -221,6 +221,15 @@ val generateThirdPartyNoticesTasks =
         }
     }
 
+// AboutLibrariesのライブラリ定義生成をフレーバー間で直列化する。
+// 並列に走らせるとCIでaiRelease側のライセンス本文だけが空になる事象が発生した
+// （spdxIdは入るが本文が落ちる＝共有キャッシュの競合と考えられる）。
+// ローカルでは再現しないため、順序を固定して競合そのものを排除する。
+// AboutLibrariesがtaskを登録するのはこのブロックより後なので、matchingで遅延設定する。
+tasks.matching { task -> task.name == "prepareLibraryDefinitionsAiRelease" }.configureEach {
+    mustRunAfter("prepareLibraryDefinitionsStandardRelease")
+}
+
 /** リリース成果物へ添付する正本。standardの内容をそのまま使う。 */
 val generateThirdPartyNotices by tasks.registering(Copy::class) {
     group = "documentation"
@@ -275,7 +284,17 @@ val verifyLicenseReport by tasks.registering {
                     "The bundled $spdxId license text is missing from the $variant report."
                 }
                 check(contentMarker in contents) {
-                    "The bundled $spdxId license content is empty in the $variant report."
+                    // どのライセンスの本文が落ちたのかを、再実行せずに切り分けられるようにする。
+                    val declared =
+                        Regex("\"spdxId\":\"([^\"]+)\"")
+                            .findAll(contents)
+                            .map { match -> match.groupValues[1] }
+                            .distinct()
+                            .sorted()
+                            .joinToString(", ")
+                    "The bundled $spdxId license content is empty in the $variant report. " +
+                        "Declared spdxIds: [$declared]. Report: " +
+                        "${report.get().asFile} (${contents.length} chars)."
                 }
             }
         }
