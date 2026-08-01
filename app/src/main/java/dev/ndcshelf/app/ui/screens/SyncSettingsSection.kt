@@ -21,6 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +34,7 @@ import dev.ndcshelf.app.domain.sync.SyncDeviceInfo
 import dev.ndcshelf.app.domain.sync.SyncFailure
 import dev.ndcshelf.app.domain.sync.SyncFailureReason
 import dev.ndcshelf.app.domain.sync.SyncJoinCandidate
+import dev.ndcshelf.app.ui.text.resolve
 import java.text.DateFormat
 import java.util.Date
 
@@ -257,13 +259,17 @@ fun SyncSettingsSection(
                         if (receipt.remainingObjectCount == 0) {
                             stringResource(R.string.sync_purge_receipt_complete)
                         } else {
-                            stringResource(
-                                R.string.sync_purge_receipt_incomplete,
+                            pluralStringResource(
+                                R.plurals.sync_purge_receipt_incomplete,
+                                receipt.remainingObjectCount,
                                 receipt.remainingObjectCount,
                             )
                         },
                     )
-                    Text(receipt.physicalDeletionNote, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        receipt.physicalDeletionNote.resolve(),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             },
             confirmButton = {

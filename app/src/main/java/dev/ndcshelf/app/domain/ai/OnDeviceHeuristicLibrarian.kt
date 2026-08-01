@@ -63,7 +63,7 @@ class OnDeviceHeuristicLibrarian(
                     label = item.ndcCategory,
                     reason =
                         when {
-                            item.readingStatus == UNREAD_LABEL -> AiLibrarianReason.UNREAD_FIRST
+                            item.readingStatus == AiPayloadLabels.UNREAD -> AiLibrarianReason.UNREAD_FIRST
                             item.ndcCategory != null -> AiLibrarianReason.CATEGORY_MATCH
                             else -> AiLibrarianReason.BIBLIOGRAPHIC_ORDER
                         },
@@ -123,10 +123,10 @@ class OnDeviceHeuristicLibrarian(
 
     private fun statusRank(readingStatus: String?): Int =
         when (readingStatus) {
-            UNREAD_LABEL -> 0
+            AiPayloadLabels.UNREAD -> 0
             null -> 1
-            PAUSED_LABEL -> 2
-            READING_LABEL -> 3
+            AiPayloadLabels.PAUSED -> 2
+            AiPayloadLabels.READING -> 3
             else -> 4
         }
 
@@ -138,10 +138,6 @@ class OnDeviceHeuristicLibrarian(
 
         /** 並べ替えで分類なしを末尾へ送るための番兵。NDC記号より必ず大きい。 */
         const val UNCLASSIFIED_SORT_KEY = "￿"
-
-        const val UNREAD_LABEL = "未読"
-        const val READING_LABEL = "読書中"
-        const val PAUSED_LABEL = "中断"
 
         val PICK_NEXT_KEYWORDS =
             listOf("次に読", "次の一冊", "何を読", "どれを読", "選んで", "選ぶ", "おすすめ", "オススメ")

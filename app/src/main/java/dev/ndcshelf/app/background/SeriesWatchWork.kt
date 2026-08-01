@@ -148,8 +148,19 @@ class AndroidSeriesReleaseNotifier(
                 NotificationCompat
                     .Builder(context, SERIES_RELEASE_CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_launcher)
-                    .setContentTitle("${item.seriesTitle}の新しい候補")
-                    .setContentText("${item.candidateIds.size}件を国立国会図書館サーチで確認しました")
+                    .setContentTitle(
+                        context.getString(
+                            R.string.series_watch_notification_title,
+                            item.seriesTitle,
+                        ),
+                    )
+                    .setContentText(
+                        context.resources.getQuantityString(
+                            R.plurals.series_watch_notification_text,
+                            item.candidateIds.size,
+                            item.candidateIds.size,
+                        ),
+                    )
                     .setStyle(style)
                     .setContentIntent(openApp)
                     .setAutoCancel(true)
@@ -159,8 +170,16 @@ class AndroidSeriesReleaseNotifier(
                         NotificationCompat
                             .Builder(context, SERIES_RELEASE_CHANNEL_ID)
                             .setSmallIcon(R.drawable.ic_launcher)
-                            .setContentTitle("シリーズの新刊候補")
-                            .setContentText("アプリを開いて確認してください")
+                            .setContentTitle(
+                                context.getString(
+                                    R.string.series_watch_notification_group_title,
+                                ),
+                            )
+                            .setContentText(
+                                context.getString(
+                                    R.string.series_watch_notification_group_text,
+                                ),
+                            )
                             .build(),
                     ).build()
             runCatching { manager.notify(item.seriesId.hashCode(), notification) }
@@ -174,10 +193,11 @@ class AndroidSeriesReleaseNotifier(
         val channel =
             NotificationChannel(
                 SERIES_RELEASE_CHANNEL_ID,
-                "シリーズの新刊候補",
+                context.getString(R.string.series_watch_notification_channel_name),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
-                description = "明示的に確認を有効にしたシリーズの新しい書誌候補"
+                description =
+                    context.getString(R.string.series_watch_notification_channel_description)
             }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }

@@ -35,6 +35,7 @@
 - 用途と影響を確認して操作できる専用データ管理画面
 - プライバシー、NDL出典、アプリ情報、OSSライセンスのオフライン表示
 - ライトテーマ、ダークテーマ、Material You
+- 英語・日本語のUI（端末の言語設定に追従。日本語以外の端末では英語で表示）
 
 ## インストール
 
@@ -89,6 +90,17 @@ apksigner verify --print-certs ndc-shelf-vX.Y.Z.apk
 | <img src="app/roborazzi/scan_light.png" alt="ライトテーマのスキャン画面。カメラ権限の説明と、手入力・手動登録の代替経路" width="240"> | <img src="app/roborazzi/scan_dark.png" alt="ダークテーマのスキャン画面" width="240"> |
 
 画像はすべて匿名fixtureで、実在するISBN・氏名・置き場所を含みません。スクリーンショットは`ScreenshotRegressionTest`がCIで検証しているため、UIの変更に追随します。デモGIFの作り直しは`tools/build_demo_gif.py`の手順に従います。
+
+## 対応言語
+
+| 言語 | リソース | 備考 |
+| --- | --- | --- |
+| English | `app/src/main/res/values/strings.xml` | 既定（fallback）。日本語以外の端末はこちらを表示 |
+| 日本語 | `app/src/main/res/values-ja/strings.xml` | 日本語ロケールの端末 |
+
+端末の言語設定に追従します。ISBNとNDCコードは言語に依存しない識別子としてそのまま表示し、
+日付・時刻・冊数の表記は端末のロケールに合わせます。翻訳方針、用語集、翻訳を追加する手順は
+[docs/I18N.md](docs/I18N.md) を参照してください。
 
 ## 技術スタック
 

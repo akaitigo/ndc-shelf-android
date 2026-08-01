@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -226,7 +227,7 @@ private fun InfoOverview(
                     if (libraryCount == null) {
                         stringResource(R.string.info_oss_unavailable)
                     } else {
-                        stringResource(R.string.info_oss_summary, libraryCount)
+                        pluralStringResource(R.plurals.info_oss_summary, libraryCount, libraryCount)
                     },
                 testTag = OSS_LICENSE_BUTTON_TAG,
                 enabled = libraryCount != null,
@@ -297,7 +298,11 @@ private fun LibraryLicenseList(
         item {
             DetailHeading(stringResource(R.string.info_oss_title), onBack)
             Text(
-                text = stringResource(R.string.info_oss_offline_notice, libraries?.libraries?.size ?: 0),
+                text = pluralStringResource(
+                        R.plurals.info_oss_offline_notice,
+                        libraries?.libraries?.size ?: 0,
+                        libraries?.libraries?.size ?: 0,
+                    ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

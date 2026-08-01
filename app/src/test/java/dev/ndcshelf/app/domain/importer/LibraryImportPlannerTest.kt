@@ -1,9 +1,11 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.text.UiMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,8 +67,8 @@ class LibraryImportPlannerTest {
             ImportConflictPolicy.SKIP_EXISTING,
         ) as ImportPreviewResult.Invalid
 
-        assertTrue(oversized.errors.any { it.reason.contains("10バイト") })
-        assertTrue(tooMany.errors.any { it.reason.contains("1件") })
+        assertTrue(oversized.errors.any { it.reason == UiMessage(R.string.import_error_file_too_large, 10L) })
+        assertTrue(tooMany.errors.any { it.reason == UiMessage(R.string.import_error_too_many_records, 1) })
         assertTrue(tooLong.errors.any { it.field == "title" && it.recordNumber == 1 })
     }
 
@@ -89,7 +91,7 @@ class LibraryImportPlannerTest {
 
         assertTrue(
             result.errors.any {
-                it.recordNumber == 2 && it.field == "copyId" && it.reason.contains("レコード1")
+                it.recordNumber == 2 && it.field == "copyId" && it.reason == UiMessage(R.string.import_error_duplicate_record, 1)
             },
         )
         assertTrue(result.errors.any { it.field == "workId" })
@@ -114,7 +116,7 @@ class LibraryImportPlannerTest {
         assertTrue(result.errors.any { it.field == "isbn13" })
         assertTrue(result.errors.any { it.field == "copyId" })
         assertTrue(result.errors.any { it.field == "coverUrl" })
-        assertTrue(result.errors.any { it.field == "mediaType" && it.reason.contains("未知") })
+        assertTrue(result.errors.any { it.field == "mediaType" && it.reason.resId == R.string.import_error_unknown_value })
         assertTrue(result.errors.any { it.field == "addedAt" })
     }
 
@@ -184,7 +186,7 @@ class LibraryImportPlannerTest {
             ImportConflictPolicy.UPDATE_EXISTING,
         ) as ImportPreviewResult.Invalid
 
-        assertTrue(result.errors.any { it.field == "isbn13" && it.reason.contains("異なる既存蔵書") })
+        assertTrue(result.errors.any { it.field == "isbn13" && it.reason.resId == R.string.import_error_copy_isbn_mismatch })
     }
 
     @Test
@@ -221,7 +223,7 @@ class LibraryImportPlannerTest {
 
         assertEquals(existing.editionId, added.preview.additions.single().editionId)
         assertEquals(existing.workId, added.preview.additions.single().workId)
-        assertTrue(conflict.errors.any { it.field == "isbn13" && it.reason.contains("一致しません") })
+        assertTrue(conflict.errors.any { it.field == "isbn13" && it.reason.resId == R.string.import_error_existing_edition_mismatch })
     }
 
     private fun batch(vararg records: UnvalidatedLibraryBook) = LibraryImportBatch(

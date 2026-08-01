@@ -2,6 +2,7 @@ package dev.ndcshelf.app.data.repository
 
 import android.database.sqlite.SQLiteConstraintException
 import androidx.room.withTransaction
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.LocationRoomEntity
 import dev.ndcshelf.app.data.local.LocationShelfEntity
@@ -18,6 +19,7 @@ import dev.ndcshelf.app.domain.sync.SyncMutation
 import dev.ndcshelf.app.domain.sync.SyncMutationJournal
 import dev.ndcshelf.app.data.sync.syncDelete
 import dev.ndcshelf.app.data.sync.toSyncUpsert
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -251,12 +253,16 @@ class RoomLocationRepository(
         block: suspend (String) -> Any?,
     ): LocationMutationResult {
         val name = rawName.trim()
-        if (name.isEmpty()) return LocationMutationResult.InvalidName("名前を入力してください")
+        if (name.isEmpty()) return LocationMutationResult.InvalidName(UiMessage(R.string.validation_name_required))
         if (name.length > MAX_NAME_LENGTH) {
-            return LocationMutationResult.InvalidName("${MAX_NAME_LENGTH}文字以下にしてください")
+            return LocationMutationResult.InvalidName(
+                UiMessage(R.string.validation_max_length, MAX_NAME_LENGTH),
+            )
         }
         if ('\u0000' in name || '/' in name) {
-            return LocationMutationResult.InvalidName("NUL文字と / は使用できません")
+            return LocationMutationResult.InvalidName(
+                UiMessage(R.string.validation_location_name_charset),
+            )
         }
         return try {
             database.withTransaction {

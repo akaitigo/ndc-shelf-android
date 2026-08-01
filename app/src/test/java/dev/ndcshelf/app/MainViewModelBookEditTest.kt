@@ -17,6 +17,7 @@ import dev.ndcshelf.app.domain.repository.DeleteBookResult
 import dev.ndcshelf.app.domain.repository.LibraryRepository
 import dev.ndcshelf.app.domain.repository.RestoreDeletedBookResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -49,7 +50,10 @@ class MainViewModelBookEditTest {
     fun `validation errors stay associated with edited copy`() = runTest(dispatcher) {
         val repository = FakeRepository().apply {
             updateResult = UpdateBookResult.Invalid(
-                listOf(BookEditValidationError(BookEditField.TITLE, "必須項目です")),
+                listOf(BookEditValidationError(
+                    BookEditField.TITLE,
+                    UiMessage(R.string.validation_required),
+                )),
             )
         }
         val viewModel = MainViewModel(repository, dispatcher, dispatcher)

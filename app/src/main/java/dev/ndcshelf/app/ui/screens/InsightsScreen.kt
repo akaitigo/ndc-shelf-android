@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -54,6 +55,7 @@ import dev.ndcshelf.app.domain.insights.RediscoveryCandidate
 import dev.ndcshelf.app.domain.insights.RediscoveryReason
 import dev.ndcshelf.app.domain.insights.TsundokuCandidate
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.ui.text.ndcCategoryLabelRes
 import kotlin.math.roundToInt
 
 /**
@@ -220,7 +222,11 @@ private fun InsightsContent(
         if (insights.unclassifiedCount > 0) {
             item {
                 Text(
-                    text = stringResource(R.string.insights_unclassified_count, insights.unclassifiedCount),
+                    text = pluralStringResource(
+                            R.plurals.insights_unclassified_count,
+                            insights.unclassifiedCount,
+                            insights.unclassifiedCount,
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -243,7 +249,11 @@ private fun InsightsContent(
         } else {
             item {
                 Text(
-                    text = stringResource(R.string.insights_tsundoku_unread_count, insights.tsundoku.unreadCount),
+                    text = pluralStringResource(
+                            R.plurals.insights_tsundoku_unread_count,
+                            insights.tsundoku.unreadCount,
+                            insights.tsundoku.unreadCount,
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -313,7 +323,11 @@ private fun InsightsContent(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = stringResource(R.string.insights_excluded_count, insights.excludedCount),
+                    text = pluralStringResource(
+                        R.plurals.insights_excluded_count,
+                        insights.excludedCount,
+                        insights.excludedCount,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -369,13 +383,21 @@ private fun InsightsContent(
 }
 
 @Composable
-private fun tsundokuReason(candidate: TsundokuCandidate): String = stringResource(R.string.insights_reason_unread, candidate.daysSinceAdded)
+private fun tsundokuReason(candidate: TsundokuCandidate): String = pluralStringResource(
+        R.plurals.insights_reason_unread,
+        candidate.daysSinceAdded.toInt(),
+        candidate.daysSinceAdded,
+    )
 
 @Composable
 private fun rediscoveryReason(candidate: RediscoveryCandidate): String =
     when (val reason = candidate.reason) {
         is RediscoveryReason.UnreadSinceAdded -> {
-            stringResource(R.string.insights_reason_unread, reason.daysSinceAdded)
+            pluralStringResource(
+                R.plurals.insights_reason_unread,
+                reason.daysSinceAdded.toInt(),
+                reason.daysSinceAdded,
+            )
         }
 
         RediscoveryReason.PausedMidway -> {
@@ -484,10 +506,18 @@ private fun FinishedTrendCard(trend: FinishedTrendInsight.Ready) {
             )
             FinishedTrendChart(trend.monthlyCounts)
             if (trend.yearOnlyCount > 0) {
-                TrendNote(stringResource(R.string.insights_trend_year_only_note, trend.yearOnlyCount))
+                TrendNote(pluralStringResource(
+                        R.plurals.insights_trend_year_only_note,
+                        trend.yearOnlyCount,
+                        trend.yearOnlyCount,
+                    ))
             }
             if (trend.undatedCount > 0) {
-                TrendNote(stringResource(R.string.insights_trend_undated_note, trend.undatedCount))
+                TrendNote(pluralStringResource(
+                        R.plurals.insights_trend_undated_note,
+                        trend.undatedCount,
+                        trend.undatedCount,
+                    ))
             }
             if (trend.outsideWindowCount > 0) {
                 TrendNote(stringResource(R.string.insights_trend_outside_note, trend.outsideWindowCount))
@@ -519,8 +549,9 @@ private fun FinishedTrendChart(points: List<FinishedTrendPoint>) {
     ) {
         points.forEach { point ->
             val description =
-                stringResource(
-                    R.string.insights_trend_bar_description,
+                pluralStringResource(
+                    R.plurals.insights_trend_bar_description,
+                    point.count,
                     point.month.year,
                     point.month.month,
                     point.count,
@@ -605,11 +636,13 @@ private fun ClassificationRow(
     progress: Float,
 ) {
     val percent = (share.ratio * 100).roundToInt()
+    val categoryLabel = stringResource(ndcCategoryLabelRes(share.digit))
     val rowDescription =
-        stringResource(
-            R.string.insights_ndc_row_description,
+        pluralStringResource(
+            R.plurals.insights_ndc_row_description,
+            share.count,
             share.digit,
-            share.label,
+            categoryLabel,
             share.count,
             percent,
         )
@@ -633,7 +666,7 @@ private fun ClassificationRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "${share.digit}  ${share.label}",
+                    text = stringResource(R.string.insights_ndc_row_label, share.digit, categoryLabel),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -644,7 +677,7 @@ private fun ClassificationRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = stringResource(R.string.insights_ndc_count, share.count),
+                        text = pluralStringResource(R.plurals.insights_ndc_count, share.count, share.count),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )

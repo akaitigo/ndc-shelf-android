@@ -1,9 +1,11 @@
 package dev.ndcshelf.app.domain.search
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.Tag
 import dev.ndcshelf.app.domain.model.TagColorRole
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -172,7 +174,13 @@ class NaturalLanguageQueryParserTest {
             NaturalLanguageQueryParser.parse("書斎にある去年買った未読の自然科学 #研究用", tags, nowMillis, timeZone)
         val labels = interpretation.chips.map(SearchInterpretationChip::label)
         assertEquals(
-            listOf("場所: 書斎", "追加: 去年", "未読", "NDC 4類 自然科学", "タグ: 研究用"),
+            listOf(
+                UiMessage(R.string.nl_search_chip_location, "書斎"),
+                UiMessage(R.string.nl_search_chip_added, "去年"),
+                UiMessage(R.string.reading_status_unread),
+                UiMessage(R.string.nl_search_chip_ndc, 4, UiMessage(R.string.ndc_category_4)),
+                UiMessage(R.string.nl_search_chip_tag, "研究用"),
+            ),
             labels,
         )
     }

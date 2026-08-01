@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.core.app.ApplicationProvider
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.BookSeries
 import dev.ndcshelf.app.domain.model.PurchaseStatus
 import dev.ndcshelf.app.domain.model.SeriesMembership
@@ -26,6 +28,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class SeriesScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -35,7 +39,7 @@ class SeriesScreenTest {
 
         composeRule.onNodeWithTag(SERIES_LIST_TEST_TAG).assertIsDisplayed()
         composeRule.onNodeWithTag(SERIES_EMPTY_TEST_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("シリーズはまだありません").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.series_empty_title)).assertIsDisplayed()
     }
 
     @Test
@@ -46,8 +50,12 @@ class SeriesScreenTest {
         )
         setContent(listOf(overview), onSelectSeries = { selected = it })
 
-        composeRule.onNodeWithText("所有 1 / 既知 1 ・ 読了 1").assertIsDisplayed()
-        composeRule.onNodeWithText("最新の所有巻: 1巻").assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.series_catalog_counts, 1, 1, 1))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.series_latest_owned, "1巻"))
+            .assertIsDisplayed()
         composeRule.onNodeWithText("銀河叙事詩").performClick()
         assertEquals("series", selected)
     }
@@ -63,10 +71,10 @@ class SeriesScreenTest {
         )
 
         composeRule.onNodeWithTag(SERIES_DETAIL_TEST_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("確認済みの本編をすべて所有しています")
+        composeRule.onNodeWithText(context.getString(R.string.series_confirmed_complete))
             .performScrollTo()
             .assertIsDisplayed()
-        composeRule.onNodeWithText("本の詳細").performScrollTo().performClick()
+        composeRule.onNodeWithText(context.getString(R.string.book_detail_title)).performScrollTo().performClick()
         assertEquals("edition-upper", openedEdition)
     }
 
@@ -82,9 +90,9 @@ class SeriesScreenTest {
             onOpenBookstore = { openedIsbn = it },
         )
 
-        composeRule.onNodeWithText("予約済み").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("確認済みの未所有本編").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("書店モード").performScrollTo().performClick()
+        composeRule.onNodeWithText(context.getString(R.string.bookstore_reserved)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.series_missing_candidate)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.scan_mode_bookstore)).performScrollTo().performClick()
         assertEquals("9784000000039", openedIsbn)
     }
 
@@ -96,8 +104,8 @@ class SeriesScreenTest {
         setContent(listOf(overview), selectedSeriesId = "series")
 
         composeRule.onNodeWithText("銀河叙事詩 外伝").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("未所有").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("確認済みの未所有本編").assertDoesNotExist()
+        composeRule.onNodeWithText(context.getString(R.string.series_state_unowned)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.series_missing_candidate)).assertDoesNotExist()
     }
 
     @Test
@@ -108,9 +116,9 @@ class SeriesScreenTest {
         )
         setContent(listOf(overview), selectedSeriesId = "series")
 
-        composeRule.onNodeWithText("合本").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("欠巻候補").assertTextContains("欠巻候補")
-        composeRule.onNodeWithText("確認済みの未所有本編").assertDoesNotExist()
+        composeRule.onNodeWithText(context.getString(R.string.series_type_omnibus)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.series_missing_label)).assertTextContains(context.getString(R.string.series_missing_label))
+        composeRule.onNodeWithText(context.getString(R.string.series_missing_candidate)).assertDoesNotExist()
     }
 
     @Test
@@ -122,8 +130,9 @@ class SeriesScreenTest {
             onSetWatchEnabled = { seriesId, enabled -> mutation = seriesId to enabled },
         )
 
-        composeRule.onNodeWithText("新刊候補を定期確認").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("シリーズ名「銀河叙事詩」と検索開始年", substring = true)
+        composeRule.onNodeWithText(context.getString(R.string.series_watch_title)).performScrollTo().assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.series_watch_privacy, "銀河叙事詩"))
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNode(isToggleable()).performScrollTo().assertIsOff().performClick()
@@ -160,8 +169,8 @@ class SeriesScreenTest {
         )
 
         composeRule.onNodeWithText("銀河叙事詩 2巻").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("予約済み").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("書店モード").performScrollTo().performClick()
+        composeRule.onNodeWithText(context.getString(R.string.bookstore_reserved)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.scan_mode_bookstore)).performScrollTo().performClick()
 
         assertEquals("9784000000039", openedIsbn)
     }

@@ -6,6 +6,7 @@ import dev.ndcshelf.app.domain.model.Tag
 import dev.ndcshelf.app.domain.model.TagAssignment
 import dev.ndcshelf.app.domain.model.TagColorRole
 import dev.ndcshelf.app.domain.model.TagWithUsage
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -73,7 +74,7 @@ sealed interface TagMutationResult {
     ) : TagMutationResult
 
     data class Invalid(
-        val reason: String,
+        val reason: UiMessage,
     ) : TagMutationResult
 
     data object Duplicate : TagMutationResult
@@ -101,7 +102,7 @@ sealed interface SavedSearchMutationResult {
     ) : SavedSearchMutationResult
 
     data class Invalid(
-        val reason: String,
+        val reason: UiMessage,
     ) : SavedSearchMutationResult
 
     data object Duplicate : SavedSearchMutationResult

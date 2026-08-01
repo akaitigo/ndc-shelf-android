@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.data.repository
 
 import androidx.room.withTransaction
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
@@ -69,6 +70,7 @@ import dev.ndcshelf.app.domain.repository.ShelfMoveResult
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.sync.SyncMutation
 import dev.ndcshelf.app.domain.sync.SyncMutationJournal
+import dev.ndcshelf.app.domain.text.UiMessage
 import dev.ndcshelf.app.scanner.Isbn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -1007,7 +1009,12 @@ class DefaultLibraryRepository(
                     database.locationDao().findTier(edit.locationTierId) == null
                 ) {
                     return@withTransaction UpdateBookResult.Invalid(
-                        listOf(BookEditValidationError(BookEditField.LOCATION, "選択した場所が見つかりません")),
+                        listOf(
+                            BookEditValidationError(
+                                BookEditField.LOCATION,
+                                UiMessage(R.string.validation_location_not_found),
+                            ),
+                        ),
                     )
                 }
                 val shelfOrderKey =
@@ -1019,7 +1026,7 @@ class DefaultLibraryRepository(
                                 listOf(
                                     BookEditValidationError(
                                         BookEditField.LOCATION,
-                                        "選択した挿入位置が見つかりません",
+                                        UiMessage(R.string.validation_insert_position_not_found),
                                     ),
                                 ),
                             )

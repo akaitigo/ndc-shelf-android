@@ -37,11 +37,14 @@
 
 - タブレット・横画面・分割画面・折りたたみ端末への適応レイアウト。ウィンドウ幅が600dp以上でナビゲーションを画面下部から左側のレールへ移し、840dp以上では本棚とシリーズを一覧＋詳細の2ペインで同時に表示します。大画面では本文の最大幅を制限して読みやすさを保ち、横画面・分割画面・折りたたみの姿勢変更でも検索文字列・選択中の本・スクロール位置を失いません。端末の種類ではなくウィンドウの大きさで切り替えるため、同じ端末でも分割画面の幅に応じて最適な表示になります。方針はdocs/ADAPTIVE_LAYOUT.md。
 
+- 英語と日本語の2言語対応。全文言をリソース化し、既定（fallback）を英語（`values/`）、日本語を `values-ja/` に分離した。冊数・件数は `<plurals>` で英語の単複を正しく出し分け、日付・時刻は端末ロケールの書式で表示する。ISBNとNDCコードは言語非依存の識別子としてそのまま表示し、NDCの類名だけを訳す。インポート検証・バリデーション・通知・同期の受領メッセージまで端末の言語に追従する。方針と用語集はdocs/I18N.md。
+
 ### Changed
 
 - 配布方針を無料OSSのGitHub Releases署名付きAPKへ変更（アプリストアへは公開しない）。リリースはpre-release→stableの2段階とし、APK・SHA256SUMS・署名証明書・SBOM・NOTICESを添付する。判断は[ADR 0008](docs/adr/0008-github-releases-apk-distribution.md)。
 - リリースゲートの「旧版からの更新でデータが保持される」検証をCIへ自動化（v0.1.2 APKからの更新インストールとRoom v1 DBの引き継ぎをエミュレーターで毎回検証）。
 - CIへ主要画面のライト・ダーク・大文字スクリーンショット回帰（Roborazzi golden比較）、API 26エミュレーターの互換性行列、手動登録→本棚→Activity再生成のE2Eテストを追加。実機検証との分離と証跡はdocs/DEVICE_TEST_MATRIX.mdへ定義。
+- スクリーンショット回帰へロケール軸（英語・擬似ロケール `en-XA` / `ar-XB`）を追加し、翻訳キーの欠落・不要をCIで検出する `verify-translations.sh` をverifyジョブへ追加。
 - ランチャーアイコンをadaptive icon（foreground/background/monochrome、安全領域準拠、Android 13テーマアイコン対応）へ移行。
 - リリースビルドでR8によるコード縮小・リソース縮小を有効化し、署名鍵をGitHub release environment secretsから供給する再現可能な署名付きAAB生成（タグ整合検証・mapping/SBOM/checksums添付・承認ゲート付き）を自動化。
 

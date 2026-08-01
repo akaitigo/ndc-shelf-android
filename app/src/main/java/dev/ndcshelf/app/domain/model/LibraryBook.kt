@@ -42,13 +42,11 @@ data class LibraryBook(
     }
 }
 
-enum class ReadingStatus(
-    val label: String,
-) {
-    UNREAD("未読"),
-    READING("読書中"),
-    READ("読了"),
-    PAUSED("中断"),
+enum class ReadingStatus {
+    UNREAD,
+    READING,
+    READ,
+    PAUSED,
 }
 
 enum class MediaType {

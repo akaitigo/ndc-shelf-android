@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.domain.text.UiMessage
+
 data class WorkGroup(
     val id: String,
     val title: String,
@@ -47,7 +49,7 @@ enum class WorkVariantSuggestionConfidence {
 data class WorkVariantSuggestion(
     val work: WorkVariant,
     val confidence: WorkVariantSuggestionConfidence,
-    val reason: String,
+    val reason: UiMessage,
 )
 
 data class WorkVariantEditor(

@@ -44,6 +44,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // en-XA（アクセント付き・約30%長い）とar-XB（RTL）の擬似ロケールを生成し、
+            // ScreenshotRegressionTestとRoborazziのgoldenで切れ・未翻訳・双方向表示を検証する。
+            // debug限定なのでreleaseのAPK/AABサイズには影響しない。
+            isPseudoLocalesEnabled = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

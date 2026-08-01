@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.ui.navigation.TopLevelDestination
+import dev.ndcshelf.app.ui.text.labelRes
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 
 /** compact時の下部NavigationBar。テストとスクリーンショットの識別に使う。 */

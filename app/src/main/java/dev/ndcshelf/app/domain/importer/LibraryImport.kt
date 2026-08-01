@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
@@ -10,6 +11,7 @@ import dev.ndcshelf.app.domain.model.TagColorRole
 import dev.ndcshelf.app.domain.model.TagNameRules
 import dev.ndcshelf.app.domain.model.TagNameValidation
 import dev.ndcshelf.app.domain.network.NdlEndpointPolicy
+import dev.ndcshelf.app.domain.text.UiMessage
 import dev.ndcshelf.app.scanner.Isbn
 import java.util.Calendar
 import java.util.Locale
@@ -71,7 +73,7 @@ enum class ImportConflictPolicy {
 data class ImportValidationError(
     val recordNumber: Int?,
     val field: String?,
-    val reason: String,
+    val reason: UiMessage,
 )
 
 sealed interface ImportPreviewResult {
@@ -108,7 +110,7 @@ sealed interface ImportApplyResult {
     data object StalePreview : ImportApplyResult
 
     data class Failure(
-        val message: String,
+        val message: UiMessage,
     ) : ImportApplyResult
 }
 
@@ -124,12 +126,14 @@ class LibraryImportPlanner(
     ): ImportPreviewResult {
         val errors = mutableListOf<ImportValidationError>()
         if (batch.sourceSizeBytes < 0) {
-            errors.addCapped(globalError("入力サイズが不正です"))
+            errors.addCapped(globalError(UiMessage(R.string.import_error_size_invalid)))
         } else if (batch.sourceSizeBytes > limits.maxSourceBytes) {
-            errors.addCapped(globalError("入力ファイルは${limits.maxSourceBytes}バイト以下にしてください"))
+            errors.addCapped(globalError(
+                    UiMessage(R.string.import_error_file_too_large, limits.maxSourceBytes),
+                ))
         }
         if (batch.records.size > limits.maxRecords) {
-            errors.addCapped(globalError("蔵書件数は${limits.maxRecords}件以下にしてください"))
+            errors.addCapped(globalError(UiMessage(R.string.import_error_too_many_records, limits.maxRecords)))
         }
         if (errors.isNotEmpty()) return ImportPreviewResult.Invalid(errors)
 
@@ -173,7 +177,7 @@ class LibraryImportPlanner(
                     recordError(
                         normalized.indexOf(book) + 1,
                         "isbn13",
-                        "同じISBNに異なる版情報が指定されています",
+                        UiMessage(R.string.import_error_edition_conflict),
                     ),
                 )
             }
@@ -188,7 +192,7 @@ class LibraryImportPlanner(
                     recordError(
                         index + 1,
                         "isbn13",
-                        "copyIdとISBNが異なる既存蔵書を参照しています",
+                        UiMessage(R.string.import_error_copy_isbn_mismatch),
                     ),
                 )
                 return@forEachIndexed
@@ -205,7 +209,7 @@ class LibraryImportPlanner(
                     recordError(
                         index + 1,
                         "isbn13",
-                        "既存ISBNの版情報と一致しません",
+                        UiMessage(R.string.import_error_existing_edition_mismatch),
                     ),
                 )
                 return@forEachIndexed
@@ -262,7 +266,7 @@ class LibraryImportPlanner(
         errors: MutableList<ImportValidationError>,
     ): List<ImportTagDefinition> {
         if (tags.size > TagNameRules.MAX_TAGS) {
-            errors.addCapped(globalError("タグは${TagNameRules.MAX_TAGS}件以下にしてください"))
+            errors.addCapped(globalError(UiMessage(R.string.import_error_tag_limit, TagNameRules.MAX_TAGS)))
             return emptyList()
         }
         val definitions = mutableListOf<ImportTagDefinition>()
@@ -283,7 +287,11 @@ class LibraryImportPlanner(
                 }
             if (!seenNames.add(name)) {
                 errors.addCapped(
-                    ImportValidationError(index + 1, "tags.name", "タグ名が重複しています"),
+                    ImportValidationError(
+                        index + 1,
+                        "tags.name",
+                        UiMessage(R.string.import_error_tag_name_duplicate),
+                    ),
                 )
                 return@forEachIndexed
             }
@@ -293,7 +301,11 @@ class LibraryImportPlanner(
                 }
             if (colorRole == null) {
                 errors.addCapped(
-                    ImportValidationError(index + 1, "tags.colorRole", "未知の色ロールです"),
+                    ImportValidationError(
+                        index + 1,
+                        "tags.colorRole",
+                        UiMessage(R.string.import_error_tag_color_unknown),
+                    ),
                 )
                 return@forEachIndexed
             }
@@ -302,7 +314,7 @@ class LibraryImportPlanner(
         val totalTagCount = existingTags.mapTo(hashSetOf(), Tag::name).union(seenNames).size
         if (totalTagCount > TagNameRules.MAX_TAGS) {
             errors.addCapped(
-                globalError("タグ数の上限（${TagNameRules.MAX_TAGS}件）を超えるため取り込めません"),
+                globalError(UiMessage(R.string.import_error_tag_total_limit, TagNameRules.MAX_TAGS)),
             )
         }
         return definitions
@@ -329,7 +341,7 @@ class LibraryImportPlanner(
                     }
                 }
             if (name !in knownTagNames) {
-                errors.addCapped(recordError(recordNumber, "tags", "未定義のタグ名です"))
+                errors.addCapped(recordError(recordNumber, "tags", UiMessage(R.string.import_error_tag_undefined)))
                 return@forEach
             }
             normalized += name
@@ -375,7 +387,11 @@ class LibraryImportPlanner(
             )
         val isbn13 = rawIsbn?.let(Isbn::normalizeToIsbn13)
         if (rawIsbn != null && isbn13 == null) {
-            errors.addCapped(recordError(recordNumber, "isbn13", "ISBNの形式またはチェックデジットが不正です"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    "isbn13",
+                    UiMessage(R.string.validation_invalid_isbn),
+                ))
         }
         val publisher =
             optionalText(
@@ -394,7 +410,11 @@ class LibraryImportPlanner(
                 errors,
             )
         if (coverUrl != null && !NdlEndpointPolicy.isAllowedCoverUrl(coverUrl, isbn13)) {
-            errors.addCapped(recordError(recordNumber, "coverUrl", "NDL Searchのhttps URLを指定してください"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    "coverUrl",
+                    UiMessage(R.string.import_error_cover_url),
+                ))
         }
         val ndcCode =
             optionalText(
@@ -405,7 +425,11 @@ class LibraryImportPlanner(
                 errors,
             )
         if (ndcCode != null && !NDC_CODE_REGEX.matches(ndcCode)) {
-            errors.addCapped(recordError(recordNumber, "ndcCode", "NDCコードは3桁と任意の小数部で指定してください"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    "ndcCode",
+                    UiMessage(R.string.validation_invalid_ndc),
+                ))
         }
         val ndcEdition =
             optionalText(
@@ -438,7 +462,11 @@ class LibraryImportPlanner(
                 errors,
             )
         if (isbn13 == null && bibliographicSource != BibliographicSource.MANUAL) {
-            errors.addCapped(recordError(recordNumber, "isbn13", "ISBNなしは手動書誌だけ登録できます"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    "isbn13",
+                    UiMessage(R.string.import_error_isbn_manual_only),
+                ))
         }
         val mediaType =
             enumValue<MediaType>(
@@ -500,7 +528,7 @@ class LibraryImportPlanner(
                     recordError(
                         books.indexOf(book) + 1,
                         "workId",
-                        "同じworkIdに異なる書誌情報が指定されています",
+                        UiMessage(R.string.import_error_work_conflict),
                     ),
                 )
             }
@@ -512,7 +540,7 @@ class LibraryImportPlanner(
                     recordError(
                         books.indexOf(book) + 1,
                         "editionId",
-                        "同じeditionIdに異なる版情報が指定されています",
+                        UiMessage(R.string.import_error_edition_id_conflict),
                     ),
                 )
             }
@@ -532,7 +560,7 @@ class LibraryImportPlanner(
                     recordError(
                         recordNumber,
                         "workId",
-                        "既存workIdの書誌情報と一致しません",
+                        UiMessage(R.string.import_error_existing_work_mismatch),
                     ),
                 )
             }
@@ -543,7 +571,7 @@ class LibraryImportPlanner(
                     recordError(
                         recordNumber,
                         "editionId",
-                        "既存editionIdの版情報と一致しません",
+                        UiMessage(R.string.import_error_existing_edition_id_mismatch),
                     ),
                 )
             }
@@ -559,7 +587,7 @@ class LibraryImportPlanner(
     ): String? {
         val normalized = value?.trim()
         if (normalized.isNullOrEmpty()) {
-            errors.addCapped(recordError(recordNumber, field, "必須項目です"))
+            errors.addCapped(recordError(recordNumber, field, UiMessage(R.string.validation_required)))
             return null
         }
         validateLengthAndControls(recordNumber, field, normalized, maxLength, errors)
@@ -586,10 +614,14 @@ class LibraryImportPlanner(
         errors: MutableList<ImportValidationError>,
     ) {
         if (value.length > maxLength) {
-            errors.addCapped(recordError(recordNumber, field, "${maxLength}文字以下にしてください"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    field,
+                    UiMessage(R.string.validation_max_length, maxLength),
+                ))
         }
         if (value.any { it == '\u0000' }) {
-            errors.addCapped(recordError(recordNumber, field, "NUL文字は使用できません"))
+            errors.addCapped(recordError(recordNumber, field, UiMessage(R.string.validation_no_nul)))
         }
     }
 
@@ -602,7 +634,7 @@ class LibraryImportPlanner(
         val normalized = value?.trim()?.uppercase(Locale.ROOT)
         val result = enumValues<T>().firstOrNull { it.name == normalized }
         if (result == null) {
-            errors.addCapped(recordError(recordNumber, field, "未知の値です"))
+            errors.addCapped(recordError(recordNumber, field, UiMessage(R.string.import_error_unknown_value)))
         }
         return result
     }
@@ -623,7 +655,7 @@ class LibraryImportPlanner(
                 recordError(
                     recordNumber,
                     "publishedYear",
-                    "${MIN_PUBLISHED_YEAR}〜${maxYear}の範囲で指定してください",
+                    UiMessage(R.string.validation_year_range, MIN_PUBLISHED_YEAR, maxYear),
                 ),
             )
             return null
@@ -638,7 +670,11 @@ class LibraryImportPlanner(
     ): Long? {
         val maxTimestamp = nowMillis() + MAX_CLOCK_SKEW_MILLIS
         if (value == null || value !in 0..maxTimestamp) {
-            errors.addCapped(recordError(recordNumber, "addedAt", "有効なUnix epoch millisecondsではありません"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    "addedAt",
+                    UiMessage(R.string.import_error_invalid_timestamp),
+                ))
             return null
         }
         return value
@@ -657,7 +693,11 @@ class LibraryImportPlanner(
             if (first == null) {
                 firstIndexes[key] = index
             } else {
-                errors.addCapped(recordError(index + 1, field, "レコード${first + 1}と重複しています"))
+                errors.addCapped(recordError(
+                        index + 1,
+                        field,
+                        UiMessage(R.string.import_error_duplicate_record, first + 1),
+                    ))
             }
         }
     }
@@ -669,7 +709,11 @@ class LibraryImportPlanner(
         errors: MutableList<ImportValidationError>,
     ) {
         if (value != null && !ID_REGEX.matches(value)) {
-            errors.addCapped(recordError(recordNumber, field, "英数字、ピリオド、コロン、アンダースコア、ハイフンのみ使用できます"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    field,
+                    UiMessage(R.string.import_error_id_charset),
+                ))
         }
     }
 
@@ -677,12 +721,12 @@ class LibraryImportPlanner(
         if (size < MAX_ERRORS) add(error)
     }
 
-    private fun globalError(reason: String) = ImportValidationError(null, null, reason)
+    private fun globalError(reason: UiMessage) = ImportValidationError(null, null, reason)
 
     private fun recordError(
         record: Int,
         field: String,
-        reason: String,
+        reason: UiMessage,
     ) = ImportValidationError(record, field, reason)
 
     private fun LibraryBook.editionFingerprint(): List<Any?> =

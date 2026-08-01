@@ -13,6 +13,7 @@ import dev.ndcshelf.app.domain.ai.AiLibrarianProviderException
 import dev.ndcshelf.app.domain.ai.AiLibrarianProviderId
 import dev.ndcshelf.app.domain.ai.AiLibrarianReason
 import dev.ndcshelf.app.domain.ai.AiLibrarianRequest
+import dev.ndcshelf.app.domain.ai.AiPayloadLabels
 import dev.ndcshelf.app.domain.ai.InMemoryAiLibrarianHistoryStore
 import dev.ndcshelf.app.domain.ai.InMemoryAiLibrarianUsageStore
 import dev.ndcshelf.app.domain.ai.OnDeviceHeuristicLibrarian
@@ -145,7 +146,7 @@ class AiLibrarianViewModelTest {
             }
             val payload = Json.encodeToString(request)
             assertFalse(payload.contains("サンプル書斎"))
-            assertFalse(payload.contains(ReadingStatus.UNREAD.label))
+            assertFalse(payload.contains(AiPayloadLabels.UNREAD))
         }
 
     @Test

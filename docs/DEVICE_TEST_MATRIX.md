@@ -3,6 +3,16 @@
 E2E・スクリーンショット・互換性検証の正本。CIで自動化する層と、実機でしか
 検証できない層を分離し、結果をリリースゲート（`docs/releases/`）の証跡へ残す。
 
+## ロケール行列
+
+| 層 | ロケール | 実行方法 | 対象 |
+| --- | --- | --- | --- |
+| 既定（fallback） | `en-US` | CI（Roborazzi golden `*_en`） | library / insights / onboarding |
+| 日本語 | `ja-JP` | CI（Roborazzi golden 既定） | 主要画面のライト・ダーク・大文字 |
+| 擬似（アクセント・伸長） | `en-XA` | CI（Roborazzi golden `*_pseudo_en_xa`） | library / onboarding |
+| 擬似（RTL） | `ar-XB` | CI（Roborazzi golden `*_pseudo_ar_xb`） | library / onboarding |
+| 実機 | `ja-JP` / `en-US` | 手動実機（下記「手動実機層」9） | TalkBack読み上げ・通知・日付書式 |
+
 ## OS行列
 
 | 層 | API / OS | 実行方法 | 対象 |
@@ -25,7 +35,10 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
   出力する。goldenの更新は `./gradlew recordRoborazziDebug` の結果をレビューして
   コミットする。大文字は fontScale 1.5 に加え 2.0（library / insights / onboarding）も
   golden 化し、200%文字での切れ・重なりを検出する。
-  日英スクリーンショットは#44（i18n）導入後にlocale軸を追加する。
+  ロケール軸として英語（`en-rUS`）の library / insights / onboarding と、擬似ロケール
+  `en-XA`（アクセント付き・伸長）・`ar-XB`（RTL）の library / onboarding を golden 化し、
+  未翻訳・文字切れ・双方向表示の崩れを検出する。既定ロケールは `ja-rJP` を明示指定する。
+  擬似ロケールは debug ビルドの `isPseudoLocalesEnabled` で生成する（`docs/I18N.md`）。
   大画面はwindow qualifiersで medium（w720dp）と expanded（w1280dp）の代表2枚を
   golden化し、NavigationRailとlist-detail 2ペインの回帰を検出する
   （方針は `docs/ADAPTIVE_LAYOUT.md`）。
@@ -43,6 +56,10 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
   Accessibility Test Framework（Accessibility Scanner相当）の検査を実行し、ラベル欠落・
   48dp未満のタップ領域・重複クリック領域をERROR判定で失敗させる。抑制中のチェックと
   理由は `docs/ACCESSIBILITY_AUDIT.md` の「自動チェックの範囲」を参照する。
+- **翻訳キーの欠落・不要検出**: `.github/scripts/verify-translations.sh` が
+  `values/strings.xml`（英語・既定）と `values-ja/strings.xml`（日本語）のキー集合、
+  フォーマット引数、`<plurals>` の quantity を突き合わせ、verifyジョブで失敗させる。
+  Android Lint の `MissingTranslation` / `ExtraTranslation` も `lintDebug` で有効のまま。
 - 検証成果は各リリースのGitHub Actions run URLをリリースチェックリストへ記録する。
 
 - **更新インストール回帰**: `update-install`ジョブがv0.1.2（commit d852975、versionCode 3）の
@@ -68,6 +85,15 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
 8. 大画面・折りたたみゲート（折りたたみの開閉、分割画面の幅変更、タブレット横持ち、
    物理キーボードのTab移動とEnter発火）。手順は `docs/ADAPTIVE_LAYOUT.md` の
    「実機での確認（リリースゲート）」に定義する。
+9. 多言語ゲート。端末の言語を「日本語」「English (United States)」へ切り替え、
+   それぞれで以下を確認する。手順は `docs/I18N.md` と
+   `docs/ACCESSIBILITY_AUDIT.md` の「2. 両言語でのTalkBack読み上げ」に定義する。
+   - 主要画面（オンボーディング・本棚・スキャン・本詳細・データ管理・プライバシーと同意・
+     AI司書・情報）に未翻訳の文言が残っていないこと
+   - **両言語でのTalkBack読み上げ**（`contentDescription`・冊数の単複・日付書式）
+   - 通知（新刊候補）が端末の言語で表示されること
+   - 日付・時刻が端末ロケールの書式で表示されること
+   - 言語切り替え後にアプリを再起動せずとも画面の文言が追従すること
 
 結果は表形式（端末・OS・結果・日付・実施者）でチェックリストへ残し、失敗時は
 再試行ではなくIssue化して原因を修正する。

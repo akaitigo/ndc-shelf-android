@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.domain.model.BibliographicSource
@@ -9,6 +10,7 @@ import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.Tag
 import dev.ndcshelf.app.domain.model.TagColorRole
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -129,10 +131,10 @@ class LibraryJsonImporterTest {
 
             assertTrue(
                 result.errors.any {
-                    it.field == "schemaVersion" && it.reason.contains("新しいスキーマバージョン999")
+                    it.field == "schemaVersion" && it.reason == UiMessage(R.string.import_error_schema_too_new, 999L)
                 },
             )
-            assertTrue(result.errors.none { it.reason.contains("本の題名") })
+            assertTrue(result.errors.none { it.reason.args.any { arg -> arg == "本の題名" } })
         }
 
     @Test
@@ -146,11 +148,11 @@ class LibraryJsonImporterTest {
 
             val result = parse(source) as LibraryJsonParseResult.Invalid
 
-            assertTrue(result.errors.any { it.field == "bookCount" && it.reason.contains("一致") })
-            assertTrue(result.errors.any { it.field == "unexpected" && it.reason.contains("未知") })
+            assertTrue(result.errors.any { it.field == "bookCount" && it.reason.resId == R.string.import_error_book_count_mismatch })
+            assertTrue(result.errors.any { it.field == "unexpected" && it.reason.resId == R.string.import_error_unknown_field })
             assertTrue(
                 result.errors.any {
-                    it.recordNumber == 1 && it.field == "publisher" && it.reason.contains("項目")
+                    it.recordNumber == 1 && it.field == "publisher" && it.reason.resId == R.string.import_error_field_missing
                 },
             )
         }
@@ -164,10 +166,10 @@ class LibraryJsonImporterTest {
 
             assertTrue(
                 typedResult.errors.any {
-                    it.recordNumber == 1 && it.field == "publishedYear" && it.reason.contains("整数")
+                    it.recordNumber == 1 && it.field == "publishedYear" && it.reason.resId == R.string.import_error_expect_integer
                 },
             )
-            assertTrue(malformedResult.errors.any { it.reason.contains("構文") })
+            assertTrue(malformedResult.errors.any { it.reason.resId == R.string.import_error_json_syntax })
         }
 
     @Test
@@ -183,7 +185,7 @@ class LibraryJsonImporterTest {
             val result = parse(source) as LibraryJsonParseResult.Invalid
             val field =
                 result.errors
-                    .first { it.reason.contains("未知") }
+                    .first { it.reason.resId == R.string.import_error_unknown_field }
                     .field
                     .orEmpty()
 
@@ -207,9 +209,9 @@ class LibraryJsonImporterTest {
                     ByteArrayInputStream(byteArrayOf(0xC3.toByte(), 0x28)),
                 ) as LibraryJsonParseResult.Invalid
 
-            assertTrue(oversized.errors.any { it.reason.contains("8バイト") })
-            assertTrue(deeplyNested.errors.any { it.reason.contains("64段") })
-            assertTrue(malformedUtf8.errors.any { it.reason.contains("UTF-8") })
+            assertTrue(oversized.errors.any { it.reason == UiMessage(R.string.import_error_file_too_large, 8L) })
+            assertTrue(deeplyNested.errors.any { it.reason == UiMessage(R.string.import_error_json_nesting, 64) })
+            assertTrue(malformedUtf8.errors.any { it.reason.resId == R.string.import_error_json_encoding })
         }
 
     @Test
@@ -286,7 +288,7 @@ class LibraryJsonImporterTest {
                 ) as ImportPreviewResult.Invalid
             assertTrue(
                 undefinedResult.errors.any {
-                    it.field == "tags" && it.reason.contains("未定義")
+                    it.field == "tags" && it.reason.resId == R.string.import_error_tag_undefined
                 },
             )
 

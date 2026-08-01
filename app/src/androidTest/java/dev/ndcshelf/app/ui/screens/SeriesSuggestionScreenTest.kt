@@ -13,6 +13,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ApplicationProvider
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.SeriesEditorUiState
 import dev.ndcshelf.app.domain.model.BookSeries
 import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
@@ -30,6 +32,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class SeriesSuggestionScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -43,7 +47,10 @@ class SeriesSuggestionScreenTest {
 
         composeRule.onNodeWithTag(SERIES_SUGGESTIONS_TEST_TAG).assertIsDisplayed()
         composeRule.onNodeWithText("年代記").assertIsDisplayed()
-        composeRule.onNodeWithText("候補 2冊").assertIsDisplayed()
+        composeRule
+            .onNodeWithText(
+                context.resources.getQuantityString(R.plurals.series_suggestion_count, 2, 2),
+            ).assertIsDisplayed()
         assertNull(confirmation)
     }
 
@@ -64,11 +71,16 @@ class SeriesSuggestionScreenTest {
         val firstVolume = composeRule.onNodeWithTag(SERIES_VOLUME_FIELD_TEST_TAG_PREFIX + "one")
         firstVolume.performTextClearance()
         firstVolume.performTextInput("上巻")
-        val moveSecondUp = "年代記 2巻を刊行順で上へ"
+        val moveSecondUp = context.getString(R.string.series_move_up, "年代記 2巻")
         scrollEditorTo(hasContentDescription(moveSecondUp))
         composeRule.onNodeWithContentDescription(moveSecondUp).performClick()
-        scrollEditorTo(hasText("選択した2冊を確定"))
-        composeRule.onNodeWithText("選択した2冊を確定").performClick()
+        scrollEditorTo(
+            hasText(context.resources.getQuantityString(R.plurals.series_confirm_selected, 2, 2)),
+        )
+        composeRule
+            .onNodeWithText(
+                context.resources.getQuantityString(R.plurals.series_confirm_selected, 2, 2),
+            ).performClick()
 
         assertEquals(SeriesConfirmationTarget.New("年代記 完全版"), confirmation?.first)
         assertEquals(listOf("two", "one"), confirmation?.second?.map { it.workId })
@@ -94,11 +106,16 @@ class SeriesSuggestionScreenTest {
             onConfirm = { selected, _ -> target = selected },
         )
         composeRule.onNodeWithText("年代記").performClick()
-        composeRule.onNodeWithText("低信頼度・要確認").assertIsDisplayed()
-        composeRule.onNodeWithText("既存シリーズ").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.series_confidence_low)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.series_target_existing)).performClick()
         composeRule.onNodeWithText("保存済み年代記").performClick()
-        scrollEditorTo(hasText("選択した1冊を確定"))
-        composeRule.onNodeWithText("選択した1冊を確定").performClick()
+        scrollEditorTo(
+            hasText(context.resources.getQuantityString(R.plurals.series_confirm_selected, 1, 1)),
+        )
+        composeRule
+            .onNodeWithText(
+                context.resources.getQuantityString(R.plurals.series_confirm_selected, 1, 1),
+            ).performClick()
 
         assertEquals(SeriesConfirmationTarget.Existing("existing"), target)
     }

@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.text.UiMessage
 import dev.ndcshelf.app.scanner.Isbn
 import java.util.Calendar
 import java.util.TimeZone
@@ -28,7 +30,7 @@ data class ValidatedManualBook(
 
 data class ManualBookValidationError(
     val field: ManualBookField,
-    val reason: String,
+    val reason: UiMessage,
 )
 
 enum class ManualBookField {
@@ -76,13 +78,13 @@ class ManualBookValidator(
         if (rawIsbn != null && isbn13 == null) {
             errors += ManualBookValidationError(
                 ManualBookField.ISBN,
-                "ISBNの形式またはチェックデジットが不正です",
+                UiMessage(R.string.validation_invalid_isbn),
             )
         }
         if (ndcCode != null && !NDC_CODE_REGEX.matches(ndcCode)) {
             errors += ManualBookValidationError(
                 ManualBookField.NDC_CODE,
-                "NDCコードは3桁と任意の小数部で指定してください",
+                UiMessage(R.string.validation_invalid_ndc),
             )
         }
         val year = validatePublishedYear(draft.publishedYear, errors)
@@ -110,7 +112,7 @@ class ManualBookValidator(
     ): String? {
         val normalized = value.trim()
         if (normalized.isEmpty()) {
-            errors += ManualBookValidationError(field, "必須項目です")
+            errors += ManualBookValidationError(field, UiMessage(R.string.validation_required))
             return null
         }
         validateText(normalized, field, maxLength, errors)
@@ -133,9 +135,12 @@ class ManualBookValidator(
         errors: MutableList<ManualBookValidationError>,
     ) {
         if (value.length > maxLength) {
-            errors += ManualBookValidationError(field, "${maxLength}文字以下にしてください")
+            errors += ManualBookValidationError(
+                field,
+                UiMessage(R.string.validation_max_length, maxLength),
+            )
         }
-        if ('\u0000' in value) errors += ManualBookValidationError(field, "NUL文字は使用できません")
+        if ('\u0000' in value) errors += ManualBookValidationError(field, UiMessage(R.string.validation_no_nul))
     }
 
     private fun validatePublishedYear(
@@ -152,7 +157,7 @@ class ManualBookValidator(
         if (year == null || year !in MIN_PUBLISHED_YEAR..maxYear) {
             errors += ManualBookValidationError(
                 ManualBookField.PUBLISHED_YEAR,
-                "${MIN_PUBLISHED_YEAR}〜${maxYear}の範囲の整数で指定してください",
+                UiMessage(R.string.validation_year_range, MIN_PUBLISHED_YEAR, maxYear),
             )
             return null
         }

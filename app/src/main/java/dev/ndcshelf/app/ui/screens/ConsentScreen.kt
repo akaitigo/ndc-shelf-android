@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -224,12 +225,16 @@ fun ConsentPayloadDialog(
                 } else {
                     Text(stringResource(R.string.consent_preview_description))
                     payloadItems.take(MAX_PREVIEW_ITEMS).forEach { item ->
-                        Text("・$item", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            stringResource(R.string.consent_bullet_item, item),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                     if (payloadItems.size > MAX_PREVIEW_ITEMS) {
                         Text(
-                            stringResource(
-                                R.string.consent_preview_more,
+                            pluralStringResource(
+                                R.plurals.consent_preview_more,
+                                payloadItems.size - MAX_PREVIEW_ITEMS,
                                 payloadItems.size - MAX_PREVIEW_ITEMS,
                             ),
                         )

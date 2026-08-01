@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.data.sync.backend
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.data.sync.crypto.Base64Url
 import dev.ndcshelf.app.data.sync.crypto.SyncCrypto
 import dev.ndcshelf.app.domain.sync.MAX_SYNC_OBJECT_PLAINTEXT_BYTES
@@ -14,6 +15,7 @@ import dev.ndcshelf.app.domain.sync.SyncBackendException
 import dev.ndcshelf.app.domain.sync.SyncCasResult
 import dev.ndcshelf.app.domain.sync.SyncDeletionReceipt
 import dev.ndcshelf.app.domain.sync.SyncHeadRecord
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -271,8 +273,8 @@ class FolderSyncBackend(
         private const val JOIN_DIR = "join-requests"
         private const val FILE_SUFFIX = ".json"
         private const val HEAD_LOCK_STALE_MILLIS = 60_000L
-        private const val PHYSICAL_DELETION_NOTE =
-            "選択フォルダ内の同期データを直ちに削除しました。保存先のごみ箱やOS・クラウドの複製は各保存先の規約に従います。"
+        private val PHYSICAL_DELETION_NOTE =
+            UiMessage(R.string.sync_purge_receipt_detail)
 
         /** objectのwire上限。padding込みで8 MiB + envelope overheadを許容する。 */
         const val MAX_OBJECT_BYTES = MAX_SYNC_OBJECT_PLAINTEXT_BYTES + 512L * 1024

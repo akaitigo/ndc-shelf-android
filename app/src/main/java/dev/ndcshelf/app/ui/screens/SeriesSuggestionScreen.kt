@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -159,7 +160,7 @@ private fun SuggestionGroups(
                             verticalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(stringResource(R.string.series_suggestion_count, group.size))
+                            Text(pluralStringResource(R.plurals.series_suggestion_count, group.size, group.size))
                             if (group.any { it.confidence == SeriesSuggestionConfidence.LOW }) {
                                 Text(
                                     stringResource(R.string.series_low_confidence_notice),
@@ -184,8 +185,16 @@ private fun SuggestionEditor(
     onBack: () -> Unit,
     contentPadding: PaddingValues,
 ) {
-    var rows by remember(source.map(SeriesSuggestion::workId)) {
-        mutableStateOf(source.map(::EditableSuggestion))
+    val fallbackVolumeLabel = stringResource(R.string.series_volume_label_none)
+    var rows by remember(source.map(SeriesSuggestion::workId), fallbackVolumeLabel) {
+        mutableStateOf(
+            source.map { suggestion ->
+                EditableSuggestion(
+                    suggestion = suggestion,
+                    volumeLabel = suggestion.proposedVolumeLabel ?: fallbackVolumeLabel,
+                )
+            },
+        )
     }
     var useExisting by rememberSaveable { mutableStateOf(false) }
     var newSeriesName by rememberSaveable(source.firstOrNull()?.proposedSeriesName) {
@@ -285,7 +294,7 @@ private fun SuggestionEditor(
                 if (busy) {
                     CircularProgressIndicator()
                 } else {
-                    Text(stringResource(R.string.series_confirm_selected, selectedRows.size))
+                    Text(pluralStringResource(R.plurals.series_confirm_selected, selectedRows.size, selectedRows.size))
                 }
             }
         }
@@ -389,7 +398,7 @@ private fun EditorHeader(
 private data class EditableSuggestion(
     val suggestion: SeriesSuggestion,
     val included: Boolean = true,
-    val volumeLabel: String = suggestion.proposedVolumeLabel,
+    val volumeLabel: String,
     val type: SeriesMembershipType = suggestion.proposedType,
 ) {
     fun toDraft() =

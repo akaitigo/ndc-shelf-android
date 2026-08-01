@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.sync
 
+import dev.ndcshelf.app.domain.text.UiMessage
+
 /**
  * transport共通のエラー分類。SYNC_PROTOCOL.md 10節の失敗分類に対応し、
  * HTTPS adapterとSAFフォルダadapterの双方で同じenumを使う。
@@ -118,7 +120,7 @@ data class SyncDeletionReceipt(
     val requestedAtMillis: Long,
     val completedAtMillis: Long?,
     val remainingObjectCount: Int,
-    val physicalDeletionNote: String,
+    val physicalDeletionNote: UiMessage,
 )
 
 /**

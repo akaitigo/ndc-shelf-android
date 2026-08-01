@@ -1,6 +1,7 @@
 package dev.ndcshelf.app.data.repository
 
 import androidx.room.withTransaction
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.SavedSearchEntity
 import dev.ndcshelf.app.data.local.TagAssignmentEntity
@@ -24,6 +25,7 @@ import dev.ndcshelf.app.domain.repository.TagMutationResult
 import dev.ndcshelf.app.domain.repository.TagRepository
 import dev.ndcshelf.app.domain.sync.SyncMutation
 import dev.ndcshelf.app.domain.sync.SyncMutationJournal
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -146,7 +148,7 @@ class RoomTagRepository(
         try {
             database.withTransaction {
                 if (sourceTagId == targetTagId) {
-                    return@withTransaction TagMutationResult.Invalid("同じタグ同士は統合できません")
+                    return@withTransaction TagMutationResult.Invalid(UiMessage(R.string.validation_tag_merge_same))
                 }
                 val source =
                     dao.findTagById(sourceTagId)

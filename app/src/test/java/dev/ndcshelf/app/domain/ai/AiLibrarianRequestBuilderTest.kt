@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.domain.ai
 
+import dev.ndcshelf.app.domain.ai.AiPayloadLabels
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -48,7 +49,7 @@ class AiLibrarianRequestBuilderTest {
         assertFalse("置き場所が漏れている", payload.contains("サンプル書斎"))
         assertFalse("メモが漏れている", payload.contains("秘密のメモ"))
         assertFalse("タグ名が漏れている", payload.contains("極秘タグ"))
-        assertFalse("読書状態が漏れている", payload.contains(ReadingStatus.UNREAD.label))
+        assertFalse("読書状態が漏れている", payload.contains(AiPayloadLabels.UNREAD))
     }
 
     @Test
@@ -65,7 +66,7 @@ class AiLibrarianRequestBuilderTest {
 
         val item = draft.request.items.single()
         assertEquals("サンプル書斎の3段目", item.location)
-        assertEquals(ReadingStatus.UNREAD.label, item.readingStatus)
+        assertEquals(AiPayloadLabels.UNREAD, item.readingStatus)
         assertEquals("秘密のメモ", item.note)
         assertEquals(listOf("極秘タグ"), item.tags)
         assertTrue(AiLibrarianField.LOCATION in draft.request.includedFields)
