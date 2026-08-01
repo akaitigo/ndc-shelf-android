@@ -79,6 +79,13 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            // AABへネイティブデバッグシンボルを同梱しない。
+            // LiteRT-LMの liblitertlm_jni.so.sym はライブラリ本体と同じ約9.2 MBあり、
+            // APKには含まれないのにAABだけを膨らませていた。シンボル抽出にはNDKが
+            // 必要なため、NDKの無い環境では生成されず、ローカルとCIで計測が食い違う
+            // 原因にもなっていた（v0.6.0のリリース失敗）。
+            // 対象は他社製のprebuiltライブラリで、シンボルがあっても自前で修正できない。
+            ndk { debugSymbolLevel = "none" }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
