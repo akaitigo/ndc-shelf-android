@@ -44,15 +44,24 @@ NDC Shelfは**無料のオープンソースアプリとして、GitHub Releases
 
 添付される成果物:
 
+v0.6.0以降、配布物はフレーバーごとに2つある（`docs/adr/0009-on-device-llm-librarian.md`）。
+`-ai` が付く方が端末内LLMを含むAI版で、`applicationId` が異なる別アプリとして扱われる。
+
 | ファイル | 用途 |
 | --- | --- |
-| `ndc-shelf-vX.Y.Z.apk` | **配布物**。利用者がインストールする |
-| `SHA256SUMS.txt` | 配布物の完全性検証 |
-| `apk-signature-vX.Y.Z.txt` | 署名者証明書のSHA-256。配布元の同一性検証 |
-| `mapping-vX.Y.Z.txt` | R8のマッピング。クラッシュ報告の解析用 |
-| `ndc-shelf.cdx.json` | CycloneDX SBOM |
+| `ndc-shelf-vX.Y.Z.apk` | **配布物（通常版）**。端末内LLMを含まない。Android 6.0以上 |
+| `ndc-shelf-vX.Y.Z-ai.apk` | **配布物（AI版）**。端末内LLMを含む。Android 7.0以上・arm64-v8a専用 |
+| `SHA256SUMS.txt` | 全配布物の完全性検証 |
+| `apk-signature-vX.Y.Z.txt` | 通常版の署名者証明書のSHA-256。配布元の同一性検証 |
+| `apk-signature-vX.Y.Z-ai.txt` | AI版の署名者証明書のSHA-256。通常版と一致することを`release.yml`が判定する |
+| `mapping-vX.Y.Z.txt` | 通常版のR8マッピング。クラッシュ報告の解析用 |
+| `mapping-vX.Y.Z-ai.txt` | AI版のR8マッピング |
+| `ndc-shelf.cdx.json` | CycloneDX SBOM（両フレーバーの実行時依存を含む） |
 | `THIRD-PARTY-NOTICES.json` | OSSライセンス表示 |
-| `ndc-shelf-vX.Y.Z.aab` | 予備。将来ストア配布へ切り替える場合に使う |
+| `ndc-shelf-vX.Y.Z.aab` / `ndc-shelf-vX.Y.Z-ai.aab` | 予備。将来ストア配布へ切り替える場合に使う |
+
+両APKは**同じ署名鍵**で署名する。`release.yml` は両方の証明書SHA-256が一致することを
+検証し、片方だけ別鍵で署名された配布物を出さない。
 
 未署名ビルドの検証はsecretsなしで `./gradlew :app:assembleRelease` により
 いつでも実行できる（署名configは環境変数が無ければ生成されない）。

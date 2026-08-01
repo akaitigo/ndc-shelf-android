@@ -69,7 +69,7 @@ jobs:
       - name: Verify
         run: >-
           ./gradlew
-          verifyV05ReleaseConfiguration
+          verifyV06ReleaseConfiguration
           verifyBackupPolicy
           verifyLicenseReport
           :app:cyclonedxDirectBom
