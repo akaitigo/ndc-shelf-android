@@ -63,35 +63,57 @@ jobs:
           verifyBackupPolicy
           verifyLicenseReport
           :app:cyclonedxDirectBom
-          testDebugUnitTest
-          lintDebug
-          :app:assembleRelease
-          :app:bundleRelease
-          :app:verifyReleaseBundleSize
+          testStandardDebugUnitTest
+          lintStandardDebug
+          :app:assembleStandardRelease
+          :app:bundleStandardRelease
+          :app:verifyStandardReleaseBundleSize
+          :app:assembleAiRelease
+          :app:bundleAiRelease
+          :app:verifyAiReleaseBundleSize
           --stacktrace
 
       - name: Verify the APK is signed with the expected key
         run: |
           # 利用者は署名でしか配布元を確認できないため、APKのAPK Signature Scheme
           # 検証と証明書のSHA-256を必ず出力し、リリースノートの記載と照合できるようにする。
+          # standardとaiは同じ鍵で署名する。両方を検証しないと片方の署名不備を見逃す。
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
-          "$APKSIGNER" verify --print-certs --verbose \
-            app/build/outputs/apk/release/app-release.apk | tee "$RUNNER_TEMP/apk-signature.txt"
-          grep -q "Verifies" "$RUNNER_TEMP/apk-signature.txt"
-          grep -qi "certificate SHA-256 digest" "$RUNNER_TEMP/apk-signature.txt"
+          for flavor in standard ai; do
+            "$APKSIGNER" verify --print-certs --verbose \
+              "app/build/outputs/apk/$flavor/release/app-$flavor-release.apk" \
+              | tee "$RUNNER_TEMP/apk-signature-$flavor.txt"
+            grep -q "Verifies" "$RUNNER_TEMP/apk-signature-$flavor.txt"
+            grep -qi "certificate SHA-256 digest" "$RUNNER_TEMP/apk-signature-$flavor.txt"
+          done
+          # 2つの配布物が同じ証明書であることを確認する（別鍵での取り違えを防ぐ）。
+          standard_cert="$(grep -i "certificate SHA-256 digest" "$RUNNER_TEMP/apk-signature-standard.txt" | head -1)"
+          ai_cert="$(grep -i "certificate SHA-256 digest" "$RUNNER_TEMP/apk-signature-ai.txt" | head -1)"
+          test "$standard_cert" = "$ai_cert"
+          cp "$RUNNER_TEMP/apk-signature-standard.txt" "$RUNNER_TEMP/apk-signature.txt"
 
       - name: Collect release artifacts and checksums
         run: |
           mkdir -p release-artifacts
-          # 配布物はAPK。AABはストア配布へ切り替える場合に備えた予備成果物として残す。
-          cp app/build/outputs/apk/release/app-release.apk \
+          # 配布物はAPK2種類。standardは端末内LLMなし、aiはLiteRT-LM同梱で
+          # applicationIdが異なる別アプリ（同時インストール可・データ非共有）。
+          # AABはストア配布へ切り替える場合に備えた予備成果物として残す。
+          cp app/build/outputs/apk/standard/release/app-standard-release.apk \
             "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}.apk"
-          cp app/build/outputs/bundle/release/app-release.aab \
+          cp app/build/outputs/bundle/standardRelease/app-standard-release.aab \
             "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}.aab"
-          cp "$RUNNER_TEMP/apk-signature.txt" \
+          cp app/build/outputs/apk/ai/release/app-ai-release.apk \
+            "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}-ai.apk"
+          cp app/build/outputs/bundle/aiRelease/app-ai-release.aab \
+            "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}-ai.aab"
+          cp "$RUNNER_TEMP/apk-signature-standard.txt" \
             "release-artifacts/apk-signature-${GITHUB_REF_NAME}.txt"
-          cp app/build/outputs/mapping/release/mapping.txt \
+          cp "$RUNNER_TEMP/apk-signature-ai.txt" \
+            "release-artifacts/apk-signature-${GITHUB_REF_NAME}-ai.txt"
+          cp app/build/outputs/mapping/standardRelease/mapping.txt \
             "release-artifacts/mapping-${GITHUB_REF_NAME}.txt"
+          cp app/build/outputs/mapping/aiRelease/mapping.txt \
+            "release-artifacts/mapping-${GITHUB_REF_NAME}-ai.txt"
           cp app/build/reports/cyclonedx/ndc-shelf.cdx.json release-artifacts/
           cp app/build/reports/licenses/THIRD-PARTY-NOTICES.json release-artifacts/
           (cd release-artifacts && sha256sum -- * > SHA256SUMS.txt)

@@ -43,6 +43,24 @@ android {
         }
     }
 
+    // 配布物を2種類に分ける（docs/adr/0009-on-device-llm-librarian.md）。
+    // standard: 端末内LLMを同梱しない従来のアプリ。
+    // ai: LiteRT-LMを同梱する別アプリ。applicationIdが異なるため相互に上書き更新されず、
+    //     同時インストールできる。データは共有しない（乗り換えはexport/import）。
+    flavorDimensions += "inference"
+
+    productFlavors {
+        create("standard") {
+            dimension = "inference"
+            isDefault = true
+        }
+        create("ai") {
+            dimension = "inference"
+            applicationIdSuffix = ".ai"
+            versionNameSuffix = "-ai"
+        }
+    }
+
     buildTypes {
         debug {
             // en-XA（アクセント付き・約30%長い）とar-XB（RTL）の擬似ロケールを生成し、
@@ -92,6 +110,10 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // LiteRT-LMのnative libraryはarm64-v8aだけを同梱する。x86_64はエミュレータ専用で、
+        // 配布サイズが約10MB増える一方で実機の対象にならない。非対応ABIでは
+        // LlmCapabilityCheckerが取得も起動も抑止する（fail-closed）。
+        jniLibs.excludes += "**/x86_64/liblitertlm_jni.so"
     }
 }
 
@@ -138,6 +160,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.okhttp)
+    // 端末内LLMのruntime。aiフレーバーだけへ入り、standardの配布物には含まれない。
+    "aiImplementation"(libs.litertlm.android)
     implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
@@ -171,52 +195,84 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4.accessibility)
 }
 
-val generatedLicenseReport =
-    layout.buildDirectory.file(
-        "generated/aboutLibraries/release/res/raw/aboutlibraries.json",
-    )
+/**
+ * ライセンスレポートはフレーバーごとに生成する。aiフレーバーだけがLiteRT-LMを
+ * 含むため、両方を検証しないと同梱依存の申告漏れに気づけない。
+ */
+val licenseReportVariants = listOf("standardRelease" to "Standard", "aiRelease" to "Ai")
 
+val generateThirdPartyNoticesTasks =
+    licenseReportVariants.map { (variant, suffix) ->
+        tasks.register<Copy>("generateThirdPartyNotices$suffix") {
+            group = "documentation"
+            description = "Generates the third-party notice artifact from $variant dependencies."
+            dependsOn("prepareLibraryDefinitions${suffix}Release")
+            from(
+                layout.buildDirectory.file(
+                    "generated/aboutLibraries/$variant/res/raw/aboutlibraries.json",
+                ),
+            )
+            into(layout.buildDirectory.dir("reports/licenses"))
+            rename { "THIRD-PARTY-NOTICES-$variant.json" }
+        }
+    }
+
+/** リリース成果物へ添付する正本。standardの内容をそのまま使う。 */
 val generateThirdPartyNotices by tasks.registering(Copy::class) {
     group = "documentation"
-    description = "Generates the third-party notice artifact from release dependencies."
-    dependsOn("prepareLibraryDefinitionsRelease")
-    from(generatedLicenseReport)
+    description = "Copies the standard release notice artifact to the published file name."
+    dependsOn(generateThirdPartyNoticesTasks)
+    from(layout.buildDirectory.file("reports/licenses/THIRD-PARTY-NOTICES-standardRelease.json"))
     into(layout.buildDirectory.dir("reports/licenses"))
     rename { "THIRD-PARTY-NOTICES.json" }
 }
 
 val verifyLicenseReport by tasks.registering {
     group = "verification"
-    description = "Verifies that the release license report covers direct and transitive dependencies."
+    description = "Verifies that both flavors' license reports cover direct and transitive dependencies."
     dependsOn(generateThirdPartyNotices)
 
-    val report = layout.buildDirectory.file("reports/licenses/THIRD-PARTY-NOTICES.json")
-    inputs.file(report)
+    val reports =
+        licenseReportVariants.associate { (variant, _) ->
+            variant to layout.buildDirectory.file("reports/licenses/THIRD-PARTY-NOTICES-$variant.json")
+        }
+    inputs.files(reports.values)
     doLast {
-        val contents = report.get().asFile.readText()
-        val libraryCount = "\"uniqueId\":".toRegex().findAll(contents).count()
-        check(libraryCount >= 100) {
-            "Expected a transitive release dependency report, but found only $libraryCount entries."
-        }
-        check("\"uniqueId\":\"org.apache.commons:commons-csv\"" in contents) {
-            "A known direct dependency is missing from the release license report."
-        }
-        check("\"uniqueId\":\"com.squareup.okio:okio-jvm\"" in contents) {
-            "A known transitive dependency is missing from the release license report."
-        }
-        check("\"licenses\":[]" !in contents) {
-            "At least one release dependency has no declared license or terms."
-        }
-        mapOf(
-            "Apache-2.0" to "Apache License\\nVersion 2.0",
-            "BSD-3-Clause" to "Redistribution and use in source and binary forms",
-            "MIT" to "MIT License",
-        ).forEach { (spdxId, contentMarker) ->
-            check("\"spdxId\":\"$spdxId\"" in contents) {
-                "The bundled $spdxId license text is missing from the release report."
+        reports.forEach { (variant, report) ->
+            val contents = report.get().asFile.readText()
+            val libraryCount = "\"uniqueId\":".toRegex().findAll(contents).count()
+            check(libraryCount >= 100) {
+                "Expected a transitive $variant dependency report, but found only $libraryCount entries."
             }
-            check(contentMarker in contents) {
-                "The bundled $spdxId license content is empty in the release report."
+            check("\"uniqueId\":\"org.apache.commons:commons-csv\"" in contents) {
+                "A known direct dependency is missing from the $variant license report."
+            }
+            check("\"uniqueId\":\"com.squareup.okio:okio-jvm\"" in contents) {
+                "A known transitive dependency is missing from the $variant license report."
+            }
+            check("\"licenses\":[]" !in contents) {
+                "At least one $variant dependency has no declared license or terms."
+            }
+            // 端末内LLM runtimeはaiフレーバーだけに入り、standardの配布物へ漏れてはならない。
+            val hasLiteRtLm = "com.google.ai.edge.litertlm:litertlm-android" in contents
+            check(hasLiteRtLm == (variant == "aiRelease")) {
+                if (variant == "aiRelease") {
+                    "The ai release report must declare the bundled LiteRT-LM runtime."
+                } else {
+                    "The standard release must not bundle the LiteRT-LM runtime."
+                }
+            }
+            mapOf(
+                "Apache-2.0" to "Apache License\\nVersion 2.0",
+                "BSD-3-Clause" to "Redistribution and use in source and binary forms",
+                "MIT" to "MIT License",
+            ).forEach { (spdxId, contentMarker) ->
+                check("\"spdxId\":\"$spdxId\"" in contents) {
+                    "The bundled $spdxId license text is missing from the $variant report."
+                }
+                check(contentMarker in contents) {
+                    "The bundled $spdxId license content is empty in the $variant report."
+                }
             }
         }
     }
@@ -227,7 +283,8 @@ tasks.named("check") {
 }
 
 tasks.cyclonedxDirectBom {
-    includeConfigs = listOf("releaseRuntimeClasspath")
+    // 両フレーバーの実行時依存を1つのSBOMへ含め、配布物のどちらも追跡できるようにする。
+    includeConfigs = listOf("standardReleaseRuntimeClasspath", "aiReleaseRuntimeClasspath")
     projectType = org.cyclonedx.model.Component.Type.APPLICATION
     componentName = "NDC Shelf"
     componentVersion = android.defaultConfig.versionName ?: "unspecified"
@@ -236,30 +293,50 @@ tasks.cyclonedxDirectBom {
     xmlOutput.unsetConvention()
 }
 
+/**
+ * 配布サイズ予算はフレーバーごとに持つ（docs/PERFORMANCE_BUDGETS.md）。
+ *
+ * - standard: 端末内LLMを同梱しない。実測17,590,996バイト（2026-07-29）+20%を上限とする。
+ *   直近の実測は18,450,318バイト（2026-08-01、R8有効・未署名）。
+ * - ai: LiteRT-LMのarm64-v8a native libraryを含む。実測28,953,242バイト（2026-08-01）に
+ *   約3%の余裕を持たせた30,000,000バイトを上限とする。
+ *
+ * 予算の引き上げにはmaintainerの承認と上記docの更新を伴うこと。
+ */
+val releaseBundleBudgets =
+    listOf(
+        Triple("Standard", "standardRelease/app-standard-release.aab", 21_000_000L),
+        Triple("Ai", "aiRelease/app-ai-release.aab", 30_000_000L),
+    )
+
+val verifyReleaseBundleSizeTasks =
+    releaseBundleBudgets.map { (flavor, path, budgetBytes) ->
+        tasks.register("verify${flavor}ReleaseBundleSize") {
+            group = "verification"
+            description =
+                "Verifies the $flavor release AAB stays within the size budget in docs/PERFORMANCE_BUDGETS.md."
+            dependsOn("bundle${flavor}Release")
+
+            val bundle = layout.buildDirectory.file("outputs/bundle/$path")
+            inputs.file(bundle)
+            inputs.property("budgetBytes", budgetBytes)
+            doLast {
+                val actualBytes = bundle.get().asFile.length()
+                check(actualBytes in 1 until budgetBytes) {
+                    "$flavor release AAB is $actualBytes bytes, over the $budgetBytes byte budget. " +
+                        "Investigate the size regression or update docs/PERFORMANCE_BUDGETS.md " +
+                        "with a justified new budget before raising this limit."
+                }
+                println("$flavor release AAB size: $actualBytes bytes (budget: $budgetBytes bytes)")
+            }
+        }
+    }
+
+/** 両フレーバーのサイズ予算をまとめて判定する入口。 */
 val verifyReleaseBundleSize by tasks.registering {
     group = "verification"
-    description = "Verifies the release AAB stays within the size budget in docs/PERFORMANCE_BUDGETS.md."
-    dependsOn("bundleRelease")
-
-    // 実測17,590,996バイト（2026-07-29、R8有効・未署名）+20%を上限とする。
-    // 直近の実測は18,409,960バイト（2026-08-01、同条件）。
-    // 根拠と更新手順はdocs/PERFORMANCE_BUDGETS.mdに記載。
-    // 端末内LLM runtimeを採用する場合は30,000,000バイト以上が必要になる
-    // （実測はdocs/adr/0009-on-device-llm-librarian.md）。予算の引き上げには
-    // maintainerの承認と上記docの更新を伴うこと。
-    val budgetBytes = 21_000_000L
-    val bundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
-    inputs.file(bundle)
-    inputs.property("budgetBytes", budgetBytes)
-    doLast {
-        val actualBytes = bundle.get().asFile.length()
-        check(actualBytes in 1 until budgetBytes) {
-            "Release AAB is $actualBytes bytes, over the $budgetBytes byte budget. " +
-                "Investigate the size regression or update docs/PERFORMANCE_BUDGETS.md " +
-                "with a justified new budget before raising this limit."
-        }
-        println("Release AAB size: $actualBytes bytes (budget: $budgetBytes bytes)")
-    }
+    description = "Verifies every flavor's release AAB size budget."
+    dependsOn(verifyReleaseBundleSizeTasks)
 }
 
 val verifyBackupPolicy by tasks.registering {

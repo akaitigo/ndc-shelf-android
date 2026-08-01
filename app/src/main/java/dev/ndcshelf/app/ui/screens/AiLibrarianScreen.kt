@@ -77,6 +77,7 @@ fun AiLibrarianScreen(
     onGrantConsent: () -> Unit,
     onRevokeConsent: () -> Unit,
     onClearHistory: () -> Unit,
+    onOpenModelManagement: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     var showConsentDialog by rememberSaveable { mutableStateOf(false) }
@@ -192,6 +193,11 @@ fun AiLibrarianScreen(
         }
 
         item {
+            TextButton(
+                onClick = onOpenModelManagement,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) { Text(stringResource(R.string.llm_model_open_action)) }
+
             TextButton(
                 onClick = onBack,
                 modifier = Modifier.padding(horizontal = 16.dp),

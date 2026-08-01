@@ -63,8 +63,8 @@ Dependabot PRも自動mergeしません。1件ずつ次を確認します。
 1. upstream release note、公式migration guide、既知のbreaking changeと脆弱性修正を確認する。
 2. 直接・推移依存のlicenseとNOTICE要件を確認する。
 3. Gradle、AGP、Kotlin、KSP、Compose、Roomはcompatibility matrixと生成物差分を確認する。
-4. `verifyLicenseReport testDebugUnitTest lintDebug assembleDebug`を実行する。
-5. Android plugin、runtime、UI、databaseへ影響する更新はemulatorの`connectedDebugAndroidTest`も実行する。
+4. `verifyLicenseReport testStandardDebugUnitTest lintStandardDebug assembleStandardDebug`を実行する。
+5. Android plugin、runtime、UI、databaseへ影響する更新はemulatorの`connectedStandardDebugAndroidTest`も実行する。
 6. 1 PRずつsquash mergeし、main CI失敗時はmerge commitをrevertする。force pushやcheck skipは使用しない。
 
 複数Dependabot PRが同じversion catalogまたはwrapperへ競合する場合も、内容を手作業でまとめて元PRを無条件closeしません。採用PR、重複理由、検証結果を各PRへ記録します。

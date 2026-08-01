@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.domain.ai.llm
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -74,6 +75,38 @@ class LlmModelUrlPolicyTest {
                 testModelDefinition(version = segment)
             }
         }
+    }
+
+    @Test
+    fun `redirect targets are limited to the distributor domain and may carry signed queries`() {
+        listOf(
+            "https://us.aws.cdn.hf.co/xet-bridge-us/abc/def?Expires=1&Signature=2&Key-Pair-Id=3",
+            "https://cas-bridge.xethub.hf.co/xet-bridge-us/abc/def?Expires=1",
+            "https://cdn-lfs-us-1.hf.co/repos/abc/model.bin?download=true",
+            "https://huggingface.co/org/model/resolve/main/model.bin",
+        ).forEach { url ->
+            assertTrue(url, LlmModelUrlPolicy.isAllowedRedirectTarget(url))
+        }
+    }
+
+    @Test
+    fun `redirect targets outside the distributor domain are refused`() {
+        listOf(
+            "http://us.aws.cdn.hf.co/model.bin",
+            "https://evil.example.com/model.bin",
+            "https://hf.co.evil.example.com/model.bin",
+            "https://evilhf.co/model.bin",
+            "https://user:pass@us.aws.cdn.hf.co/model.bin",
+            "https://us.aws.cdn.hf.co:8443/model.bin",
+            "https://us.aws.cdn.hf.co/../etc/passwd",
+        ).forEach { url ->
+            assertFalse(url, LlmModelUrlPolicy.isAllowedRedirectTarget(url))
+        }
+    }
+
+    @Test
+    fun `only one redirect hop is permitted`() {
+        assertEquals(1, LlmModelUrlPolicy.MAX_REDIRECTS)
     }
 
     @Test

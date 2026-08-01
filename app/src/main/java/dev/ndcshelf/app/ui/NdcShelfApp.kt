@@ -38,6 +38,8 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import dev.ndcshelf.app.AiLibrarianViewModel
+import dev.ndcshelf.app.LlmModelViewModel
+import dev.ndcshelf.app.data.remote.LlmModelDownloadSource
 import dev.ndcshelf.app.BookDeleteFailure
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditFailure
@@ -67,6 +69,7 @@ import dev.ndcshelf.app.domain.model.OnboardingStore
 import dev.ndcshelf.app.ui.adaptive.AdaptiveLayout
 import dev.ndcshelf.app.ui.adaptive.AdaptiveNavigationScaffold
 import dev.ndcshelf.app.ui.navigation.AiLibrarianRoute
+import dev.ndcshelf.app.ui.navigation.LlmModelRoute
 import dev.ndcshelf.app.ui.navigation.ConsentRoute
 import dev.ndcshelf.app.ui.navigation.DataGraph
 import dev.ndcshelf.app.ui.navigation.DataRoute
@@ -83,6 +86,7 @@ import dev.ndcshelf.app.ui.navigation.SeriesSuggestionRoute
 import dev.ndcshelf.app.ui.navigation.TagManagementRoute
 import dev.ndcshelf.app.ui.navigation.WorkVariantRoute
 import dev.ndcshelf.app.ui.screens.AiLibrarianScreen
+import dev.ndcshelf.app.ui.screens.LlmModelScreen
 import dev.ndcshelf.app.ui.screens.AppInfoScreen
 import dev.ndcshelf.app.ui.screens.ConsentPayloadDialog
 import dev.ndcshelf.app.ui.screens.ConsentScreen
@@ -802,6 +806,39 @@ fun NdcShelfApp(
                         onGrantConsent = aiLibrarianViewModel::grantConsent,
                         onRevokeConsent = aiLibrarianViewModel::revokeConsent,
                         onClearHistory = aiLibrarianViewModel::clearHistory,
+                        onOpenModelManagement = {
+                            navController.navigate(LlmModelRoute) { launchSingleTop = true }
+                        },
+                        contentPadding = contentPadding,
+                    )
+                }
+
+                composable<LlmModelRoute> {
+                    val application = context.applicationContext as NdcShelfApplication
+                    val llmModelViewModel: LlmModelViewModel =
+                        viewModel(
+                            factory =
+                                LlmModelViewModel.factory(
+                                    modelStore = application.container.llmModelStore,
+                                    capabilityProvider = application.container::llmCapability,
+                                    consentRepository = application.container.consentRepository,
+                                    downloadSourceFactory = { definition ->
+                                        LlmModelDownloadSource(definition)
+                                    },
+                                ),
+                        )
+                    val llmModelState by llmModelViewModel.state.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) { llmModelViewModel.refresh() }
+                    LlmModelScreen(
+                        state = llmModelState,
+                        onBack = { navController.popBackStack() },
+                        onGrantConsent = llmModelViewModel::grantDownloadConsent,
+                        onRevokeConsent = llmModelViewModel::revokeDownloadConsent,
+                        onStartDownload = llmModelViewModel::startDownload,
+                        onCancelDownload = llmModelViewModel::cancelInstall,
+                        onVerify = llmModelViewModel::verifyInstalled,
+                        onDeleteAll = llmModelViewModel::deleteAll,
+                        onDismissFailure = llmModelViewModel::dismissFailure,
                         contentPadding = contentPadding,
                     )
                 }

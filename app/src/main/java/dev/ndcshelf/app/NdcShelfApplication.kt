@@ -45,12 +45,13 @@ import dev.ndcshelf.app.domain.ai.AiLibrarianProvider
 import dev.ndcshelf.app.domain.ai.AiLibrarianUsageStore
 import dev.ndcshelf.app.domain.ai.OnDeviceHeuristicLibrarian
 import dev.ndcshelf.app.domain.ai.llm.FallbackAiLibrarianProvider
+import dev.ndcshelf.app.data.llm.PlatformLlmRuntime
+import dev.ndcshelf.app.domain.ai.llm.LlmCapability
 import dev.ndcshelf.app.domain.ai.llm.LlmCapabilityChecker
 import dev.ndcshelf.app.domain.ai.llm.LlmModelCatalog
 import dev.ndcshelf.app.domain.ai.llm.LlmModelStore
 import dev.ndcshelf.app.domain.ai.llm.LlmTelemetrySink
 import dev.ndcshelf.app.domain.ai.llm.OnDeviceLlmLibrarian
-import dev.ndcshelf.app.domain.ai.llm.UnavailableLlmRuntime
 import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticCode
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
@@ -219,7 +220,19 @@ class AppContainer(
             logger = diagnosticsLogger,
         )
 
-    private val llmDeviceProbe = AndroidLlmDeviceProbe(application)
+    private val llmDeviceProbe =
+        AndroidLlmDeviceProbe(
+            context = application,
+            runtimeAvailable = PlatformLlmRuntime::isAvailable,
+        )
+
+    /** 端末内LLMの状態。UIはここだけを見て取得導線と縮退表示を切り替える。 */
+    fun llmCapability(): LlmCapability =
+        LlmCapabilityChecker.evaluate(
+            profile = llmDeviceProbe.profile(),
+            model = LlmModelCatalog.defaultModel,
+            enabled = true,
+        )
 
     private val llmTelemetrySink: LlmTelemetrySink = DiagnosticsLlmTelemetrySink(diagnosticsLogger)
 
@@ -230,15 +243,10 @@ class AppContainer(
      */
     private val onDeviceLlmLibrarian =
         OnDeviceLlmLibrarian(
-            capabilityProvider = {
-                LlmCapabilityChecker.evaluate(
-                    profile = llmDeviceProbe.profile(),
-                    model = LlmModelCatalog.defaultModel,
-                    enabled = true,
-                )
-            },
+            capabilityProvider = ::llmCapability,
             modelStore = llmModelStore,
-            runtime = UnavailableLlmRuntime,
+            runtime = PlatformLlmRuntime.runtime,
+            runtimeCacheDir = application.cacheDir.resolve("llm-runtime"),
             telemetry = llmTelemetrySink,
         )
 
@@ -251,13 +259,7 @@ class AppContainer(
         FallbackAiLibrarianProvider(
             preferred = onDeviceLlmLibrarian,
             fallback = OnDeviceHeuristicLibrarian(),
-            preferredEnabled = {
-                LlmCapabilityChecker.canAcquire(
-                    profile = llmDeviceProbe.profile(),
-                    model = LlmModelCatalog.defaultModel,
-                    enabled = true,
-                )
-            },
+            preferredEnabled = { llmCapability() is LlmCapability.Supported },
             onDegraded = { diagnosticsLogger.log(DiagnosticCode.LLM_DEGRADED_TO_HEURISTIC) },
         )
 

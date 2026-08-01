@@ -8,13 +8,38 @@
 
 ## 現在の登録状況
 
-| モデルID | version | runtime | ライセンス | 状態 | 廃止日 |
-| --- | --- | --- | --- | --- | --- |
-| （なし） | — | — | — | — | — |
+| モデルID | version | runtime | ライセンス | サイズ | SHA-256 | 状態 | 廃止日 |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| `qwen3-0-6b-mixed-int4` | 2026-08-01 | LiteRT-LM 0.15.0 | Apache-2.0 | 497,664,000 B | `b1baab462f6be49d70eada79d715c2c52cd9ece0cad00bddf6a2c097d23498e9` | 有効 | — |
 
-**台帳は空である。** ADR 0009のとおり推論runtimeが未採用のため、
-`LlmModelCatalog.models` は空リストで、AI司書は規則ベースの
-`OnDeviceHeuristicLibrarian` の回答だけを返す（fail-closed）。
+- 取得元: <https://huggingface.co/litert-community/Qwen3-0.6B>（`qwen3_0_6b_mixed_int4.litertlm`）
+- 一次情報の確認日: 2026-08-01（Hugging Face API の `tree/main` で `size` と `lfs.oid`、
+  モデル情報APIで `gated: false` と `cardData.license: apache-2.0` を実測）
+- 端末要件: API 24以上、arm64-v8a、物理RAM 4 GiB以上、空き容量 1.1 GB以上
+- 既知の制約:
+  - **日本語の回答品質について配布元の公式な保証はない。**
+    配布元・上流いずれのモデルカードにも日本語に関する記述は無い（上流Qwen3は
+    「100+ languages」と記すが日本語を名指ししていない）。
+  - 0.6Bの小型モデルのため、事実誤りや指示の取りこぼしが起こりやすい
+  - 推論速度・メモリ・発熱は実機測定で確定していない
+
+このモデルを読めるのは `ai` フレーバー（`dev.ndcshelf.app.ai`）だけである。
+`standard` フレーバーにはLiteRT-LMのnative libraryが入らないため、能力判定が
+`RUNTIME_UNAVAILABLE` を返し、AI司書は規則ベースの `OnDeviceHeuristicLibrarian`
+の回答だけを返す（fail-closed）。
+
+## 採用を見送ったモデル（2026-08-01時点）
+
+| モデル | 見送った理由 |
+| --- | --- |
+| `litert-community/Qwen2.5-0.5B-Instruct` | `.litertlm` が存在しない（`.task` / `.tflite` のみ）ためLiteRT-LMで読めない |
+| `litert-community/Qwen2.5-1.5B-Instruct` | `.litertlm` はq8で1,597,931,520 B。0.6Bのint4より端末負担が大きい |
+| `litert-community/TinyLlama-1.1B-Chat-v1.0` | `.litertlm` が存在しない |
+| `litert-community/LFM2.5-1.2B-JP` | 日本語特化だがライセンスが `lfm-open-license-v1.0`（非OSI） |
+| `litert-community/TinySwallow-1.5B-Instruct` | 上流がGemmaデータで学習しており Gemma Terms が付随する |
+| `litert-community/Gemma` 系 | Gemma Terms of Use（OSI承認外・利用制限の下流継承義務） |
+| `litert-community/SmolLM2-*` | Apache-2.0だが英語中心で日本語は期待できない |
+| `litert-community/Phi-4-mini-instruct` | MITだが `.litertlm` が3,910,090,752 Bで端末要件を満たしにくい |
 
 ## 台帳へ登録できる条件
 
@@ -23,14 +48,18 @@
 1. **ライセンス**: OSI承認ライセンス（Apache-2.0 / MIT / BSD）で、利用者への再配布条件、
    利用制限の下流継承義務、遠隔での利用停止条項が無いこと。一次情報のURLと確認日を記録する。
 2. **取得可否**: 認証なしで取得できること（gatedモデルはアプリからトークンを配らないため不可）。
-   取得URLのhostが `LlmModelUrlPolicy.ALLOWED_HOSTS` に含まれ、**redirectを返さない**こと。
-   現在の実装はredirectを一切追わないため、Hugging Faceの `/resolve/` のようにCDNへ302する
-   URLは登録できない。詳細と対応案はADR 0009「未解決の技術課題」を参照する。
-3. **完全性**: ファイルサイズとSHA-256を実測し、台帳へ記録すること。
-4. **端末条件**: 必要なAPI level・ABI・物理RAM・空き容量を実機で確定し、台帳へ記録すること。
-5. **日本語品質**: 「次に読む本」「テーマ別整理」「蔵書概観」の3ユースケースを実機で評価し、
+   取得URLのhostが `LlmModelUrlPolicy.ALLOWED_HOSTS` に含まれること。
+   Hugging Faceの `/resolve/` は署名付きCDNへ302で誘導するため、実装は
+   `LlmModelUrlPolicy.ALLOWED_REDIRECT_DOMAINS`（`hf.co` / `huggingface.co` とその
+   サブドメイン）内に限って**1回だけ**追従する。2回目のリダイレクトは失敗にする。
+   別ドメインのCDNへ誘導する配布元は登録できない。
+3. **形式**: LiteRT-LMが読める `.litertlm` であること（`.task` / `.tflite` は不可）。
+4. **完全性**: ファイルサイズとSHA-256を実測し、台帳へ記録すること。
+5. **端末条件**: 必要なAPI level・ABI・物理RAM・空き容量を実機で確定し、台帳へ記録すること。
+6. **日本語品質**: 「次に読む本」「テーマ別整理」「蔵書概観」の3ユースケースを実機で評価し、
    結果をリリースチェックリストへ記録すること（ベンダー公表のベンチマークだけでは足りない）。
-6. **配布サイズ**: runtime追加後のrelease AABが `docs/PERFORMANCE_BUDGETS.md` の予算内であること。
+7. **配布サイズ**: `ai` フレーバーのrelease AABが `docs/PERFORMANCE_BUDGETS.md` の予算内であること
+   （モデル自体はAPKへ同梱しないため、モデルの大きさはAABサイズへ影響しない）。
 
 ## 記載項目（`LlmModelDefinition`）
 
@@ -64,7 +93,7 @@
 5. `docs/PERFORMANCE_BUDGETS.md` の実行時予算枠を実機測定値で埋める。
 6. `PRIVACY.md` のモデル取得通信の記述（送信先host・送信する値）を更新する。
 7. リリースチェックリストのLLM節を更新する。
-8. `./gradlew verifyLicenseReport :app:cyclonedxDirectBom :app:bundleRelease :app:verifyReleaseBundleSize` を通す。
+8. `./gradlew verifyLicenseReport :app:cyclonedxDirectBom :app:verifyStandardReleaseBundleSize :app:verifyAiReleaseBundleSize` を通す。
 
 ## 更新（version上げ）手順
 

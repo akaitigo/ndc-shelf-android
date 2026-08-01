@@ -60,7 +60,7 @@ internal fun supportedProfile(
  * 実モデルの回答品質・OOM・発熱はこのfakeでは検証できない（実機測定が必要）。
  */
 internal class FakeLlmRuntime(
-    private val response: (String) -> String = { "{}" },
+    private val response: (LlmPrompt) -> String = { "{}" },
     private val openFailure: LlmFailureKind? = null,
     private val generateFailure: LlmFailureKind? = null,
     private val onGenerate: suspend () -> Unit = {},
@@ -75,7 +75,7 @@ internal class FakeLlmRuntime(
     var closeCount: Int = 0
         private set
 
-    var lastPrompt: String? = null
+    var lastPrompt: LlmPrompt? = null
         private set
 
     override suspend fun open(request: LlmLoadRequest): LlmSession {
@@ -83,7 +83,7 @@ internal class FakeLlmRuntime(
         openFailure?.let { kind -> throw LlmRuntimeException(kind) }
         return object : LlmSession {
             override suspend fun generate(
-                prompt: String,
+                prompt: LlmPrompt,
                 maxOutputTokens: Int,
             ): String {
                 lastPrompt = prompt

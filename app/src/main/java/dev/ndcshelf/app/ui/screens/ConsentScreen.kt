@@ -293,6 +293,7 @@ private val AVAILABLE_PURPOSES =
         ConsentPurpose.SERIES_RELEASE_WATCH,
         ConsentPurpose.LIBRARY_SYNC,
         ConsentPurpose.AI_LIBRARIAN,
+        ConsentPurpose.MODEL_DOWNLOAD,
     )
 
 internal val ConsentPurpose.titleRes: Int
@@ -302,6 +303,7 @@ internal val ConsentPurpose.titleRes: Int
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_title
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_title
             ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_title
+            ConsentPurpose.MODEL_DOWNLOAD -> R.string.consent_purpose_model_download_title
         }
 
 internal val ConsentPurpose.purposeRes: Int
@@ -311,6 +313,7 @@ internal val ConsentPurpose.purposeRes: Int
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_purpose
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_purpose
             ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_purpose
+            ConsentPurpose.MODEL_DOWNLOAD -> R.string.consent_purpose_model_download_purpose
             else -> R.string.consent_purpose_not_available
         }
 
@@ -321,6 +324,7 @@ internal val ConsentPurpose.destinationRes: Int
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_destination
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_destination
             ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_destination
+            ConsentPurpose.MODEL_DOWNLOAD -> R.string.consent_purpose_model_download_destination
             else -> R.string.consent_purpose_not_available
         }
 
@@ -331,6 +335,7 @@ internal val ConsentPurpose.itemsRes: Int
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_items
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_items
             ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_items
+            ConsentPurpose.MODEL_DOWNLOAD -> R.string.consent_purpose_model_download_items
             else -> R.string.consent_purpose_not_available
         }
 
@@ -341,6 +346,7 @@ internal val ConsentPurpose.retentionRes: Int
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_retention
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_retention
             ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_retention
+            ConsentPurpose.MODEL_DOWNLOAD -> R.string.consent_purpose_model_download_retention
             else -> R.string.consent_purpose_not_available
         }
 
@@ -359,6 +365,7 @@ internal val ConsentPurpose.thirdPartyRes: Int
             ConsentPurpose.LIBRARY_SYNC -> R.string.consent_purpose_sync_third_party
             ConsentPurpose.NATURAL_LANGUAGE_SEARCH -> R.string.consent_purpose_nl_search_third_party
             ConsentPurpose.AI_LIBRARIAN -> R.string.consent_purpose_ai_third_party
+            ConsentPurpose.MODEL_DOWNLOAD -> R.string.consent_purpose_model_download_third_party
             else -> R.string.consent_purpose_not_available
         }
 

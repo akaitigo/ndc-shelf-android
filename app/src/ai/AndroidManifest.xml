@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    LiteRT-LM 0.15.0のAndroidManifestはminSdkVersion 24を宣言する。アプリ本体の
+    minSdk 23は維持したいため、ここでライブラリのminSdkを明示的に上書きする。
+
+    API 23端末で安全なのは、端末内LLMを起動する経路がすべてLlmCapabilityChecker
+    （API level・ABI・native libraryの読み込み可否をfail-closedで判定）を通り、
+    条件を満たさない端末ではモデルの取得もruntimeの初期化も行われないため。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-sdk tools:overrideLibrary="com.google.ai.edge.litertlm" />
+
+</manifest>

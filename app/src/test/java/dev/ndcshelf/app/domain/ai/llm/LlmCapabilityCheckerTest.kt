@@ -108,9 +108,32 @@ class LlmCapabilityCheckerTest {
     }
 
     @Test
-    fun `catalog is fail closed until a model is approved`() {
-        assertEquals(emptyList<LlmModelDefinition>(), LlmModelCatalog.models)
-        assertEquals(null, LlmModelCatalog.defaultModel)
-        assertEquals(null, LlmModelCatalog.findById("test-model"))
+    fun `catalog only lists OSI licensed models with verified checksums`() {
+        assertTrue(LlmModelCatalog.models.isNotEmpty())
+        LlmModelCatalog.models.forEach { model ->
+            assertTrue(model.licenseSpdxId, model.licenseSpdxId in setOf("Apache-2.0", "MIT", "BSD-3-Clause"))
+            assertTrue(model.id, LlmModelUrlPolicy.isAllowed(model.downloadUrl))
+            assertEquals(64, model.sha256.length)
+            assertTrue(model.knownLimitations.isNotEmpty())
+            // 端末内LLM経路の対象はAPI 24以降のarm64-v8aに限る（決定事項②）。
+            assertTrue(model.minSdkInt >= 24)
+            assertEquals(setOf("arm64-v8a"), model.requiredAbis)
+        }
+    }
+
+    @Test
+    fun `unknown model ids are not resolvable`() {
+        assertEquals(null, LlmModelCatalog.findById("not-in-the-catalog"))
+    }
+
+    @Test
+    fun `default model is excluded once it is retired`() {
+        val retired = testModelDefinition(retiredOn = "2026-01-01")
+
+        assertEquals(
+            LlmCapability.Unsupported(listOf(LlmUnsupportedReason.NO_MODEL_AVAILABLE)).reasons,
+            (LlmCapabilityChecker.evaluate(supportedProfile(), null, enabled = true) as LlmCapability.Unsupported).reasons,
+        )
+        assertEquals("2026-01-01", retired.retiredOn)
     }
 }

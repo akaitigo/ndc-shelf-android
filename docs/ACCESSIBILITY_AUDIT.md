@@ -172,7 +172,7 @@ Material3 1.4.0 のコンポーネントについて、Robolectric 上で `Seman
 
 `androidx.compose.ui:ui-test-junit4-accessibility` を導入し、Accessibility Scanner と
 同じ Accessibility Test Framework（ATF）の検査を instrumentation テストで実行する。
-API 26 / 29 / 35 のエミュレーターで `connectedDebugAndroidTest` として動作する。
+API 26 / 29 / 35 のエミュレーターで `connectedStandardDebugAndroidTest` として動作する。
 
 | テスト | 対象 |
 | --- | --- |

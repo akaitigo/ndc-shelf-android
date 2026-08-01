@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.ai.llm
 
+import java.util.Locale
+
 /**
  * 端末内LLMのモデル台帳（設計判断はdocs/adr/0009-on-device-llm-librarian.md）。
  *
@@ -87,25 +89,61 @@ data class LlmModelDefinition(
 }
 
 /**
- * モデル取得URLの検査。NDLのcover URLと同じ考え方で、scheme・host・port・
- * userInfo・queryまで固定し、redirectは呼び出し側で拒否する。
+ * モデル取得URLの検査。
+ *
+ * 台帳へ書けるURL（[isAllowed]）と、そこから1回だけ追従してよいリダイレクト先
+ * （[isAllowedRedirectTarget]）を分けて定義する。
+ *
+ * 配布元のHugging Faceは`/resolve/`から署名付きCDNへ302で誘導し、リージョンや
+ * ストレージ方式によって`us.aws.cdn.hf.co`・`cas-bridge.xethub.hf.co`・
+ * `cdn-lfs-*.hf.co`などへ振り分ける。ホスト名を固定できないため、追従先は
+ * `hf.co`配下に限る接尾辞一致で判定する。追従は1回だけで、2回目以降は失敗にする。
  */
 object LlmModelUrlPolicy {
-    /** モデル取得を許可するhost。ここに無いhostへは一切接続しない。 */
-    val ALLOWED_HOSTS: Set<String> = setOf("huggingface.co", "cdn-lfs-us-1.hf.co")
+    /** 台帳のURLに書けるhost。ここに無いhostへは最初の要求すら行わない。 */
+    val ALLOWED_HOSTS: Set<String> = setOf("huggingface.co")
 
-    fun isAllowed(url: String): Boolean =
+    /** リダイレクト追従を許すドメイン。hostが完全一致するか、この接尾辞のサブドメインだけ。 */
+    val ALLOWED_REDIRECT_DOMAINS: Set<String> = setOf("hf.co", "huggingface.co")
+
+    /** 追従を許すリダイレクトの回数。 */
+    const val MAX_REDIRECTS: Int = 1
+
+    /**
+     * 台帳へ書いてよいURLか。署名や可変パラメータを持てないよう、queryとfragmentを
+     * 一切許可しない（URLが実質的に固定であることを保証する）。
+     */
+    fun isAllowed(url: String): Boolean {
+        val uri = parse(url) ?: return false
+        return uri.host?.lowercase(Locale.ROOT) in ALLOWED_HOSTS &&
+            uri.rawQuery == null &&
+            uri.rawFragment == null
+    }
+
+    /**
+     * リダイレクト先として追従してよいURLか。
+     *
+     * CDNの署名付きURLは`Expires`・`Signature`などのqueryを持つため、queryは許可する。
+     * 一方でscheme・port・userInfo・path traversalの制約は台帳URLと同じに保つ。
+     */
+    fun isAllowedRedirectTarget(url: String): Boolean {
+        val uri = parse(url) ?: return false
+        val host = uri.host?.lowercase(Locale.ROOT) ?: return false
+        return ALLOWED_REDIRECT_DOMAINS.any { domain -> host == domain || host.endsWith(".$domain") }
+    }
+
+    private fun parse(url: String): java.net.URI? =
         runCatching {
             val uri = java.net.URI(url)
-            uri.scheme?.lowercase(java.util.Locale.ROOT) == "https" &&
-                uri.host?.lowercase(java.util.Locale.ROOT) in ALLOWED_HOSTS &&
-                uri.userInfo == null &&
-                uri.port in ALLOWED_PORTS &&
-                uri.rawQuery == null &&
-                uri.rawFragment == null &&
-                !uri.rawPath.isNullOrBlank() &&
-                ".." !in uri.rawPath
-        }.getOrDefault(false)
+            val valid =
+                uri.scheme?.lowercase(Locale.ROOT) == "https" &&
+                    uri.host != null &&
+                    uri.userInfo == null &&
+                    uri.port in ALLOWED_PORTS &&
+                    !uri.rawPath.isNullOrBlank() &&
+                    ".." !in uri.rawPath
+            if (valid) uri else null
+        }.getOrNull()
 
     private val ALLOWED_PORTS = setOf(-1, 443)
 }
@@ -117,8 +155,46 @@ object LlmModelUrlPolicy {
  * 項目を足す経路は存在しない。
  */
 object LlmModelCatalog {
-    /** 既定で提示するモデル。空の場合、LLM経路は起動しない（fail-closed）。 */
-    val models: List<LlmModelDefinition> = emptyList()
+    /**
+     * 既定で提示するモデル。空の場合、LLM経路は起動しない（fail-closed）。
+     *
+     * 登録条件と手順はdocs/LOCAL_LLM_MODELS.mdを正本とする。
+     */
+    val models: List<LlmModelDefinition> =
+        listOf(
+            LlmModelDefinition(
+                id = "qwen3-0-6b-mixed-int4",
+                version = "2026-08-01",
+                displayName = "Qwen3 0.6B (mixed int4)",
+                runtime = LlmRuntimeId.NATIVE,
+                downloadUrl =
+                    "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/" +
+                        "qwen3_0_6b_mixed_int4.litertlm",
+                fileName = "qwen3_0_6b_mixed_int4.litertlm",
+                // Hugging Face APIのtree情報（size / lfs.oid）を2026-08-01に実測。
+                sizeBytes = 497_664_000L,
+                sha256 = "b1baab462f6be49d70eada79d715c2c52cd9ece0cad00bddf6a2c097d23498e9",
+                licenseSpdxId = "Apache-2.0",
+                licenseUrl = "https://www.apache.org/licenses/LICENSE-2.0",
+                sourceUrl = "https://huggingface.co/litert-community/Qwen3-0.6B",
+                verifiedOn = "2026-08-01",
+                // LiteRT-LM 0.15.0のAndroidManifestが宣言するminSdkと、本アプリが同梱するABI。
+                minSdkInt = 24,
+                requiredAbis = setOf("arm64-v8a"),
+                // 暫定値。実機測定で確定するまでは保守的に倒す（docs/PERFORMANCE_BUDGETS.md）。
+                minTotalRamBytes = 4L * 1024 * 1024 * 1024,
+                // モデル本体に加えて検証中の一時ファイルを同時に置けるだけの空き。
+                requiredFreeBytes = 1_100_000_000L,
+                contextTokens = 8192,
+                addedOn = "2026-08-01",
+                knownLimitations =
+                    listOf(
+                        "日本語の回答品質について配布元の公式な保証はない",
+                        "0.6Bの小型モデルのため、事実誤りや指示の取りこぼしが起こりやすい",
+                        "推論速度・メモリ・発熱は実機測定で確定していない",
+                    ),
+            ),
+        )
 
     val defaultModel: LlmModelDefinition? get() = models.firstOrNull { model -> model.retiredOn == null }
 

@@ -40,10 +40,10 @@ jobs:
           verifyBackupPolicy
           verifyLicenseReport
           :app:cyclonedxDirectBom
-          verifyRoborazziDebug
-          lintDebug
-          assembleDebug
-          assembleDebugAndroidTest
+          verifyRoborazziStandardDebug
+          lintStandardDebug
+          assembleStandardDebug
+          assembleStandardDebugAndroidTest
           --stacktrace
 
       - name: Verify translation keys match across locales
@@ -123,7 +123,7 @@ jobs:
           arch: x86_64
           profile: pixel_7
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest --stacktrace --no-configuration-cache --console=plain || { echo "::group::Crash logcat"; adb logcat -d -s AndroidRuntime:E E2E_DIAG:D TestRunner:I; echo "::endgroup::"; exit 1; }
+          script: ./gradlew connectedStandardDebugAndroidTest --stacktrace --no-configuration-cache --console=plain || { echo "::group::Crash logcat"; adb logcat -d -s AndroidRuntime:E E2E_DIAG:D TestRunner:I; echo "::endgroup::"; exit 1; }
 
   update-install:
     name: update-install (v0.1.2 -> current)
@@ -148,15 +148,15 @@ jobs:
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       - name: Build the current debug APK
-        run: ./gradlew :app:assembleDebug --console=plain
+        run: ./gradlew :app:assembleStandardDebug --console=plain
 
       - name: Build the v0.1.2 baseline debug APK
         run: |
           # 同一ジョブ内なので ~/.android/debug.keystore を共有し、更新インストールの
           # 署名互換をそのまま検証できる。
           git worktree add "$RUNNER_TEMP/baseline" "$BASELINE_COMMIT"
-          (cd "$RUNNER_TEMP/baseline" && ./gradlew :app:assembleDebug --console=plain)
-          cp "$RUNNER_TEMP/baseline/app/build/outputs/apk/debug/app-debug.apk" "$RUNNER_TEMP/baseline.apk"
+          (cd "$RUNNER_TEMP/baseline" && ./gradlew :app:assembleStandardDebug --console=plain)
+          cp "$RUNNER_TEMP/baseline/app/build/outputs/apk/standard/debug/app-standard-debug.apk" "$RUNNER_TEMP/baseline.apk"
         env:
           BASELINE_COMMIT: d852975025bf5d224e29f5b9fc475cf8c0bff957
 
@@ -174,7 +174,7 @@ jobs:
           arch: x86_64
           profile: pixel_7
           disable-animations: true
-          script: .github/scripts/verify-update-install.sh "$RUNNER_TEMP/baseline.apk" app/build/outputs/apk/debug/app-debug.apk
+          script: .github/scripts/verify-update-install.sh "$RUNNER_TEMP/baseline.apk" app/build/outputs/apk/standard/debug/app-standard-debug.apk
 
   dependency-review:
     if: github.event_name == 'pull_request'

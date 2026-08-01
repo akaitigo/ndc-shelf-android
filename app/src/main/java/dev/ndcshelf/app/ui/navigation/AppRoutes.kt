@@ -63,6 +63,10 @@ data object TagManagementRoute
 @Serializable
 data object AiLibrarianRoute
 
+/** 端末内LLMモデルの取得・検証・削除。routeへは何も渡さない。 */
+@Serializable
+data object LlmModelRoute
+
 @Serializable
 data object OnboardingRoute
 

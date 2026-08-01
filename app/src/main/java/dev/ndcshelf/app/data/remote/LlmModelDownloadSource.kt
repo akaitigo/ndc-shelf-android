@@ -24,7 +24,9 @@ import kotlin.coroutines.resumeWithException
  *
  * 安全策:
  * - HTTPS・許可host・port 443のみ（[LlmModelUrlPolicy]）
- * - redirectを追わない（3xxは失敗として扱う）
+ * - OkHttpの自動redirectは無効。3xxは自前で1回だけ追従し、追従先が
+ *   [LlmModelUrlPolicy.isAllowedRedirectTarget]を満たさなければ失敗にする
+ *   （配布元は署名付きCDNへ302で誘導するため）
  * - Content-Lengthが台帳の期待サイズと一致しなければ本文を読まない
  * - 実体のサイズ上限とSHA-256は[dev.ndcshelf.app.data.local.FileLlmModelStore]が再検証する
  */
@@ -37,15 +39,45 @@ class LlmModelDownloadSource(
         if (!LlmModelUrlPolicy.isAllowed(definition.downloadUrl)) {
             throw IOException("Blocked model URL")
         }
+        var target = definition.downloadUrl
+        var redirects = 0
+        while (true) {
+            val response = request(target)
+            val location = response.redirectLocation()
+            if (location == null) {
+                return body(response)
+            }
+            response.close()
+            // 配布元はCDNの署名付きURLへ302で誘導する。追従は許可ドメイン内で1回だけ。
+            if (redirects >= LlmModelUrlPolicy.MAX_REDIRECTS) {
+                throw IOException("Model download rejected: too many redirects")
+            }
+            val resolved = response.request.url.resolve(location)?.toString()
+            if (resolved == null || !LlmModelUrlPolicy.isAllowedRedirectTarget(resolved)) {
+                throw IOException("Model download rejected: redirect outside the allowlist")
+            }
+            target = resolved
+            redirects += 1
+        }
+    }
+
+    private suspend fun request(url: String): Response {
         val request =
             Request
                 .Builder()
-                .url(definition.downloadUrl)
+                .url(url)
                 .header("Accept", "application/octet-stream")
                 .header("User-Agent", userAgent)
                 .get()
                 .build()
-        val response = callFactory.newCall(request).await()
+        return callFactory.newCall(request).await()
+    }
+
+    /** 3xxかつLocationを持つ応答のリダイレクト先。追従しない応答ではnull。 */
+    private fun Response.redirectLocation(): String? =
+        if (code in 300..399) header("Location")?.takeIf(String::isNotBlank) else null
+
+    private fun body(response: Response): InputStream {
         if (!response.isSuccessful) {
             response.close()
             throw IOException("Model download rejected: ${response.code}")
@@ -88,6 +120,8 @@ class LlmModelDownloadSource(
 /**
  * モデル取得専用のOkHttpクライアント。数百MiB〜数GiBを扱うため読み取りtimeoutは
  * 長めにするが、全体callのtimeoutは設けずキャンセルで打ち切る。
+ *
+ * redirectはOkHttpに任せず自前で1回だけ追従する（追従先のhostを検査するため）。
  */
 fun defaultLlmModelHttpClient(): OkHttpClient =
     OkHttpClient

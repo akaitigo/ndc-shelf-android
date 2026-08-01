@@ -31,7 +31,7 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
 - **JVMスクリーンショット回帰**: `ScreenshotRegressionTest`（Robolectric +
   Roborazzi）。主要画面のライト・ダーク・大文字（fontScale 1.5）を匿名fixture
   で描画し、`app/roborazzi/` のgoldenと比較する。verifyジョブの
-  `verifyRoborazziDebug` が差分で失敗し、`screenshot-diffs` artifactへ比較画像を
+  `verifyRoborazziStandardDebug` が差分で失敗し、`screenshot-diffs` artifactへ比較画像を
   出力する。goldenの更新は `./gradlew recordRoborazziDebug` の結果をレビューして
   コミットする。大文字は fontScale 1.5 に加え 2.0（library / insights / onboarding）も
   golden 化し、200%文字での切れ・重なりを検出する。
@@ -49,7 +49,7 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
   JVM層で実行する。折りたたみの物理的な姿勢変更はエミュレーターで再現しないため、
   下記の手動実機層で確認する。
 - **エミュレーターinstrumentation**: API 26 / 29 / 35 × pixel_7 で
-  `connectedDebugAndroidTest`。画面単位テストに加え、`E2eManualRegistrationTest`
+  `connectedStandardDebugAndroidTest`。画面単位テストに加え、`E2eManualRegistrationTest`
   がオンボーディング→手動登録→本棚表示→Activity再生成の主要フローを実DBで検証する。
 - **アクセシビリティ自動チェック**: `AccessibilityChecksTest` と主要画面テスト
   （`LibrarySearchScreenTest` / `DataManagementScreenTest` / `ScanSessionPanelTest`）で
@@ -59,7 +59,7 @@ E2E・スクリーンショット・互換性検証の正本。CIで自動化す
 - **翻訳キーの欠落・不要検出**: `.github/scripts/verify-translations.sh` が
   `values/strings.xml`（英語・既定）と `values-ja/strings.xml`（日本語）のキー集合、
   フォーマット引数、`<plurals>` の quantity を突き合わせ、verifyジョブで失敗させる。
-  Android Lint の `MissingTranslation` / `ExtraTranslation` も `lintDebug` で有効のまま。
+  Android Lint の `MissingTranslation` / `ExtraTranslation` も `lintStandardDebug` で有効のまま。
 - 検証成果は各リリースのGitHub Actions run URLをリリースチェックリストへ記録する。
 
 - **更新インストール回帰**: `update-install`ジョブがv0.1.2（commit d852975、versionCode 3）の
