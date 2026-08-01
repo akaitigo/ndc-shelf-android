@@ -67,6 +67,14 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // デモGIFの記録は明示指定時だけ行う。GradleのJVMプロパティは
+            // test workerへ自動伝播しないため、ここで転送する。
+            it.systemProperty(
+                "ndcshelf.recordDemo",
+                providers.systemProperty("ndcshelf.recordDemo").getOrElse("false"),
+            )
+        }
     }
 
     sourceSets {
