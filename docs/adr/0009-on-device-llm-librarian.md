@@ -135,7 +135,7 @@ runtimeを採用する版では、次のいずれかを別途決める必要が�
 - 既存利用者のダウンロード量は増えない。端末内LLMを使いたい利用者だけが大きい方を選ぶ。
 - **applicationIdが異なるため、2つは別アプリとして扱われる。** 同時インストールでき、相互に上書き更新されない代わりに、**データは共有しない**。乗り換えにはエクスポート→インポートが必要で、この制約はREADMEとリリースノートへ明記する。
 - 署名鍵は同一。`release.yml`は両方の署名を検証し、証明書のSHA-256が一致することも確認する。
-- **`ai`フレーバーは`abiFilters`でarm64-v8aへ限定する。** LiteRT-LM 0.15.0のnative libraryはarm64-v8aとx86_64しか無く、x86_64はエミュレータ専用で実機の対象にならない。加えて、AI版は「Android 7.0以上・64bit Arm」を対象として配布するため、armeabi-v7a・x86のライブラリを積んでも端末内LLMは動かない。限定によりAPKは47,025,138 Bから31,475,717 Bへ**33%減った**。他ABIの端末は`standard`を使う（アプリ本体の機能に差は無い）。
+- **`ai`フレーバーは`abiFilters`でarm64-v8aへ限定する。** LiteRT-LM 0.15.0のnative libraryはarm64-v8aとx86_64しか無く、x86_64はエミュレータ専用で実機の対象にならない。加えて、AI版は「Android 7.0以上・64bit Arm」を対象として配布するため、armeabi-v7a・x86のライブラリを積んでも端末内LLMは動かない。限定によりAPKは47,025,138 Bから31,475,717 Bへ**33%減った**。副作用として、arm64-v8a以外の端末では`ai`のインストール自体が失敗する（`INSTALL_FAILED_NO_MATCHING_ABIS`）。端末内LLMが動かない状態でインストールできてしまうより、導入時点で明示される方が誤解が少ない。他ABIの端末は`standard`を使う（アプリ本体の機能に差は無い）。この挙動はREADMEへ明記した。
 - CIの通常ジョブは`standard`を主対象にして実行時間を増やさない（`verifyRoborazziStandardDebug` / `lintStandardDebug` / `assembleStandardDebug` / `connectedStandardDebugAndroidTest`）。ただし`ai`専用のソースセットが未検査のままmainへ入らないよう、`assembleAiDebug`と`lintAiDebug`は毎PRで実行する。releaseビルドとサイズ検証は`release.yml`で行う。
 
 ### 2. 対応端末
