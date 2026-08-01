@@ -97,25 +97,19 @@ jobs:
       - name: Collect release artifacts and checksums
         run: |
           mkdir -p release-artifacts
-          # 配布物はAPK2種類。standardは端末内LLMなし、aiはLiteRT-LM同梱で
-          # applicationIdが異なる別アプリ（同時インストール可・データ非共有）。
+          # 配布物はstandardのAPKだけ。aiフレーバーはビルドとサイズ検証は行うが、
+          # 実機検証で実用にならないことが判明したため配布しない
+          # （docs/ON_DEVICE_LLM_FINDINGS.md）。同梱すると475MBのモデル取得を
+          # 促しておいて回答が返らない体験になる。
           # AABはストア配布へ切り替える場合に備えた予備成果物として残す。
           cp app/build/outputs/apk/standard/release/app-standard-release.apk \
             "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}.apk"
           cp app/build/outputs/bundle/standardRelease/app-standard-release.aab \
             "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}.aab"
-          cp app/build/outputs/apk/ai/release/app-ai-release.apk \
-            "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}-ai.apk"
-          cp app/build/outputs/bundle/aiRelease/app-ai-release.aab \
-            "release-artifacts/ndc-shelf-${GITHUB_REF_NAME}-ai.aab"
           cp "$RUNNER_TEMP/apk-signature-standard.txt" \
             "release-artifacts/apk-signature-${GITHUB_REF_NAME}.txt"
-          cp "$RUNNER_TEMP/apk-signature-ai.txt" \
-            "release-artifacts/apk-signature-${GITHUB_REF_NAME}-ai.txt"
           cp app/build/outputs/mapping/standardRelease/mapping.txt \
             "release-artifacts/mapping-${GITHUB_REF_NAME}.txt"
-          cp app/build/outputs/mapping/aiRelease/mapping.txt \
-            "release-artifacts/mapping-${GITHUB_REF_NAME}-ai.txt"
           cp app/build/reports/cyclonedx/ndc-shelf.cdx.json release-artifacts/
           cp app/build/reports/licenses/THIRD-PARTY-NOTICES.json release-artifacts/
           (cd release-artifacts && sha256sum -- * > SHA256SUMS.txt)
