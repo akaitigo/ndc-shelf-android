@@ -43,7 +43,7 @@ LLM native libraryをarm64-v8aだけに絞っても（`packaging { jniLibs.exclu
 
 `litertlm-android` 0.15.0は`kotlin-reflect`（3.3 MB）と`gson`を推移的に持ち込むため、native library以外にもdex側の増分がある。
 
-> 注: ADR 0007当時の基準値17,590,996 B（2026-07-29）はその後のmain更新で18,409,960 Bへ増えている。残余枠は当初想定より狭い。
+> 注: ADR 0007当時の基準値17,590,996 B（2026-07-29）はその後のmain更新で18,409,960 Bへ増えている（残余枠は当初想定より狭い）。上表は#126（i18n）のmerge前に同一commitで測定した比較で、#126をmergeした本ブランチの実測は18,451,644 B。
 
 ### runtime候補の実測値
 

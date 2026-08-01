@@ -95,7 +95,7 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 
 | 指標 | 実測（2026-08-01、R8有効・未署名） | 予算 |
 | --- | ---: | ---: |
-| リリースAAB（`app-release.aab`） | 18,409,960 B | 21,000,000 B |
+| リリースAAB（`app-release.aab`） | 18,451,644 B | 21,000,000 B |
 
 `:app:verifyReleaseBundleSize` が `bundleRelease` の成果物サイズを予算と比較する。
 `bundleRelease` は毎PRのverifyには重いため必須ジョブへは入れず、
@@ -104,7 +104,7 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 超過時はABI別配信・依存の見直しを先に検討し、正当な増加であればこの表と
 タスク定数の両方を更新する。
 
-参考: 同条件でarm64-v8aだけを同梱すると 11,610,678 B（2026-08-01実測）。
+参考: 同条件でarm64-v8aだけを同梱すると 11,610,678 B（2026-08-01、#126のmerge前に実測）。
 
 ## 端末内LLM AI司書（層3、未採用）
 
@@ -115,7 +115,7 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 
 | 構成 | アプリABI | LLM native lib ABI | AAB実測（2026-08-01） | 現行予算比 |
 | --- | --- | --- | ---: | ---: |
-| 現行main（LLMなし） | 4 ABI | — | 18,409,960 B | 87.7% |
+| 現行main（LLMなし、#126のmerge前） | 4 ABI | — | 18,409,960 B | 87.7% |
 | `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | 4 ABI | 60,660,835 B | 288.9% |
 | `com.google.mediapipe:tasks-genai:0.10.35` | 4 ABI | arm64-v8aのみ | 28,691,368 B | 136.6% |
 | `com.google.mediapipe:tasks-genai:0.10.35` | arm64-v8aのみ | arm64-v8aのみ | 21,885,472 B | 104.2% |
