@@ -54,7 +54,7 @@ AARを取得して`jni/`配下のELFサイズと`AndroidManifest.xml`の`minSdkV
 | **MediaPipe LLM Inference API** | `com.google.mediapipe:tasks-genai:0.10.35` | Google Maven | Apache-2.0 | 21 | v7a/arm64/x86/x86_64 | 26,625,664 | 108,775,920 |
 | MediaPipe（旧版） | `com.google.mediapipe:tasks-genai:0.10.24` | Google Maven | Apache-2.0 | 24 | v7a/arm64/x86/x86_64 | 11,950,912 | 48,592,356 |
 | **LiteRT-LM**（Googleの後継） | `com.google.ai.edge.litertlm:litertlm-android:0.15.0` | Google Maven | Apache-2.0 | 24 | arm64/x86_64のみ | 21,199,264 | 46,421,288 |
-| ONNX Runtime（基盤のみ） | `com.microsoft.onnxruntime:onnxruntime-android:1.28.0` | Maven Central | MIT | 24 | v7a/arm64/x86/x86_64 | 28,748,928 | 118,510,396 |
+| ONNX Runtime（基盤のみ） | `com.microsoft.onnxruntime:onnxruntime-android:1.28.0` | Maven Central | MIT | 24 | v7a/arm64/x86/x86_64 | 28,748,928 | 118,610,396 |
 | ONNX Runtime GenAI | `com.microsoft.onnxruntime:onnxruntime-genai-android` | **未publish** | MIT | — | — | — | — |
 | llama.cpp Androidバインディング | 該当なし | **未publish** | MIT | — | — | — | — |
 
@@ -64,6 +64,20 @@ AARを取得して`jni/`配下のELFサイズと`AndroidManifest.xml`の`minSdkV
 - LiteRT-LMはarmeabi-v7aを同梱していない。32bit端末ではLLM経路を提供できない。
 - `onnxruntime-genai-android`はMaven Centralにも Google Mavenにも存在せず（`maven-metadata.xml`が404）、公式手順もソースからのAARビルドのみ（<https://github.com/microsoft/onnxruntime-genai>）。本リポジトリはGradle dependency verification（sha256）で依存を固定しているため、公開artifactの無い依存は運用に載せられない。
 - llama.cppのJNIバインディングでAndroid native libraryを同梱するMaven Central artifactは存在しない。最有力の`de.kherud:llama`は対応プラットフォームにAndroidを含まず、最終リリースは2025-06-20で13か月以上更新が無い。NDKによるソースビルドが必要で、これもdependency verificationの外側になる。
+
+### 未解決の技術課題: redirect拒否とHugging Faceの配布形態
+
+本PRの`LlmModelDownloadSource`はredirectを一切追わない。一方Hugging Faceの`/resolve/<rev>/<file>`は実体のCDN（`cdn-lfs-*.hf.co`）へ302で誘導し、CDNのURLには有効期限つきの署名queryが付く。したがって、
+
+- 台帳へ`/resolve/`のURLを書くとredirect拒否で必ず失敗する
+- 台帳へCDNの実体URLを書いても署名が失効する
+
+runtimeを採用する版では、次のいずれかを別途決める必要がある。
+
+1. **許可hostへの1段だけのredirect追従を明示的に実装する**（追従先も`ALLOWED_HOSTS`で検査し、追従回数を1回に固定する）
+2. **redirectを返さない配布元を選ぶ**（リリース成果物として自リポジトリのGitHub Releasesへ再配布できるライセンスに限る）
+
+いずれもURLポリシー・許可host一覧・`docs/NETWORK_BOUNDARY.md`の更新を伴う。現時点では取得経路が動作しないままだが、モデルが台帳に無いため実行されることはない。
 
 ### モデルのライセンス（一次情報、確認日2026-08-01）
 
