@@ -36,16 +36,9 @@ class AppInfoScreenTest {
         composeRule.onNodeWithText(context.getString(R.string.info_privacy_network_title)).assertIsDisplayed()
         scrollOverviewTo(hasText(context.getString(R.string.info_privacy_backup_title)))
         composeRule.onNodeWithText(context.getString(R.string.info_privacy_backup_title)).assertIsDisplayed()
-        scrollOverviewTo(
-            hasText(
-                "Androidのクラウドバックアップから全データを除外しています。",
-                substring = true,
-            ),
-        )
-        composeRule.onNodeWithText(
-            "Androidのクラウドバックアップから全データを除外しています。",
-            substring = true,
-        ).assertIsDisplayed()
+        val backupBody = context.getString(R.string.info_privacy_backup_body)
+        scrollOverviewTo(hasText(backupBody))
+        composeRule.onNodeWithText(backupBody).assertIsDisplayed()
         scrollOverviewTo(hasText(context.getString(R.string.info_source_ndl_title)))
         composeRule.onNodeWithText(context.getString(R.string.info_source_ndl_title)).assertIsDisplayed()
     }

@@ -71,7 +71,7 @@ class SeriesSuggestionScreenTest {
         val firstVolume = composeRule.onNodeWithTag(SERIES_VOLUME_FIELD_TEST_TAG_PREFIX + "one")
         firstVolume.performTextClearance()
         firstVolume.performTextInput("上巻")
-        val moveSecondUp = "年代記 2巻を刊行順で上へ"
+        val moveSecondUp = context.getString(R.string.series_move_up, "年代記 2巻")
         scrollEditorTo(hasContentDescription(moveSecondUp))
         composeRule.onNodeWithContentDescription(moveSecondUp).performClick()
         scrollEditorTo(

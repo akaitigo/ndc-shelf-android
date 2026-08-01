@@ -196,7 +196,13 @@ class LibraryLocationScreenTest {
 
     private fun openCopyEditor(copyLabel: String) {
         val description =
-            "$copyLabel、場所 書斎 / 本棚A / 上段、未読、紙。タップして編集"
+            context.getString(
+                R.string.book_detail_copy_description,
+                copyLabel,
+                "書斎 / 本棚A / 上段",
+                context.getString(R.string.reading_status_unread),
+                context.getString(R.string.book_detail_media_physical),
+            )
         composeRule.onNodeWithTag(BOOK_DETAIL_TEST_TAG)
             .performScrollToNode(hasContentDescription(description))
         composeRule.onNodeWithContentDescription(

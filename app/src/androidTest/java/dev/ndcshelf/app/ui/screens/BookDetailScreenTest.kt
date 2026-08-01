@@ -97,10 +97,16 @@ class BookDetailScreenTest {
             .assertIsDisplayed()
             .performClick()
         assertEquals(first.workId, managedVariantWorkId)
-        scrollDetailTo(hasContentDescription("保存用、場所 書庫、未読、電子。タップして編集"))
-        composeRule.onNodeWithContentDescription(
-            "保存用、場所 書庫、未読、電子。タップして編集",
-        ).performClick()
+        val savedCopyDescription =
+            appContext.getString(
+                R.string.book_detail_copy_description,
+                "保存用",
+                "書庫",
+                appContext.getString(R.string.reading_status_unread),
+                appContext.getString(R.string.book_detail_media_digital),
+            )
+        scrollDetailTo(hasContentDescription(savedCopyDescription))
+        composeRule.onNodeWithContentDescription(savedCopyDescription).performClick()
         assertEquals("copy-2", editedCopyId)
     }
 

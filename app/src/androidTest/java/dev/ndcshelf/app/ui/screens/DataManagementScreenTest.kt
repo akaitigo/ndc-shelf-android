@@ -55,7 +55,7 @@ class DataManagementScreenTest {
     fun emptyLibrary_disablesOnlyOperationsThatNeedCurrentData() {
         setContent(bookCount = 0)
 
-        val emptyReason = "本棚が空のため書き出すデータがありません"
+        val emptyReason = context.getString(R.string.data_management_empty_reason)
         assertButton(EXPORT_JSON_TAG, enabled = false, reason = emptyReason)
         assertButton(EXPORT_CSV_TAG, enabled = false, reason = emptyReason)
         assertButton(BACKUP_TAG, enabled = false, reason = emptyReason)
@@ -73,11 +73,11 @@ class DataManagementScreenTest {
         composeRule.onNodeWithText(context.getString(R.string.data_management_destructive_section)).assertIsDisplayed()
         composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(
             hasText(
-                "現在の全データをバックアップ内容で置き換えます。実行直前の状態はアプリ内へ自動退避します。",
+                context.getString(R.string.data_management_restore_description),
             ),
         )
         composeRule.onNodeWithText(
-            "現在の全データをバックアップ内容で置き換えます。実行直前の状態はアプリ内へ自動退避します。",
+            context.getString(R.string.data_management_restore_description),
         ).assertIsDisplayed()
         composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(hasTestTag(RESTORE_TAG))
         composeRule.onNodeWithTag(RESTORE_TAG).assertIsEnabled()
