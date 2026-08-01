@@ -95,6 +95,11 @@ internal fun BookDetailScreen(
     tags: List<TagWithUsage> = emptyList(),
     tagIdsByWork: Map<String, Set<String>> = emptyMap(),
     onSetTagOnWorks: (String, Set<String>, Boolean) -> Unit = { _, _, _ -> },
+    /**
+     * 一覧が同時に見えている2ペイン表示では`false`にする。戻る操作（矢印・システム戻る）は
+     * 一覧へ戻るための導線なので、一覧が既に見えている場合は提供しない。
+     */
+    showBackAction: Boolean = true,
     contentPadding: PaddingValues,
 ) {
     require(copies.isNotEmpty())
@@ -107,7 +112,7 @@ internal fun BookDetailScreen(
             physicalLabel.takeIf { copies.any { it.mediaType == MediaType.PHYSICAL } },
             digitalLabel.takeIf { copies.any { it.mediaType == MediaType.DIGITAL } },
         ).joinToString("・")
-    BackHandler(onBack = onBack)
+    BackHandler(enabled = showBackAction, onBack = onBack)
 
     var sessionEditorVisible by rememberSaveable { mutableStateOf(false) }
     var editingSessionId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -203,11 +208,13 @@ internal fun BookDetailScreen(
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(R.string.book_detail_back),
-                    )
+                if (showBackAction) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = stringResource(R.string.book_detail_back),
+                        )
+                    }
                 }
                 Text(
                     stringResource(R.string.book_detail_title),
@@ -503,44 +510,44 @@ private fun ReadingSessionCard(
                 modifier = Modifier.semantics(mergeDescendants = true) {},
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                buildList {
-                    add(
-                        stringResource(
-                            R.string.reading_history_started_at,
-                            session.startedDay?.format()
-                                ?: stringResource(R.string.reading_history_unknown_day),
-                        ),
-                    )
-                    if (session.status == ReadingSessionStatus.FINISHED) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    buildList {
                         add(
                             stringResource(
-                                R.string.reading_history_finished_at,
-                                session.finishedDay?.format()
+                                R.string.reading_history_started_at,
+                                session.startedDay?.format()
                                     ?: stringResource(R.string.reading_history_unknown_day),
                             ),
                         )
-                    }
-                }.joinToString(" / "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            session.rating?.let { rating ->
-                Text(
-                    stringResource(R.string.reading_history_rating_label, rating),
+                        if (session.status == ReadingSessionStatus.FINISHED) {
+                            add(
+                                stringResource(
+                                    R.string.reading_history_finished_at,
+                                    session.finishedDay?.format()
+                                        ?: stringResource(R.string.reading_history_unknown_day),
+                                ),
+                            )
+                        }
+                    }.joinToString(" / "),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            session.note?.let { note ->
-                Text(
-                    note,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+                session.rating?.let { rating ->
+                    Text(
+                        stringResource(R.string.reading_history_rating_label, rating),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                session.note?.let { note ->
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             // 破壊的操作（削除）への誤タップを避けるため間隔を広げ、
             // どちらのボタンも48dpのタップ領域を確保する。

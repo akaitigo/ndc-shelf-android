@@ -18,10 +18,14 @@ import dev.ndcshelf.app.domain.insights.LibraryInsightsCalculator
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
 import dev.ndcshelf.app.domain.model.LibraryStats
 import dev.ndcshelf.app.domain.model.LocationTree
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.ui.adaptive.AdaptiveLayout
+import dev.ndcshelf.app.ui.adaptive.AdaptiveNavigationScaffold
+import dev.ndcshelf.app.ui.navigation.TopLevelDestination
 import dev.ndcshelf.app.ui.screens.InsightsScreen
 import dev.ndcshelf.app.ui.screens.LibraryScreen
 import dev.ndcshelf.app.ui.screens.OnboardingScreen
@@ -75,6 +79,27 @@ class ScreenshotRegressionTest {
     @Test
     fun onboardingDark() = captureScreen("onboarding_dark", darkTheme = true) { OnboardingFixture() }
 
+    /**
+     * medium幅（NavigationRail + 1ペイン + 最大幅720dp）。
+     * 代表サイズは docs/ADAPTIVE_LAYOUT.md の表に対応する。
+     */
+    @Test
+    @Config(qualifiers = "w720dp-h1024dp-normal-notlong-notround-any-320dpi-keyshidden-nonav")
+    fun libraryMediumRail() =
+        captureScreen("library_medium_rail") {
+            AdaptiveShellFixture(AdaptiveLayout.Medium) { LibraryFixture() }
+        }
+
+    /** expanded幅（NavigationRail + list-detail 2ペイン。詳細を選択済みの状態）。 */
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-normal-notlong-notround-any-320dpi-keyshidden-nonav")
+    fun libraryExpandedTwoPane() =
+        captureScreen("library_expanded_two_pane") {
+            AdaptiveShellFixture(AdaptiveLayout.Expanded) {
+                LibraryFixture(twoPane = true, selectedEditionId = "edition-copy-1")
+            }
+        }
+
     private fun captureScreen(
         name: String,
         darkTheme: Boolean = false,
@@ -105,11 +130,33 @@ class ScreenshotRegressionTest {
     }
 }
 
+/**
+ * 大画面のナビゲーション（NavigationRail）と最大幅制約を含めて撮影するためのシェル。
+ * サイズクラスは実測ではなく明示指定し、qualifiersの解釈差でgoldenが揺れないようにする。
+ */
 @Composable
-private fun LibraryFixture() {
+private fun AdaptiveShellFixture(
+    layout: AdaptiveLayout,
+    content: @Composable () -> Unit,
+) {
+    AdaptiveNavigationScaffold(
+        isSelected = { it == TopLevelDestination.LIBRARY },
+        onSelectDestination = {},
+        layoutOverride = layout,
+    ) { _, _ -> content() }
+}
+
+@Composable
+private fun LibraryFixture(
+    twoPane: Boolean = false,
+    selectedEditionId: String? = null,
+) {
     LibraryScreen(
         books = anonymousBooks(),
+        searchCriteria =
+            selectedEditionId?.let { LibrarySearchCriteria(selectedEditionId = it) },
         libraryStats = LibraryStats(totalCount = 3, classifiedCount = 3, readingCount = 1),
+        twoPane = twoPane,
         onSaveBook = { _, _ -> },
         onDeleteBook = {},
         bookEditState = BookEditUiState.Idle,

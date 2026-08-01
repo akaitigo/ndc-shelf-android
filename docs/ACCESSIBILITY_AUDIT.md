@@ -161,6 +161,8 @@ Material3 1.4.0 のコンポーネントについて、Robolectric 上で `Seman
 | `insights_font_scale_200` | **`fontScale 2.0`（本Issueで追加）** |
 | `onboarding_light` / `onboarding_dark` | オンボーディングのライト・ダーク |
 | `onboarding_font_scale_200` | **`fontScale 2.0`（本Issueで追加）** |
+| `library_medium_rail` | **medium幅（w720dp）の NavigationRail + 1ペイン（#47で追加）** |
+| `library_expanded_two_pane` | **expanded幅（w1280dp）の NavigationRail + list-detail 2ペイン（#47で追加）** |
 
 `fontScale 2.0` の3枚を目視確認し、テキストの切れ・重なりが無いこと、絞り込みチップが
 横スクロールで到達可能なことを確認した。golden の更新は
@@ -190,6 +192,38 @@ API 26 / 29 / 35 のエミュレーターで `connectedDebugAndroidTest` とし�
 
 抑制は `AccessibilityChecksTest.runChecks()` と各テストの `@Before` に集約しており、
 追加・解除はこの表と合わせて更新する。
+
+## 大画面レイアウト（#47）での読み上げ順とタップ領域
+
+タブレット・横画面・折りたたみ向けにナビゲーションと本文の配置を変えた際
+（方針は `docs/ADAPTIVE_LAYOUT.md`）、読み上げ順の論理性が崩れないことを次のとおり確認した。
+
+### 読み上げ順（見出し → 内容）の維持
+
+| 変更点 | 読み上げ順への影響 | 対応 |
+| --- | --- | --- |
+| medium/expanded で下部 `NavigationBar` → 左 `NavigationRail` | railを`Row`の先頭に置くため、TalkBackは「ナビゲーション → 本文」の順に読む。compactは従来どおりScaffoldの`bottomBar`として本文の後に読む | 位置の入れ替えのみで、いずれも「現在地の把握 → 内容」の順序を保つ |
+| expanded の list-detail 2ペイン | 一覧ペインを`Row`の先頭、詳細ペインを後に置く。各ペイン内の見出し（`library_title` / `book_detail_title` / `series_title`）と`semantics { heading() }`は変更していないため、見出しジャンプの順序は「本棚 → 本の詳細」になる | ペイン順序を固定（`AdaptivePaneTest` で一覧・詳細が同時に表示されることを検証） |
+| 2ペインで詳細の戻る矢印を非表示 | 一覧が同時に見えているため「一覧へ戻る」導線は不要。読み上げ・フォーカスの停止点が1つ減る | `showBackAction = false`。1ペイン時は従来どおり表示（`AdaptivePaneTest` で両方を検証） |
+| 詳細ペイン未選択時のプレースホルダ | 空白ペインは読み上げるものが無く、次の操作が分からない | `EmptyDetailPane` で「左の一覧から選ぶ」旨を文言で明示 |
+| 2ペインでの一覧側の選択強調 | 背景色だけでは選択中の項目が伝わらない | `BookCard` / `SeriesCatalogCard` に `selected` セマンティクスと `stateDescription`（「詳細表示中」）を付与。一括選択中は従来の選択状態表現を優先する |
+
+既存の `AccessibilityChecksTest`（ATF）は `LibraryScreen` を1ペイン構成で描画しており、
+本変更後も同じfixtureで通ることを確認した。2ペイン構成は `AdaptivePaneTest`（Robolectric）と
+`library_expanded_two_pane` golden で回帰を検出する。
+
+### 48dpタップ領域（大画面で追加された操作）
+
+| コンポーネント | 実測 | 備考 |
+| --- | --- | --- |
+| `NavigationRailItem` | **48dp 以上（幅・高さとも）** | `AdaptiveNavigationTest.railItemKeepsMinimumTouchTarget` で回帰検証。Material 3 が `minimumInteractiveComponentSize()` を内部適用している（`FilterChip` と同じ仕組み・上表参照） |
+
+### キーボード操作
+
+物理キーボード接続時のフォーカス順は「NavigationRail → 一覧ペイン → 詳細ペイン」。
+レール項目は `Modifier.selectable` 由来のフォーカス可能ノードで、Enter / Space で発火する
+（`AdaptiveNavigationTest.railItemIsFocusableAndActivatesWithEnterKey`）。
+2ペインでも一覧→詳細の順序が保たれるため、Tab だけで詳細へ到達できる。
 
 ## 実機ゲート
 
@@ -224,7 +258,14 @@ Android 13 以上の実機で TalkBack を有効化し、以下を**画面を見
 2. スキャン画面のカメラプレビューがフォーカス可能で、代替経路へ到達できる
 3. フォーカスが視覚的に追える（ハイライトが隠れない）
 
-### 3. 拡大とコントラスト
+### 3. 大画面・折りたたみでのTalkBack
+
+1. タブレット横持ち（expanded）で、TalkBackの見出しジャンプが
+   「本棚 → 本の詳細」の順に移動できること
+2. 折りたたみを開閉しても読み上げ位置とフォーカスが失われないこと
+3. 物理キーボードのTabだけで NavigationRail → 一覧 → 詳細 へ到達し、Enter で発火すること
+
+### 4. 拡大とコントラスト
 
 1. 「表示サイズとテキスト」でフォントサイズ最大・表示サイズ最大にし、
    主要画面で文字の切れ・重なり・操作不能な要素が無いこと
@@ -233,7 +274,7 @@ Android 13 以上の実機で TalkBack を有効化し、以下を**画面を見
 3. 「ハイコントラストテキスト」を有効化して主要画面を確認する
 4. 動的配色（壁紙変更で配色が変わる端末）で主要画面のコントラストを確認する
 
-### 4. モーション低減
+### 5. モーション低減
 
 1. 開発者オプションでアニメーションを全てオフ（0x）にし、
    画面遷移・スキャン成功オーバーレイ・Snackbar が正しく機能すること

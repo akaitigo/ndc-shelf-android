@@ -2,14 +2,19 @@ package dev.ndcshelf.app.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,8 +45,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.SeriesMembershipOrigin
@@ -51,6 +60,8 @@ import dev.ndcshelf.app.domain.model.SeriesReleaseState
 import dev.ndcshelf.app.domain.model.SeriesVolume
 import dev.ndcshelf.app.domain.model.SeriesVolumeState
 import dev.ndcshelf.app.domain.model.SeriesWatchOverview
+import dev.ndcshelf.app.ui.adaptive.AdaptiveLayout
+import dev.ndcshelf.app.ui.adaptive.EmptyDetailPane
 import java.text.DateFormat
 import java.util.Date
 
@@ -65,39 +76,86 @@ fun SeriesScreen(
     onManageSuggestions: () -> Unit = {},
     onRemoveMembership: (String) -> Unit = {},
     onSetWatchEnabled: (String, Boolean) -> Unit = { _, _ -> },
+    /** expanded幅で一覧と巻を左右に並べる。判定は`NdcShelfApp`が行う。 */
+    twoPane: Boolean = false,
+    listPaneWidth: Dp = AdaptiveLayout.LIST_PANE_WIDTH,
     contentPadding: PaddingValues,
 ) {
     val selectedSeries = series.firstOrNull { it.series.id == selectedSeriesId }
-    if (selectedSeries == null) {
-        SeriesCatalog(
-            series = series,
-            onSelectSeries = onSelectSeries,
-            onManageSuggestions = onManageSuggestions,
-            contentPadding = contentPadding,
-        )
-    } else {
-        SeriesDetail(
-            overview = selectedSeries,
-            watch = watches.firstOrNull { it.watch.seriesId == selectedSeries.series.id },
-            onBack = { onSelectSeries(null) },
-            onOpenEdition = onOpenEdition,
-            onOpenBookstore = onOpenBookstore,
-            onRemoveMembership = onRemoveMembership,
-            onSetWatchEnabled = onSetWatchEnabled,
-            contentPadding = contentPadding,
-        )
+    // 一覧のスクロール位置は1ペイン⇔2ペインの切り替えでも保持する。
+    val catalogListState = rememberLazyListState()
+
+    val detailPane: @Composable (Modifier) -> Unit = { modifier ->
+        if (selectedSeries == null) {
+            EmptyDetailPane(
+                message = stringResource(R.string.series_detail_pane_empty),
+                modifier = modifier,
+                contentPadding = contentPadding,
+            )
+        } else {
+            Box(modifier = modifier) {
+                SeriesDetail(
+                    overview = selectedSeries,
+                    watch = watches.firstOrNull { it.watch.seriesId == selectedSeries.series.id },
+                    onBack = { onSelectSeries(null) },
+                    onOpenEdition = onOpenEdition,
+                    onOpenBookstore = onOpenBookstore,
+                    onRemoveMembership = onRemoveMembership,
+                    onSetWatchEnabled = onSetWatchEnabled,
+                    showBackAction = !twoPane,
+                    contentPadding = contentPadding,
+                )
+            }
+        }
+    }
+
+    // 読み上げ順・Tabフォーカス順は一覧ペイン→詳細ペインを維持する。
+    // 呼び出し箇所を1つに保ち、1ペイン⇔2ペインの切り替えでも状態を失わない。
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (twoPane || selectedSeries == null) {
+            SeriesCatalog(
+                series = series,
+                selectedSeriesId = selectedSeriesId,
+                onSelectSeries = onSelectSeries,
+                onManageSuggestions = onManageSuggestions,
+                listState = catalogListState,
+                contentPadding = contentPadding,
+                modifier =
+                    if (twoPane) {
+                        Modifier.width(listPaneWidth).fillMaxHeight()
+                    } else {
+                        Modifier.fillMaxSize()
+                    },
+            )
+        }
+        if (twoPane) {
+            VerticalDivider()
+        }
+        if (twoPane || selectedSeries != null) {
+            detailPane(
+                if (twoPane) {
+                    Modifier.weight(1f).fillMaxHeight()
+                } else {
+                    Modifier.fillMaxSize()
+                },
+            )
+        }
     }
 }
 
 @Composable
 private fun SeriesCatalog(
     series: List<SeriesOverview>,
+    selectedSeriesId: String?,
     onSelectSeries: (String) -> Unit,
     onManageSuggestions: () -> Unit,
+    listState: LazyListState,
     contentPadding: PaddingValues,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag(SERIES_LIST_TEST_TAG),
+        modifier = modifier.testTag(SERIES_LIST_TEST_TAG),
+        state = listState,
         contentPadding =
             PaddingValues(
                 start = 16.dp,
@@ -131,7 +189,11 @@ private fun SeriesCatalog(
             item { SeriesEmptyState() }
         } else {
             items(series, key = { it.series.id }) { overview ->
-                SeriesCatalogCard(overview = overview, onClick = { onSelectSeries(overview.series.id) })
+                SeriesCatalogCard(
+                    overview = overview,
+                    selected = overview.series.id == selectedSeriesId,
+                    onClick = { onSelectSeries(overview.series.id) },
+                )
             }
         }
     }
@@ -167,12 +229,30 @@ private fun SeriesEmptyState() {
 @Composable
 private fun SeriesCatalogCard(
     overview: SeriesOverview,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
     val latest = overview.latestOwnedVolume?.membership?.volumeLabel
+    val selectedLabel = stringResource(R.string.series_catalog_selected)
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onClick)
+                // 2ペイン時は色だけでなくstateDescriptionでも選択中を伝える。
+                .semantics {
+                    this.selected = selected
+                    if (selected) stateDescription = selectedLabel
+                },
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (selected) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    },
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -239,6 +319,7 @@ private fun SeriesDetail(
     onOpenBookstore: (String) -> Unit,
     onRemoveMembership: (String) -> Unit,
     onSetWatchEnabled: (String, Boolean) -> Unit,
+    showBackAction: Boolean,
     contentPadding: PaddingValues,
 ) {
     val dateFormatter = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
@@ -255,11 +336,13 @@ private fun SeriesDetail(
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(R.string.series_back),
-                    )
+                if (showBackAction) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = stringResource(R.string.series_back),
+                        )
+                    }
                 }
                 Column(modifier = Modifier.padding(start = 4.dp)) {
                     Text(
