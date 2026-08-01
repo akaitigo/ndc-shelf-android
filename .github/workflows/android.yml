@@ -44,6 +44,8 @@ jobs:
           lintStandardDebug
           assembleStandardDebug
           assembleStandardDebugAndroidTest
+          assembleAiDebug
+          lintAiDebug
           --stacktrace
 
       - name: Verify translation keys match across locales
@@ -154,9 +156,11 @@ jobs:
         run: |
           # 同一ジョブ内なので ~/.android/debug.keystore を共有し、更新インストールの
           # 署名互換をそのまま検証できる。
+          # v0.1.2 時点には product flavor が無いため、baseline 側は
+          # フレーバー無しのタスク名と出力パスを使う。
           git worktree add "$RUNNER_TEMP/baseline" "$BASELINE_COMMIT"
-          (cd "$RUNNER_TEMP/baseline" && ./gradlew :app:assembleStandardDebug --console=plain)
-          cp "$RUNNER_TEMP/baseline/app/build/outputs/apk/standard/debug/app-standard-debug.apk" "$RUNNER_TEMP/baseline.apk"
+          (cd "$RUNNER_TEMP/baseline" && ./gradlew :app:assembleDebug --console=plain)
+          cp "$RUNNER_TEMP/baseline/app/build/outputs/apk/debug/app-debug.apk" "$RUNNER_TEMP/baseline.apk"
         env:
           BASELINE_COMMIT: d852975025bf5d224e29f5b9fc475cf8c0bff957
 
