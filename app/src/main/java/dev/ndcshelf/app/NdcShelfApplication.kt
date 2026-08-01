@@ -18,6 +18,7 @@ import dev.ndcshelf.app.data.diagnostics.DiagnosticsLoggingBookMetadataService
 import dev.ndcshelf.app.data.diagnostics.FileDiagnosticsLogger
 import dev.ndcshelf.app.data.diagnostics.RoomDiagnosticsSnapshotCollector
 import dev.ndcshelf.app.data.local.AppDatabase
+import dev.ndcshelf.app.data.local.SharedPreferencesAiLibrarianStore
 import dev.ndcshelf.app.data.local.SharedPreferencesInsightsExclusionStore
 import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
 import dev.ndcshelf.app.data.remote.NdlBookMetadataService
@@ -35,6 +36,10 @@ import dev.ndcshelf.app.data.sync.RoomSyncEngine
 import dev.ndcshelf.app.data.sync.RoomSyncStatusRepository
 import dev.ndcshelf.app.data.sync.backend.AndroidSyncBackendFactory
 import dev.ndcshelf.app.data.sync.crypto.AndroidKeystoreSyncKeyManager
+import dev.ndcshelf.app.domain.ai.AiLibrarianHistoryStore
+import dev.ndcshelf.app.domain.ai.AiLibrarianProvider
+import dev.ndcshelf.app.domain.ai.AiLibrarianUsageStore
+import dev.ndcshelf.app.domain.ai.OnDeviceHeuristicLibrarian
 import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
 import dev.ndcshelf.app.domain.insights.InsightsExclusionStore
@@ -194,6 +199,18 @@ class AppContainer(
         )
 
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
+
+    /**
+     * AI司書のプロバイダ。本版は端末内で完結する決定的実装だけを提供し、
+     * クラウドのAIプロバイダは接続しない（docs/adr/0007-optin-ai-librarian.md）。
+     */
+    val aiLibrarianProvider: AiLibrarianProvider = OnDeviceHeuristicLibrarian()
+
+    private val aiLibrarianStore = SharedPreferencesAiLibrarianStore(application)
+
+    val aiLibrarianUsageStore: AiLibrarianUsageStore = aiLibrarianStore
+
+    val aiLibrarianHistoryStore: AiLibrarianHistoryStore = aiLibrarianStore
 
     val insightsExclusionStore: InsightsExclusionStore =
         SharedPreferencesInsightsExclusionStore(application)

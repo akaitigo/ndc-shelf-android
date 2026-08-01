@@ -59,6 +59,10 @@ data object ConsentRoute
 @Serializable
 data object TagManagementRoute
 
+/** AI司書への相談。対象範囲と送信項目は画面内で選び、routeへは何も渡さない。 */
+@Serializable
+data object AiLibrarianRoute
+
 @Serializable
 data object OnboardingRoute
 

@@ -9,6 +9,7 @@
 | `LibraryGraph` → `LibraryRoute` | なし | 本棚タブの開始画面 |
 | `LibraryGraph` → `WorkVariantRoute` | `workId: String` | 版違い（作品グループ）編集 |
 | `LibraryGraph` → `TagManagementRoute` | なし | タグとコレクション（保存済み検索）の管理 |
+| `LibraryGraph` → `AiLibrarianRoute` | なし | AI司書への相談（対象範囲・送信項目は画面内で選ぶ） |
 | `ScanRoute` | なし | スキャン・書店モード |
 | `SeriesGraph` → `SeriesRoute` | なし | シリーズ一覧・詳細 |
 | `SeriesGraph` → `SeriesSuggestionRoute` | `workId: String?` | シリーズ候補の確認・確定（nullは一覧起点） |
@@ -47,4 +48,5 @@
 
 - タブ横断で共有する状態（本棚検索、スキャン、インポート・バックアップ進行）は`MainViewModel`が保持する。
 - 特定routeでしか使わない状態は、そのroute専用のViewModelへ分離し、route引数を`SavedStateHandle`（`toRoute()`）から復元する。第一弾は`WorkVariantViewModel`。
+- `AiLibrarianRoute`は`AiLibrarianViewModel`を持つ。対象範囲となる「現在の検索結果」はroute引数ではなく、`MainViewModel.librarySearchResult`から取得したcopyIdの集合を`setSearchResultCopyIds`で渡す（冊名や検索文をBundleへ載せないため）。
 - 新しい詳細画面を追加する際は、`MainViewModel`へStateFlowを足すのではなく、この方式に従う。

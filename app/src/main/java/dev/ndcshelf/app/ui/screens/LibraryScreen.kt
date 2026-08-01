@@ -167,6 +167,7 @@ fun LibraryScreen(
     onSaveCurrentSearch: (String) -> Unit = {},
     onApplySavedSearch: (SavedSearch) -> Unit = {},
     onOpenTagManager: () -> Unit = {},
+    onOpenAiLibrarian: () -> Unit = {},
     /** expanded幅で一覧と詳細を左右に並べる。判定は`NdcShelfApp`が行う。 */
     twoPane: Boolean = false,
     listPaneWidth: Dp = AdaptiveLayout.LIST_PANE_WIDTH,
@@ -391,6 +392,12 @@ fun LibraryScreen(
                     modifier = Modifier.align(Alignment.End),
                 ) {
                     Text(stringResource(R.string.tag_manage_action))
+                }
+                TextButton(
+                    onClick = onOpenAiLibrarian,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(stringResource(R.string.ai_librarian_open_action))
                 }
                 if (bulkSelectedCopyIds.isNotEmpty()) {
                     Row(
