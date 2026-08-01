@@ -12,11 +12,15 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import org.junit.Rule
 import org.junit.Test
 
 class AppInfoScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -24,13 +28,14 @@ class AppInfoScreenTest {
     fun overview_disclosesPrivacySourceBackupAndBuild() {
         setContent()
 
-        composeRule.onNodeWithText("バージョン 0.1.2（3）・debug ビルド")
+        composeRule
+            .onNodeWithText(context.getString(R.string.info_version_value, "0.1.2", 3, "debug"))
             .assertIsDisplayed()
-        composeRule.onNodeWithText("プライバシーとデータ").assertIsDisplayed()
-        scrollOverviewTo(hasText("外部サービスへの通信"))
-        composeRule.onNodeWithText("外部サービスへの通信").assertIsDisplayed()
-        scrollOverviewTo(hasText("バックアップとファイル"))
-        composeRule.onNodeWithText("バックアップとファイル").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.info_privacy_title)).assertIsDisplayed()
+        scrollOverviewTo(hasText(context.getString(R.string.info_privacy_network_title)))
+        composeRule.onNodeWithText(context.getString(R.string.info_privacy_network_title)).assertIsDisplayed()
+        scrollOverviewTo(hasText(context.getString(R.string.info_privacy_backup_title)))
+        composeRule.onNodeWithText(context.getString(R.string.info_privacy_backup_title)).assertIsDisplayed()
         scrollOverviewTo(
             hasText(
                 "Androidのクラウドバックアップから全データを除外しています。",
@@ -41,8 +46,8 @@ class AppInfoScreenTest {
             "Androidのクラウドバックアップから全データを除外しています。",
             substring = true,
         ).assertIsDisplayed()
-        scrollOverviewTo(hasText("国立国会図書館サーチ"))
-        composeRule.onNodeWithText("国立国会図書館サーチ").assertIsDisplayed()
+        scrollOverviewTo(hasText(context.getString(R.string.info_source_ndl_title)))
+        composeRule.onNodeWithText(context.getString(R.string.info_source_ndl_title)).assertIsDisplayed()
     }
 
     @Test
@@ -66,13 +71,16 @@ class AppInfoScreenTest {
         composeRule.onNodeWithTag(OSS_LICENSE_BUTTON_TAG).performClick()
         composeRule.onNodeWithTag(OSS_LICENSE_LIST_TAG).assertIsDisplayed()
 
-        val search = composeRule.onNodeWithText("名前、提供元、座標で検索")
+        val search = composeRule.onNodeWithText(context.getString(R.string.info_oss_search))
         search.performTextInput("okio-jvm")
         composeRule.onNodeWithText("okio").assertIsDisplayed()
         search.performTextClearance()
         search.performTextInput("commons-csv")
         composeRule.onNodeWithText("Apache Commons CSV").performClick()
-        composeRule.onNodeWithText("Maven座標: org.apache.commons:commons-csv")
+        composeRule
+            .onNodeWithText(
+                context.getString(R.string.info_oss_coordinate, "org.apache.commons:commons-csv"),
+            )
             .assertIsDisplayed()
         composeRule.onNodeWithText("Apache License 2.0").assertIsDisplayed()
     }

@@ -1168,4 +1168,6 @@
         <item quantity="other">%1$s \u00b7 %2$d books in scope</item>
     </plurals>
     <string name="ai_librarian_back">Back to my library</string>
+    <string name="book_card_copy_summary">%1$s · %2$s</string>
+    <string name="value_list_separator">\u0020·\u0020</string>
 </resources>

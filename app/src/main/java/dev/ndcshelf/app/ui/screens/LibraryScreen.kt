@@ -989,8 +989,15 @@ private fun BookCard(
                 )
                 Text(
                     text =
-                        "${book.copyLabel} ・ " +
-                            pluralStringResource(R.plurals.book_copy_count, editionCopyCount, editionCopyCount),
+                        stringResource(
+                            R.string.book_card_copy_summary,
+                            book.copyLabel,
+                            pluralStringResource(
+                                R.plurals.book_copy_count,
+                                editionCopyCount,
+                                editionCopyCount,
+                            ),
+                        ),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )

@@ -6,7 +6,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import dev.ndcshelf.app.BookstoreUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.PurchaseStatus
@@ -17,6 +19,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class BookstoreResultCardTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -35,10 +39,12 @@ class BookstoreResultCardTest {
             }
         }
 
-        composeRule.onNodeWithText("2冊").assertIsDisplayed()
-        composeRule.onNodeWithText("所有").assertIsDisplayed()
-        composeRule.onNode(hasText("予約済み") and hasClickAction()).assertIsDisplayed()
-        composeRule.onNodeWithText("購入済みとして本棚へ追加").performClick()
+        composeRule
+            .onNodeWithText(context.resources.getQuantityString(R.plurals.bookstore_owned_count, 2, 2))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.bookstore_owned_label)).assertIsDisplayed()
+        composeRule.onNode(hasText(context.getString(R.string.bookstore_reserved)) and hasClickAction()).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.bookstore_purchased)).performClick()
         assertEquals(PurchaseTransition.PURCHASED, transition)
     }
 

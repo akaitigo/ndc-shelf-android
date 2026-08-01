@@ -4,7 +4,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import dev.ndcshelf.app.BookstoreUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.ScanFailure
 import dev.ndcshelf.app.ScanUiState
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
@@ -13,6 +15,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class CameraPermissionCardTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -29,7 +33,7 @@ class CameraPermissionCardTest {
             }
         }
 
-        composeRule.onNodeWithText("カメラを許可").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.camera_permission_allow)).performClick()
         assertEquals(1, requested)
     }
 
@@ -46,9 +50,9 @@ class CameraPermissionCardTest {
             }
         }
 
-        composeRule.onNodeWithText("手入力はそのまま利用できます。", substring = true)
+        composeRule.onNodeWithText(context.getString(R.string.camera_permission_permanent))
             .assertIsDisplayed()
-        composeRule.onNodeWithText("Androidの設定を開く").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.camera_permission_settings)).performClick()
         assertEquals(1, settingsOpened)
     }
 
@@ -68,7 +72,7 @@ class CameraPermissionCardTest {
             }
         }
 
-        composeRule.onNodeWithText("再試行").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.scan_retry)).performClick()
         assertEquals(1, restarts)
     }
 
@@ -87,7 +91,7 @@ class CameraPermissionCardTest {
             }
         }
 
-        composeRule.onNodeWithText("再試行").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.scan_retry)).performClick()
         assertEquals(1, restarts)
     }
 }

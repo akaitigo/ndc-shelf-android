@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.WorkVariantUiState
 import dev.ndcshelf.app.domain.model.BibliographicSource
@@ -23,6 +24,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class WorkVariantScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -60,8 +63,8 @@ class WorkVariantScreenTest {
         composeRule.onNodeWithText("作品（文庫版）").assertIsDisplayed()
         assertNull(linked)
         composeRule.onNodeWithText("作品（文庫版）").performClick()
-        composeRule.onNodeWithText("この2作品を関連付けますか？").assertIsDisplayed()
-        composeRule.onNodeWithText("差分を確認して関連付ける").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.work_variant_confirm_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.work_variant_confirm)).performClick()
 
         assertEquals("target" to false, linked)
     }

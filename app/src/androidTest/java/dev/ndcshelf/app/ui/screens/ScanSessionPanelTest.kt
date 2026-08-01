@@ -5,11 +5,13 @@ import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResult
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils
 import com.google.android.apps.common.testing.accessibility.framework.checks.ImageContrastCheck
 import com.google.android.apps.common.testing.accessibility.framework.checks.TextContrastCheck
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.ScanSessionUiState
 import dev.ndcshelf.app.domain.model.ScanAttempt
 import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
@@ -22,6 +24,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class ScanSessionPanelTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -57,12 +61,14 @@ class ScanSessionPanelTest {
             }
         }
 
-        composeRule.onNodeWithText("試行 2件・追加 1冊").assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.scan_session_active_count, 2, 1))
+            .assertIsDisplayed()
         composeRule.onNodeWithText("9784101010014").assertIsDisplayed()
-        composeRule.onNodeWithText("取り消す").performClick()
-        composeRule.onNodeWithText("追加を取り消しますか？").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.scan_session_undo_one)).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.scan_session_undo_title)).assertIsDisplayed()
         assertEquals(null, undoneAttempt)
-        composeRule.onNodeWithText("確認して取り消す").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.scan_session_undo_confirm)).performClick()
         assertEquals("attempt-added", undoneAttempt)
     }
 
@@ -82,8 +88,8 @@ class ScanSessionPanelTest {
             }
         }
 
-        composeRule.onNodeWithText("取り消す").performClick()
-        composeRule.onNodeWithText("キャンセル").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.scan_session_undo_one)).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.import_cancel)).performClick()
 
         assertEquals(0, undoCount)
     }

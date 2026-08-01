@@ -114,7 +114,7 @@ internal fun BookDetailScreen(
         listOfNotNull(
             physicalLabel.takeIf { copies.any { it.mediaType == MediaType.PHYSICAL } },
             digitalLabel.takeIf { copies.any { it.mediaType == MediaType.DIGITAL } },
-        ).joinToString("・")
+        ).joinToString(stringResource(R.string.value_list_separator))
     BackHandler(enabled = showBackAction, onBack = onBack)
 
     var sessionEditorVisible by rememberSaveable { mutableStateOf(false) }

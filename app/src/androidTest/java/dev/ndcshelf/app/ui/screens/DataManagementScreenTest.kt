@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResult
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils
 import com.google.android.apps.common.testing.accessibility.framework.checks.ImageContrastCheck
@@ -21,6 +22,7 @@ import com.google.android.apps.common.testing.accessibility.framework.checks.Tex
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import dev.ndcshelf.app.DatabaseBackupUiState
 import dev.ndcshelf.app.LibraryImportUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import org.hamcrest.Matchers
 import org.junit.Before
@@ -28,6 +30,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class DataManagementScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -65,8 +69,8 @@ class DataManagementScreenTest {
         setContent(bookCount = 3)
 
         composeRule.onNodeWithTag(DATA_LIST_TAG)
-            .performScrollToNode(hasText("現在のデータを置き換える操作"))
-        composeRule.onNodeWithText("現在のデータを置き換える操作").assertIsDisplayed()
+            .performScrollToNode(hasText(context.getString(R.string.data_management_destructive_section)))
+        composeRule.onNodeWithText(context.getString(R.string.data_management_destructive_section)).assertIsDisplayed()
         composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(
             hasText(
                 "現在の全データをバックアップ内容で置き換えます。実行直前の状態はアプリ内へ自動退避します。",
@@ -83,7 +87,7 @@ class DataManagementScreenTest {
     fun exportInProgress_blocksOtherOperationsAndShowsProgress() {
         setContent(bookCount = 3, exportInProgress = true)
 
-        composeRule.onNodeWithText("蔵書ファイルを書き出しています").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.data_management_exporting)).assertIsDisplayed()
         composeRule.onNodeWithTag(EXPORT_JSON_TAG, useUnmergedTree = true).assertIsNotEnabled()
     }
 
@@ -93,7 +97,7 @@ class DataManagementScreenTest {
 
         composeRule.onNodeWithTag(DATA_LIST_TAG).performScrollToNode(hasTestTag(SYNC_STATUS_TAG))
         composeRule.onNodeWithTag(SYNC_STATUS_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("同期はオフです。蔵書は端末内だけで利用できます。").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.sync_status_off)).assertIsDisplayed()
     }
 
     private fun setContent(
