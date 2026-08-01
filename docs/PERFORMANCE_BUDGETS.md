@@ -95,20 +95,27 @@ Baseline Profileは `:baselineprofile` モジュールの `BaselineProfileGenera
 
 配布物はフレーバーごとに2つある（`docs/adr/0009-on-device-llm-librarian.md`）。
 
-| 配布物 | applicationId | 端末内LLM | 実測（2026-08-01、R8有効・未署名） | 予算 |
-| --- | --- | --- | ---: | ---: |
-| `standard`（`ndc-shelf-vX.Y.Z.apk`） | `dev.ndcshelf.app` | 含まない | 18,507,772 B | 21,000,000 B |
-| `ai`（`ndc-shelf-vX.Y.Z-ai.apk`） | `dev.ndcshelf.app.ai` | LiteRT-LM（arm64-v8aのみ） | 29,096,561 B | 30,000,000 B |
+**利用者が実際にダウンロードするのはAPKである。** ADR 0008でGitHub Releasesの署名付きAPK
+配布へ切り替えたため、端末ごとに分割されるAAB（ストア配布用の予備成果物）のサイズは
+配布サイズを表さない。実測でAPKはAABの約1.4〜1.6倍になるため、両方を独立に検査する。
 
-`:app:verifyStandardReleaseBundleSize` と `:app:verifyAiReleaseBundleSize` が各AABを予算と比較する
-（`:app:verifyReleaseBundleSize` は両方をまとめて実行する）。AABのビルドは毎PRのverifyには
-重いため必須ジョブへは入れず、`release.yml`（リリース時に必ず実行）と `benchmark.yml`
-（workflow_dispatch）で実行する。
+| 配布物 | applicationId | 端末内LLM | APK実測 | APK予算 | AAB実測 | AAB予算 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `standard`（`ndc-shelf-vX.Y.Z.apk`） | `dev.ndcshelf.app` | 含まない | 25,381,403 B | 27,000,000 B | 18,507,420 B | 21,000,000 B |
+| `ai`（`ndc-shelf-vX.Y.Z-ai.apk`） | `dev.ndcshelf.app.ai` | LiteRT-LM（arm64-v8aのみ） | 47,025,138 B | 50,000,000 B | 29,096,214 B | 30,000,000 B |
+
+実測は2026-08-01、R8有効・未署名。APKはABI splitを行わないuniversal APKで、
+すべてのABIのネイティブライブラリを含む（sideloadする利用者にABI選択をさせないため）。
+
+`:app:verify{Standard,Ai}ReleaseApkSize` がAPKを、`:app:verify{Standard,Ai}ReleaseBundleSize`
+がAABを予算と比較する（`:app:verifyReleaseBundleSize` は4つをまとめて実行する）。
+releaseビルドは毎PRのverifyには重いため必須ジョブへは入れず、`release.yml`
+（リリース時に必ず実行）と `benchmark.yml`（workflow_dispatch）で実行する。
 
 `standard` の主なサイズ要因はML Kitバーコードモデルと `libbarhopper_v3.so`（4 ABI）。
 `ai` の増分はLiteRT-LMの `liblitertlm_jni.so`（arm64-v8a、21,199,264 B）で、x86_64版は
 `packaging.jniLibs.excludes` で除外している。超過時はABI別配信・依存の見直しを先に検討し、
-正当な増加であればこの表と `releaseBundleBudgets` の定数の両方を更新する。
+正当な増加であればこの表と `releaseApkBudgets` / `releaseBundleBudgets` の定数を更新する。
 
 ### runtime選定時の実測（2026-08-01、参考）
 

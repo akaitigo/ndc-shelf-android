@@ -67,9 +67,11 @@ jobs:
           lintStandardDebug
           :app:assembleStandardRelease
           :app:bundleStandardRelease
+          :app:verifyStandardReleaseApkSize
           :app:verifyStandardReleaseBundleSize
           :app:assembleAiRelease
           :app:bundleAiRelease
+          :app:verifyAiReleaseApkSize
           :app:verifyAiReleaseBundleSize
           --stacktrace
 

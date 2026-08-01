@@ -332,11 +332,69 @@ val verifyReleaseBundleSizeTasks =
         }
     }
 
+/**
+ * 配布するAPKのサイズ予算。
+ *
+ * ADR 0008でGitHub Releasesの署名付きAPK配布へ切り替えたため、**利用者が実際に
+ * ダウンロードするのはAABではなくuniversal APK**である。AABはストア配布時に
+ * 端末ごとへ分割される前提の成果物なので、AAB予算だけでは配布サイズを守れない
+ * （実測でAPKはAABより約1.4〜1.6倍大きい）。両方を独立に検査する。
+ *
+ * 直近の実測（2026-08-01、R8有効・未署名）:
+ * - standard: 25,381,403バイト → 約6%の余裕を持たせて27,000,000バイト
+ * - ai: 47,025,138バイト → 約6%の余裕を持たせて50,000,000バイト
+ *
+ * 予算の引き上げにはmaintainerの承認とdocs/PERFORMANCE_BUDGETS.mdの更新を伴うこと。
+ */
+val releaseApkBudgets =
+    listOf(
+        Triple("Standard", "standard/release", 27_000_000L),
+        Triple("Ai", "ai/release", 50_000_000L),
+    )
+
+val verifyReleaseApkSizeTasks =
+    releaseApkBudgets.map { (flavor, path, budgetBytes) ->
+        tasks.register("verify${flavor}ReleaseApkSize") {
+            group = "verification"
+            description =
+                "Verifies the $flavor release APK that users download stays within the size budget."
+            dependsOn("assemble${flavor}Release")
+
+            val directory = layout.buildDirectory.dir("outputs/apk/$path")
+            inputs.dir(directory)
+            inputs.property("budgetBytes", budgetBytes)
+            doLast {
+                // 署名の有無でファイル名が変わる（app-<flavor>-release.apk /
+                // app-<flavor>-release-unsigned.apk）ため、実体を探して判定する。
+                val apks =
+                    directory
+                        .get()
+                        .asFile
+                        .listFiles { file -> file.extension == "apk" }
+                        .orEmpty()
+                check(apks.size == 1) {
+                    "Expected exactly one $flavor release APK, found ${apks.size}: " +
+                        apks.joinToString { file -> file.name }
+                }
+                val apk = apks.single()
+                val actualBytes = apk.length()
+                check(actualBytes in 1 until budgetBytes) {
+                    "$flavor release APK (${apk.name}) is $actualBytes bytes, over the " +
+                        "$budgetBytes byte budget. This is the file users download from GitHub " +
+                        "Releases. Investigate the size regression or update " +
+                        "docs/PERFORMANCE_BUDGETS.md with a justified new budget."
+                }
+                println("$flavor release APK size: $actualBytes bytes (budget: $budgetBytes bytes)")
+            }
+        }
+    }
+
 /** 両フレーバーのサイズ予算をまとめて判定する入口。 */
 val verifyReleaseBundleSize by tasks.registering {
     group = "verification"
-    description = "Verifies every flavor's release AAB size budget."
+    description = "Verifies every flavor's release APK and AAB size budget."
     dependsOn(verifyReleaseBundleSizeTasks)
+    dependsOn(verifyReleaseApkSizeTasks)
 }
 
 val verifyBackupPolicy by tasks.registering {
