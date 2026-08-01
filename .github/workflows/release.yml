@@ -59,7 +59,7 @@ jobs:
           NDC_SHELF_UPLOAD_KEY_PASSWORD: ${{ secrets.NDC_SHELF_UPLOAD_KEY_PASSWORD }}
         run: >-
           ./gradlew
-          verifyV04ReleaseConfiguration
+          verifyV05ReleaseConfiguration
           verifyBackupPolicy
           verifyLicenseReport
           :app:cyclonedxDirectBom

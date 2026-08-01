@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-01
+
 ### Added
 
 - JSON／CSVによる蔵書のexport、検証付きimport、競合preview。
@@ -88,5 +90,6 @@
 
 - ISBN scan、NDL Search書誌取得、端末内Room本棚、検索、NDC分類表示の初回公開版。
 
-[Unreleased]: https://github.com/akaitigo/ndc-shelf-android/compare/d852975025bf5d224e29f5b9fc475cf8c0bff957...HEAD
+[Unreleased]: https://github.com/akaitigo/ndc-shelf-android/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/akaitigo/ndc-shelf-android/compare/d852975025bf5d224e29f5b9fc475cf8c0bff957...v0.5.0
 [0.1.2]: https://github.com/akaitigo/ndc-shelf-android/commit/d852975025bf5d224e29f5b9fc475cf8c0bff957
