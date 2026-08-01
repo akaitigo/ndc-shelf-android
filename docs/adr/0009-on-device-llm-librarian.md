@@ -123,16 +123,20 @@ runtimeを採用する版では、次のいずれかを別途決める必要が�
 
 ### 1. 配布物の分割（Option A/B/Cの「予算を上げる」に代えて採用）
 
-| フレーバー | applicationId | 端末内LLM | AAB予算 | 実測（2026-08-01） |
-| --- | --- | --- | ---: | ---: |
-| `standard` | `dev.ndcshelf.app` | 含まない | 21,000,000 B（据え置き） | 18,507,772 B |
-| `ai` | `dev.ndcshelf.app.ai` | LiteRT-LM（arm64-v8aのみ） | 30,000,000 B | 29,096,561 B |
+配布物はGitHub Releasesの署名付きAPK（ADR 0008）であり、**利用者が実際に
+ダウンロードするのはAPK**である。AABはストア配布へ切り替える場合の予備成果物として
+残すが、端末ごとに分割される前提のサイズなので配布サイズの正本にはしない。
+
+| フレーバー | applicationId | 端末内LLM | APK予算 | APK実測 | AAB予算 | AAB実測 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `standard` | `dev.ndcshelf.app` | 含まない | 27,000,000 B | 25,381,403 B | 21,000,000 B（据え置き） | 18,507,420 B |
+| `ai` | `dev.ndcshelf.app.ai` | LiteRT-LM（arm64-v8aのみ） | 34,000,000 B | 31,475,717 B | 24,000,000 B | 22,296,712 B |
 
 - 既存利用者のダウンロード量は増えない。端末内LLMを使いたい利用者だけが大きい方を選ぶ。
 - **applicationIdが異なるため、2つは別アプリとして扱われる。** 同時インストールでき、相互に上書き更新されない代わりに、**データは共有しない**。乗り換えにはエクスポート→インポートが必要で、この制約はREADMEとリリースノートへ明記する。
 - 署名鍵は同一。`release.yml`は両方の署名を検証し、証明書のSHA-256が一致することも確認する。
-- LiteRT-LM 0.15.0はarm64-v8aとx86_64のnative libraryを持つが、x86_64はエミュレータ専用で実機の対象にならないため`packaging.jniLibs.excludes`で除外する（除外しない場合のAAB実測は39,126,540 B）。
-- CIの通常ジョブは`standard`だけを対象にして実行時間を増やさない（`verifyRoborazziStandardDebug` / `lintStandardDebug` / `assembleStandardDebug` / `connectedStandardDebugAndroidTest`）。`ai`のビルドはreleaseとサイズ検証だけで行う。
+- **`ai`フレーバーは`abiFilters`でarm64-v8aへ限定する。** LiteRT-LM 0.15.0のnative libraryはarm64-v8aとx86_64しか無く、x86_64はエミュレータ専用で実機の対象にならない。加えて、AI版は「Android 7.0以上・64bit Arm」を対象として配布するため、armeabi-v7a・x86のライブラリを積んでも端末内LLMは動かない。限定によりAPKは47,025,138 Bから31,475,717 Bへ**33%減った**。他ABIの端末は`standard`を使う（アプリ本体の機能に差は無い）。
+- CIの通常ジョブは`standard`を主対象にして実行時間を増やさない（`verifyRoborazziStandardDebug` / `lintStandardDebug` / `assembleStandardDebug` / `connectedStandardDebugAndroidTest`）。ただし`ai`専用のソースセットが未検査のままmainへ入らないよう、`assembleAiDebug`と`lintAiDebug`は毎PRで実行する。releaseビルドとサイズ検証は`release.yml`で行う。
 
 ### 2. 対応端末
 

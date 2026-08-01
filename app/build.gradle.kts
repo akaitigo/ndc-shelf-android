@@ -58,6 +58,11 @@ android {
             dimension = "inference"
             applicationIdSuffix = ".ai"
             versionNameSuffix = "-ai"
+            // LiteRT-LMのネイティブライブラリはarm64-v8aしか無く、AI版は
+            // 「Android 7.0以上・64bit Arm」を対象として配布する。他ABIの
+            // ネイティブライブラリを積んでも端末内LLMは動かないため、除外して
+            // ダウンロードサイズを下げる。他ABIの端末はstandardを使う。
+            ndk { abiFilters += "arm64-v8a" }
         }
     }
 
@@ -110,10 +115,9 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // LiteRT-LMのnative libraryはarm64-v8aだけを同梱する。x86_64はエミュレータ専用で、
-        // 配布サイズが約10MB増える一方で実機の対象にならない。非対応ABIでは
-        // LlmCapabilityCheckerが取得も起動も抑止する（fail-closed）。
-        jniLibs.excludes += "**/x86_64/liblitertlm_jni.so"
+        // LiteRT-LMのnative libraryの絞り込みはaiフレーバーの`abiFilters`が行う。
+        // ここでx86_64を個別に除外する設定は不要になったため置かない
+        // （効かない設定を残すと、検査しているつもりの空振りを生む）。
     }
 }
 
@@ -298,15 +302,15 @@ tasks.cyclonedxDirectBom {
  *
  * - standard: 端末内LLMを同梱しない。実測17,590,996バイト（2026-07-29）+20%を上限とする。
  *   直近の実測は18,450,318バイト（2026-08-01、R8有効・未署名）。
- * - ai: LiteRT-LMのarm64-v8a native libraryを含む。実測28,953,242バイト（2026-08-01）に
- *   約3%の余裕を持たせた30,000,000バイトを上限とする。
+ * - ai: LiteRT-LMのarm64-v8a native libraryを含み、ABIをarm64-v8aへ限定する。
+ *   実測22,296,712バイト（2026-08-01）に約7%の余裕を持たせた24,000,000バイトを上限とする。
  *
  * 予算の引き上げにはmaintainerの承認と上記docの更新を伴うこと。
  */
 val releaseBundleBudgets =
     listOf(
         Triple("Standard", "standardRelease/app-standard-release.aab", 21_000_000L),
-        Triple("Ai", "aiRelease/app-ai-release.aab", 30_000_000L),
+        Triple("Ai", "aiRelease/app-ai-release.aab", 24_000_000L),
     )
 
 val verifyReleaseBundleSizeTasks =
@@ -341,15 +345,15 @@ val verifyReleaseBundleSizeTasks =
  * （実測でAPKはAABより約1.4〜1.6倍大きい）。両方を独立に検査する。
  *
  * 直近の実測（2026-08-01、R8有効・未署名）:
- * - standard: 25,381,403バイト → 約6%の余裕を持たせて27,000,000バイト
- * - ai: 47,025,138バイト → 約6%の余裕を持たせて50,000,000バイト
+ * - standard: 25,381,403バイト（4 ABI） → 約6%の余裕を持たせて27,000,000バイト
+ * - ai: 31,475,717バイト（arm64-v8aのみ） → 約8%の余裕を持たせて34,000,000バイト
  *
  * 予算の引き上げにはmaintainerの承認とdocs/PERFORMANCE_BUDGETS.mdの更新を伴うこと。
  */
 val releaseApkBudgets =
     listOf(
         Triple("Standard", "standard/release", 27_000_000L),
-        Triple("Ai", "ai/release", 50_000_000L),
+        Triple("Ai", "ai/release", 34_000_000L),
     )
 
 val verifyReleaseApkSizeTasks =

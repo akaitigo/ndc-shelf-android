@@ -48,7 +48,7 @@ Releasesには2種類のAPKがあります。
 | ファイル | 端末内LLM | ダウンロードサイズ | 対象 |
 | --- | --- | ---: | --- |
 | `ndc-shelf-vX.Y.Z.apk`（通常版） | 含まない | 約25 MB | すべての利用者（Android 6.0以上） |
-| `ndc-shelf-vX.Y.Z-ai.apk`（AI版） | 含む | 約47 MB | AI司書に自然文で提案してほしい利用者（Android 7.0以上・64bit Arm） |
+| `ndc-shelf-vX.Y.Z-ai.apk`（AI版） | 含む | 約31 MB | AI司書に自然文で提案してほしい利用者（Android 7.0以上・64bit Arm） |
 
 **2つは別アプリとして扱われます（アプリIDが `dev.ndcshelf.app` と `dev.ndcshelf.app.ai` で異なります）。**
 同時にインストールでき、片方をもう片方へ上書き更新することはできません。
