@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +59,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,6 +82,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
@@ -106,6 +110,8 @@ import dev.ndcshelf.app.domain.model.TagNameRules
 import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.search.SearchInterpretationChip
+import dev.ndcshelf.app.ui.adaptive.AdaptiveLayout
+import dev.ndcshelf.app.ui.adaptive.EmptyDetailPane
 import dev.ndcshelf.app.ui.components.BookCover
 import java.text.DateFormat
 import java.util.Date
@@ -162,6 +168,9 @@ fun LibraryScreen(
     onApplySavedSearch: (SavedSearch) -> Unit = {},
     onOpenTagManager: () -> Unit = {},
     onOpenAiLibrarian: () -> Unit = {},
+    /** expanded幅で一覧と詳細を左右に並べる。判定は`NdcShelfApp`が行う。 */
+    twoPane: Boolean = false,
+    listPaneWidth: Dp = AdaptiveLayout.LIST_PANE_WIDTH,
     contentPadding: PaddingValues,
 ) {
     var localQuery by rememberSaveable { mutableStateOf("") }
@@ -171,6 +180,10 @@ fun LibraryScreen(
     var bulkSelectedCopyIds by rememberSaveable { mutableStateOf(listOf<String>()) }
     var showBulkTagDialog by rememberSaveable { mutableStateOf(false) }
     var showSaveSearchDialog by rememberSaveable { mutableStateOf(false) }
+    var showHelp by rememberSaveable { mutableStateOf(false) }
+    // 一覧のスクロール位置は1ペイン⇔2ペインの切り替えでもリセットしないよう、
+    // ペインのlambdaではなく画面本体で保持する（rememberLazyListStateはrememberSaveable）。
+    val bookListState = rememberLazyListState()
     val query = searchCriteria?.query ?: localQuery
     val visibleBooks =
         remember(books, query, searchCriteria) {
@@ -232,46 +245,63 @@ fun LibraryScreen(
     }
 
     val isDetailLoading = !searchIsCurrent && searchCriteria?.selectedEditionId != null
-    if (isDetailLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().testTag(LIBRARY_SEARCH_PROGRESS_TAG),
-            )
+    val showDetail = searchIsCurrent && selectedCopies.isNotEmpty()
+
+    val detailPane: @Composable (Modifier) -> Unit = { paneModifier ->
+        when {
+            isDetailLoading -> {
+                Box(
+                    modifier = paneModifier,
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().testTag(LIBRARY_SEARCH_PROGRESS_TAG),
+                    )
+                }
+            }
+
+            showDetail -> {
+                Box(modifier = paneModifier) {
+                    BookDetailScreen(
+                        copies = selectedCopies,
+                        onBack = {
+                            selectedEditionId = null
+                            onSelectedEditionChange(null)
+                        },
+                        onEditCopy = ::openEditor,
+                        onEditBibliography = { openEditor(selectedCopies.first().copyId) },
+                        onReconcile = { openEditor(selectedCopies.first().copyId) },
+                        onManageSeries = onManageSeries,
+                        onManageVariants = onManageVariants,
+                        readingSessions = readingSessions,
+                        readingSessionState = readingSessionState,
+                        onAddReadingSession = onAddReadingSession,
+                        onUpdateReadingSession = onUpdateReadingSession,
+                        onDeleteReadingSession = onDeleteReadingSession,
+                        onClearReadingSessionState = onClearReadingSessionState,
+                        tags = tags,
+                        tagIdsByWork = tagIdsByWork,
+                        onSetTagOnWorks = onSetTagOnWorks,
+                        showBackAction = !twoPane,
+                        contentPadding = contentPadding,
+                    )
+                }
+            }
+
+            else -> {
+                EmptyDetailPane(
+                    message = stringResource(R.string.library_detail_pane_empty),
+                    modifier = paneModifier,
+                    contentPadding = contentPadding,
+                )
+            }
         }
-    } else if (searchIsCurrent && selectedCopies.isNotEmpty()) {
-        BookDetailScreen(
-            copies = selectedCopies,
-            onBack = {
-                selectedEditionId = null
-                onSelectedEditionChange(null)
-            },
-            onEditCopy = ::openEditor,
-            onEditBibliography = { openEditor(selectedCopies.first().copyId) },
-            onReconcile = { openEditor(selectedCopies.first().copyId) },
-            onManageSeries = onManageSeries,
-            onManageVariants = onManageVariants,
-            readingSessions = readingSessions,
-            readingSessionState = readingSessionState,
-            onAddReadingSession = onAddReadingSession,
-            onUpdateReadingSession = onUpdateReadingSession,
-            onDeleteReadingSession = onDeleteReadingSession,
-            onClearReadingSessionState = onClearReadingSessionState,
-            tags = tags,
-            tagIdsByWork = tagIdsByWork,
-            onSetTagOnWorks = onSetTagOnWorks,
-            contentPadding = contentPadding,
-        )
-    } else {
+    }
+
+    val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
         Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(top = contentPadding.calculateTopPadding()),
+            modifier = paneModifier.padding(top = contentPadding.calculateTopPadding()),
         ) {
-            var showHelp by rememberSaveable { mutableStateOf(false) }
             if (showHelp) {
                 LibraryHelpDialog(onDismiss = { showHelp = false })
             }
@@ -414,7 +444,8 @@ fun LibraryScreen(
                 )
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag(LIBRARY_LIST_TEST_TAG),
+                    state = bookListState,
                     contentPadding =
                         PaddingValues(
                             start = 16.dp,
@@ -433,6 +464,7 @@ fun LibraryScreen(
                             editionCopyCount = editionCounts[book.editionId] ?: 1,
                             selected = book.copyId in bulkSelectedCopyIds,
                             bulkSelectionActive = bulkSelectedCopyIds.isNotEmpty(),
+                            openInDetailPane = twoPane && book.editionId == selectedEditionId,
                             onClick = {
                                 if (bulkSelectedCopyIds.isNotEmpty()) {
                                     bulkSelectedCopyIds =
@@ -458,6 +490,34 @@ fun LibraryScreen(
                     }
                 }
             }
+        }
+    }
+
+    // 読み上げ順・Tabフォーカス順は一覧ペイン→詳細ペインを維持する。
+    // 各ペインの呼び出し箇所を1つに保つことで、1ペイン⇔2ペインの切り替えでも
+    // ペイン内部のrememberSaveable（スクロール位置など）を失わない。
+    val detailVisible = isDetailLoading || showDetail
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (twoPane || !detailVisible) {
+            listPane(
+                if (twoPane) {
+                    Modifier.width(listPaneWidth).fillMaxHeight()
+                } else {
+                    Modifier.fillMaxSize()
+                },
+            )
+        }
+        if (twoPane) {
+            VerticalDivider()
+        }
+        if (twoPane || detailVisible) {
+            detailPane(
+                if (twoPane) {
+                    Modifier.weight(1f).fillMaxHeight()
+                } else {
+                    Modifier.fillMaxSize()
+                },
+            )
         }
     }
 
@@ -695,6 +755,9 @@ private fun BulkTagDialog(
 
 internal const val LIBRARY_SEARCH_PROGRESS_TAG = "library-search-progress"
 
+/** 本棚一覧ペインのLazyColumn。スクロール位置の回帰テストで使う。 */
+internal const val LIBRARY_LIST_TEST_TAG = "library-list"
+
 internal fun interpretationChipTag(chipId: String): String = "nl-search-chip-$chipId"
 
 @Composable
@@ -826,18 +889,21 @@ private fun BookCard(
     onClick: () -> Unit,
     selected: Boolean = false,
     bulkSelectionActive: Boolean = false,
+    /** 2ペイン表示で、この本が右の詳細ペインに表示されている。 */
+    openInDetailPane: Boolean = false,
     onLongClick: () -> Unit = {},
 ) {
     val selectedLabel = stringResource(R.string.book_card_selected)
     val unselectedLabel = stringResource(R.string.book_card_unselected)
+    val openInDetailLabel = stringResource(R.string.book_card_open_in_detail)
     Card(
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    if (selected) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerLow
+                    when {
+                        selected -> MaterialTheme.colorScheme.secondaryContainer
+                        openInDetailPane -> MaterialTheme.colorScheme.surfaceContainerHighest
+                        else -> MaterialTheme.colorScheme.surfaceContainerLow
                     },
             ),
         shape = RoundedCornerShape(18.dp),
@@ -858,6 +924,10 @@ private fun BookCard(
                         if (bulkSelectionActive) {
                             this.selected = selected
                             stateDescription = if (selected) selectedLabel else unselectedLabel
+                        } else if (openInDetailPane) {
+                            // 2ペインでは色だけでなく状態としても「詳細表示中」を伝える。
+                            this.selected = true
+                            stateDescription = openInDetailLabel
                         }
                     }.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,

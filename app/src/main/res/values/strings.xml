@@ -400,6 +400,8 @@
     <string name="navigation_data">データ</string>
     <string name="navigation_info">情報</string>
     <string name="series_title">シリーズ</string>
+    <string name="series_catalog_selected">詳細表示中</string>
+    <string name="series_detail_pane_empty">左の一覧からシリーズを選ぶと、ここに巻の一覧が表示されます。</string>
     <string name="series_description">確認済みのシリーズ情報から、所有・読了・購入予定をまとめて確認できます。</string>
     <string name="series_empty_title">シリーズはまだありません</string>
     <string name="series_empty_description">シリーズ情報を登録すると、巻ごとの状態と欠巻候補をここで確認できます。</string>
@@ -700,6 +702,7 @@
 
     <string name="library_help_button">本棚のヘルプ</string>
     <string name="library_title">My Library</string>
+    <string name="library_detail_pane_empty">左の一覧から本を選ぶと、ここに詳細が表示されます。</string>
     <string name="library_subtitle">%1$d冊の本を、ちゃんと見つけられる場所。</string>
     <string name="library_search_placeholder">タイトル・著者・ISBN・NDC・棚で検索</string>
     <string name="library_search_clear">検索をクリア</string>
@@ -711,6 +714,7 @@
     <string name="book_card_bulk_select_label">一括選択を切り替える</string>
     <string name="book_card_selected">選択済み</string>
     <string name="book_card_unselected">未選択</string>
+    <string name="book_card_open_in_detail">詳細表示中</string>
     <string name="location_move_up_target">「%1$s」を上へ</string>
     <string name="location_move_down_target">「%1$s」を下へ</string>
     <string name="location_rename_target">「%1$s」の名前を変更</string>
