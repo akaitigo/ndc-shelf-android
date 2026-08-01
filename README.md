@@ -41,30 +41,9 @@
 
 **NDC Shelfは無料のオープンソースアプリです。アプリストアでは配布せず、GitHub Releasesで署名付きAPKを提供します。**
 
-### どちらのAPKを選ぶか
+`ndc-shelf-vX.Y.Z.apk`（約25 MB）をダウンロードしてインストールします。
 
-Releasesには2種類のAPKがあります。
-
-| ファイル | 端末内LLM | ダウンロードサイズ | 対象 |
-| --- | --- | ---: | --- |
-| `ndc-shelf-vX.Y.Z.apk`（通常版） | 含まない | 約25 MB | すべての利用者（Android 6.0以上） |
-| `ndc-shelf-vX.Y.Z-ai.apk`（AI版） | 含む | 約31 MB | AI司書に自然文で提案してほしい利用者（Android 7.0以上・64bit Arm） |
-
-**2つは別アプリとして扱われます（アプリIDが `dev.ndcshelf.app` と `dev.ndcshelf.app.ai` で異なります）。**
-同時にインストールでき、片方をもう片方へ上書き更新することはできません。
-**データは共有しないため、乗り換えるときは元のアプリでエクスポートし、新しいアプリでインポートしてください。**
-署名鍵は両方とも同じです。
-
-AI版は64bit Arm（arm64-v8a）専用です。ここ数年の端末はほぼ該当しますが、それ以外の端末では
-インストール時に「アプリはお使いの端末に対応していません」と表示されます。その場合は通常版を
-使ってください。**AI司書以外の機能に違いはありません。**
-
-AI版でも、言語モデル本体はAPKに含まれていません。アプリ内の「端末内モデルの管理」から、
-同意したうえで明示的に取得します（約475 MBのダウンロードと約1 GBの空き容量が必要）。
-モデルを取得しない限り、AI版も通常版と同じ規則ベースの提案で動作します。
-推論は完全にオフラインで、蔵書・質問文・回答は端末外へ送信しません。
-
-1. [Releases](https://github.com/akaitigo/ndc-shelf-android/releases)から最新の `ndc-shelf-vX.Y.Z.apk`（AI司書に自然文で提案してほしい場合は `ndc-shelf-vX.Y.Z-ai.apk`）をダウンロードする
+1. [Releases](https://github.com/akaitigo/ndc-shelf-android/releases)から最新の `ndc-shelf-vX.Y.Z.apk` をダウンロードする
 2. Androidの設定で、ブラウザまたはファイルアプリに「不明なアプリのインストール」を許可する
 3. ダウンロードしたAPKを開いてインストールする
 
@@ -219,7 +198,8 @@ SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLと�
 - [x] オプトインのシリーズ新刊候補確認
 - [ ] シリーズ統合
 - [ ] バックアップ同期（任意・オプトイン）
-- [ ] AI司書（任意・オプトイン。通常版は規則ベースの提案。AI版は端末内LLMで自然文の提案。詳細は[ADR 0009](docs/adr/0009-on-device-llm-librarian.md)）
+- [x] AI司書（任意・オプトイン。端末内の規則ベースで提案し、外部送信なし）
+- [ ] 端末内LLMによる自然文の提案（実装済みだが実機検証で実用に足りず未配布。[実測](docs/ON_DEVICE_LLM_FINDINGS.md) / [ADR 0009](docs/adr/0009-on-device-llm-librarian.md)）
 
 詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。将来の任意同期は、実装前に固定した[公開protocol](docs/SYNC_PROTOCOL.md)と[脅威モデル](docs/SYNC_THREAT_MODEL.md)に従います。
 

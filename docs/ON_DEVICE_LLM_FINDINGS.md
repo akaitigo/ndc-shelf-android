@@ -1,7 +1,7 @@
 # 端末内LLMの実機実測（2026-08-01）
 
 Pixel 7 実機で `#125` の端末内LLMを検証した記録。**推測ではなく実測値**だけを載せる。
-再現手段は `app/src/androidTest/java/dev/ndcshelf/app/data/llm/` の計測テスト群。
+再現手段は `app/src/androidTestAi/java/dev/ndcshelf/app/data/llm/` の計測テスト群。
 
 ## 測定環境
 
@@ -109,7 +109,8 @@ peak RSS **2,357,020 KB（2.3 GB）**。context設定では変わらない。
 
 ## 計測ハーネス
 
-`app/src/androidTest/java/dev/ndcshelf/app/data/llm/` に置く。
+`app/src/androidTestAi/java/dev/ndcshelf/app/data/llm/` に置く（LiteRT-LMへ直接依存するため
+aiフレーバー専用のソースセット。standardのテストビルドには含まれない）。
 モデル未取得・非対応ABI・runtime非同梱の端末では `assumeTrue` でskipするため、
 CIのエミュレータでは常にskipされる。
 
