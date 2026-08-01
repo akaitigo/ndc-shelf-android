@@ -4,10 +4,12 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-01
+
 ### Added
 
 - 端末内で完結する言語モデルによるAI司書。推論は端末内だけで行い、蔵書・検索文・生成結果を外部へ送信しない。
-- 配布物を通常版とAI版の2種類に分けた。通常版のダウンロードサイズと対応端末はこれまでどおり。AI版はAndroid 7.0以上の64bit Arm端末が対象。
+- 配布物を通常版（約25 MB）とAI版（約31 MB）の2種類に分けた。通常版の対応端末はこれまでどおりAndroid 6.0以上。AI版はAndroid 7.0以上の64bit Arm端末が対象で、それ以外の端末ではインストールできない。2つは別アプリとして扱われ、データを共有しない。
 - 「端末内モデルの管理」画面。モデルの取得、進捗表示、中止、SHA-256による整合性確認、削除、非対応端末での理由表示。
 - 同意目的「AIモデルの取得」。モデル配布元への通信だけを対象とし、端末内推論を行うAI司書の同意とは分けている。送信先・送信項目・保存期間・第三者提供を同意画面で確認できる。
 
@@ -101,6 +103,7 @@
 
 - ISBN scan、NDL Search書誌取得、端末内Room本棚、検索、NDC分類表示の初回公開版。
 
-[Unreleased]: https://github.com/akaitigo/ndc-shelf-android/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/akaitigo/ndc-shelf-android/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/akaitigo/ndc-shelf-android/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/akaitigo/ndc-shelf-android/compare/d852975025bf5d224e29f5b9fc475cf8c0bff957...v0.5.0
 [0.1.2]: https://github.com/akaitigo/ndc-shelf-android/commit/d852975025bf5d224e29f5b9fc475cf8c0bff957
