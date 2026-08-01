@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.text.UiMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -59,8 +61,8 @@ class BookEditValidatorTest {
             ),
         ) as BookEditValidationResult.Invalid
 
-        assertTrue(result.errors.any { it.field == BookEditField.TITLE && it.reason.contains("2000") })
-        assertTrue(result.errors.any { it.field == BookEditField.PRIMARY_AUTHOR && it.reason.contains("NUL") })
+        assertTrue(result.errors.any { it.field == BookEditField.TITLE && it.reason == UiMessage(R.string.validation_max_length, 2000) })
+        assertTrue(result.errors.any { it.field == BookEditField.PRIMARY_AUTHOR && it.reason.resId == R.string.validation_no_nul })
     }
 
     @Test

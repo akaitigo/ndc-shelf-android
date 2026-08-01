@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -73,6 +74,8 @@ import dev.ndcshelf.app.domain.model.ReadingSessionValidator
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.ui.components.BookCover
+import dev.ndcshelf.app.ui.text.labelRes
+import dev.ndcshelf.app.ui.text.resolve
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import java.text.DateFormat
 import java.util.Date
@@ -282,7 +285,15 @@ internal fun BookDetailScreen(
                 DetailValue(
                     stringResource(R.string.book_detail_ndc),
                     edition.ndcCode?.let { code ->
-                        "$code${edition.ndcCategory?.label?.let { " · $it" }.orEmpty()}"
+                        edition.ndcCategory
+                            ?.let {
+                                stringResource(
+                                    R.string.library_ndc_chip_with_category,
+                                    code,
+                                    stringResource(it.labelRes),
+                                )
+                            }
+                            ?: stringResource(R.string.library_ndc_chip, code)
                     } ?: stringResource(R.string.book_detail_unclassified),
                 )
                 DetailValue(
@@ -298,7 +309,7 @@ internal fun BookDetailScreen(
 
         item {
             SectionHeading(
-                stringResource(R.string.book_detail_copies_section, copies.size),
+                pluralStringResource(R.plurals.book_detail_copies_section, copies.size, copies.size),
             )
         }
         items(
@@ -436,7 +447,7 @@ private fun CopyDetailCard(
             R.string.book_detail_copy_description,
             copy.copyLabel,
             copy.location,
-            copy.readingStatus.label,
+            stringResource(copy.readingStatus.labelRes),
             copy.mediaType.label(),
         )
     Card(
@@ -469,8 +480,8 @@ private fun CopyDetailCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "${copy.readingStatus.label} · ${copy.mediaType.label()} · " +
-                        DateFormat.getDateInstance().format(Date(copy.addedAt)),
+                    stringResource(copy.readingStatus.labelRes) + " · " + copy.mediaType.label() + " · " +
+                        DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(copy.addedAt)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -502,9 +513,13 @@ private fun ReadingSessionCard(
         ) {
             val title =
                 if (showCopyLabel) {
-                    "${session.status.label}・${session.copyLabel}"
+                    stringResource(
+                        R.string.reading_history_entry_with_copy,
+                        stringResource(session.status.labelRes),
+                        session.copyLabel,
+                    )
                 } else {
-                    session.status.label
+                    stringResource(session.status.labelRes)
                 }
             Column(
                 modifier = Modifier.semantics(mergeDescendants = true) {},
@@ -648,7 +663,7 @@ private fun ReadingSessionEditorDialog(
                         FilterChip(
                             selected = status == candidate,
                             onClick = { status = candidate },
-                            label = { Text(candidate.label) },
+                            label = { Text(stringResource(candidate.labelRes)) },
                         )
                     }
                 }
@@ -704,7 +719,7 @@ private fun ReadingSessionEditorDialog(
                 )
                 errors.forEach { error ->
                     Text(
-                        error.message,
+                        error.message.resolve(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )

@@ -1,5 +1,8 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.text.UiMessage
+
 /**
  * 蔵書を横断整理するタグ。作品（BookWork）単位で付与する。
  *
@@ -31,19 +34,17 @@ data class TagAssignment(
 /**
  * 固定パレットの色ロール。色名に依存しないよう、UIでは必ずラベルのテキストを併記する。
  */
-enum class TagColorRole(
-    val label: String,
-) {
-    GRAY("グレー"),
-    RED("レッド"),
-    ORANGE("オレンジ"),
-    YELLOW("イエロー"),
-    GREEN("グリーン"),
-    TEAL("ティール"),
-    BLUE("ブルー"),
-    PURPLE("パープル"),
-    PINK("ピンク"),
-    BROWN("ブラウン"),
+enum class TagColorRole {
+    GRAY,
+    RED,
+    ORANGE,
+    YELLOW,
+    GREEN,
+    TEAL,
+    BLUE,
+    PURPLE,
+    PINK,
+    BROWN,
 }
 
 /** 保存済み検索（検索条件コレクション）。検索条件そのものを保存する。 */
@@ -61,7 +62,7 @@ sealed interface TagNameValidation {
     ) : TagNameValidation
 
     data class Invalid(
-        val reason: String,
+        val reason: UiMessage,
     ) : TagNameValidation
 }
 
@@ -79,15 +80,17 @@ object TagNameRules {
         val normalized = rawName.trim().replace(WHITESPACE_RUN, " ")
         return when {
             normalized.isEmpty() -> {
-                TagNameValidation.Invalid("名前を入力してください")
+                TagNameValidation.Invalid(UiMessage(R.string.validation_name_required))
             }
 
             normalized.length > MAX_NAME_LENGTH -> {
-                TagNameValidation.Invalid("名前は${MAX_NAME_LENGTH}文字以下にしてください")
+                TagNameValidation.Invalid(
+                    UiMessage(R.string.validation_name_max_length, MAX_NAME_LENGTH),
+                )
             }
 
             normalized.any { it.isISOControl() } -> {
-                TagNameValidation.Invalid("制御文字は使用できません")
+                TagNameValidation.Invalid(UiMessage(R.string.validation_no_control_chars))
             }
 
             else -> {

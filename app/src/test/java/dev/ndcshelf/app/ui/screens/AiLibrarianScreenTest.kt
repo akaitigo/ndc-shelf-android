@@ -74,7 +74,10 @@ class AiLibrarianScreenTest {
         composeRule
             .onNodeWithText(context.getString(R.string.ai_librarian_preview_title))
             .assertIsDisplayed()
-        composeRule.onNodeWithText("・匿名サンプル図書A").assertExists()
+        composeRule
+            .onNodeWithText(
+                context.getString(R.string.consent_bullet_item, "匿名サンプル図書A"),
+            ).assertExists()
         composeRule
             .onNodeWithText(
                 context.getString(
@@ -126,7 +129,7 @@ class AiLibrarianScreenTest {
             .onNodeWithText(context.getString(R.string.ai_librarian_answer_uncertainty))
             .assertIsDisplayed()
         composeRule
-            .onNodeWithText(context.getString(R.string.ai_librarian_answer_references, 1))
+            .onNodeWithText(context.resources.getQuantityString(R.plurals.ai_librarian_answer_references, 1, 1))
             .assertExists()
         composeRule
             .onNodeWithText(context.getString(R.string.ai_librarian_reason_unread_first))

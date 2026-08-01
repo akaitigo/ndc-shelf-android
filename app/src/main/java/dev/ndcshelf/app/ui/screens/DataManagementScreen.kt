@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.ui.screens
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,6 +56,8 @@ import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.importer.ImportConflictPolicy
 import dev.ndcshelf.app.domain.importer.ImportValidationError
 import dev.ndcshelf.app.domain.sync.SyncEngineStatus
+import dev.ndcshelf.app.domain.text.UiMessage
+import dev.ndcshelf.app.ui.text.resolve
 import java.text.DateFormat
 import java.util.Date
 
@@ -338,7 +341,11 @@ fun DataManagementScreen(
             ImportErrorDialog(
                 errors =
                     listOf(
-                        ImportValidationError(null, null, importFailureMessage(importState.failure)),
+                        ImportValidationError(
+                            null,
+                            null,
+                            UiMessage(importFailureMessageRes(importState.failure)),
+                        ),
                     ),
                 onDismiss = onDismissImport,
             )
@@ -619,7 +626,7 @@ private fun ImportErrorDialog(
                                     R.string.import_error_location,
                                     error.recordNumber,
                                     error.field,
-                                    error.reason,
+                                    error.reason.resolve(),
                                 )
                             }
 
@@ -627,12 +634,12 @@ private fun ImportErrorDialog(
                                 stringResource(
                                     R.string.import_error_root,
                                     error.field,
-                                    error.reason,
+                                    error.reason.resolve(),
                                 )
                             }
 
                             else -> {
-                                stringResource(R.string.import_error_general, error.reason)
+                                stringResource(R.string.import_error_general, error.reason.resolve())
                             }
                         }
                     Text(text, style = MaterialTheme.typography.bodyMedium)
@@ -694,12 +701,12 @@ private fun ImportPreviewDialog(
                     state.warnings.forEach { warning ->
                         Text(
                             if (warning.field == null) {
-                                warning.reason
+                                warning.reason.resolve()
                             } else {
                                 stringResource(
                                     R.string.import_error_root,
                                     warning.field,
-                                    warning.reason,
+                                    warning.reason.resolve(),
                                 )
                             },
                         )
@@ -751,13 +758,14 @@ private fun ImportPolicyOption(
 }
 
 @Composable
-private fun importFailureMessage(failure: ImportFailure): String =
+@StringRes
+private fun importFailureMessageRes(failure: ImportFailure): Int =
     when (failure) {
-        ImportFailure.JSON_READ -> stringResource(R.string.import_read_failure)
-        ImportFailure.CSV_READ -> stringResource(R.string.import_csv_read_failure)
-        ImportFailure.PREVIEW -> stringResource(R.string.import_preview_failure)
-        ImportFailure.APPLY -> stringResource(R.string.import_apply_failure)
-        ImportFailure.STALE_RESELECT -> stringResource(R.string.import_stale_reselect)
+        ImportFailure.JSON_READ -> R.string.import_read_failure
+        ImportFailure.CSV_READ -> R.string.import_csv_read_failure
+        ImportFailure.PREVIEW -> R.string.import_preview_failure
+        ImportFailure.APPLY -> R.string.import_apply_failure
+        ImportFailure.STALE_RESELECT -> R.string.import_stale_reselect
     }
 
 internal const val EXPORT_JSON_TAG = "data_export_json"

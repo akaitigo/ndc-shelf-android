@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.WorkVariantUiState
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
@@ -14,6 +15,7 @@ import dev.ndcshelf.app.domain.model.WorkVariant
 import dev.ndcshelf.app.domain.model.WorkVariantEditor
 import dev.ndcshelf.app.domain.model.WorkVariantSuggestion
 import dev.ndcshelf.app.domain.model.WorkVariantSuggestionConfidence
+import dev.ndcshelf.app.domain.text.UiMessage
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -41,7 +43,7 @@ class WorkVariantScreenTest {
                                 WorkVariantSuggestion(
                                     target,
                                     WorkVariantSuggestionConfidence.HIGH,
-                                    "タイトルと著者が一致",
+                                    UiMessage(R.string.work_variant_reason_title_author),
                                 ),
                             ),
                         ),

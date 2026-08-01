@@ -46,6 +46,9 @@ jobs:
           assembleDebugAndroidTest
           --stacktrace
 
+      - name: Verify translation keys match across locales
+        run: .github/scripts/verify-translations.sh
+
       - name: Verify exported Room schemas are committed
         run: git diff --exit-code -- app/schemas
 

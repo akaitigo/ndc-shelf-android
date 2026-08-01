@@ -51,7 +51,7 @@ object AiLibrarianRequestBuilder {
         val items =
             books.mapIndexed { index, book ->
                 val ref = (index + 1).toString()
-                val title = sanitize(book.title, AiLibrarianLimits.MAX_VALUE_LENGTH) ?: UNTITLED
+                val title = sanitize(book.title, AiLibrarianLimits.MAX_VALUE_LENGTH) ?: AiPayloadLabels.UNTITLED
                 references += AiLibrarianBookReference(ref = ref, copyId = book.copyId, title = title)
                 AiLibrarianItem(
                     ref = ref,
@@ -77,7 +77,7 @@ object AiLibrarianRequestBuilder {
                     location = book.valueIf(effectiveFields, AiLibrarianField.LOCATION) { location },
                     readingStatus =
                         book.valueIf(effectiveFields, AiLibrarianField.READING_STATUS) {
-                            readingStatus.label
+                            readingStatus.aiPayloadLabel()
                         },
                     note =
                         if (AiLibrarianField.NOTE in effectiveFields) {
@@ -134,7 +134,6 @@ object AiLibrarianRequestBuilder {
         return cleaned.ifEmpty { null }
     }
 
-    private const val UNTITLED = "（書名なし）"
 
     private val WHITESPACE_RUN = Regex("\\s+")
 }

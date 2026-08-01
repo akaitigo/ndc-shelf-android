@@ -1,6 +1,8 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExporter
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -36,30 +38,30 @@ class LibraryJsonImporter(
             try {
                 readLimited(input)
             } catch (_: SourceTooLargeException) {
-                return invalid("入力ファイルは${limits.maxSourceBytes}バイト以下にしてください")
+                return invalid(UiMessage(R.string.import_error_file_too_large, limits.maxSourceBytes))
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Exception) {
-                return invalid("JSONファイルを読み込めませんでした")
+                return invalid(UiMessage(R.string.import_error_json_unreadable))
             }
 
         val source =
             try {
                 decodeUtf8(bytes)
             } catch (_: Exception) {
-                return invalid("JSONファイルはUTF-8で保存してください")
+                return invalid(UiMessage(R.string.import_error_json_encoding))
             }
         currentCoroutineContext().ensureActive()
         if (!hasSafeNestingDepth(source)) {
-            return invalid("JSONのネストは${MAX_NESTING_DEPTH}段以下にしてください")
+            return invalid(UiMessage(R.string.import_error_json_nesting, MAX_NESTING_DEPTH))
         }
 
         val root =
             try {
                 Json.parseToJsonElement(source) as? JsonObject
-                    ?: return invalid("JSONのルートはオブジェクトにしてください")
+                    ?: return invalid(UiMessage(R.string.import_error_json_root_object))
             } catch (_: Exception) {
-                return invalid("JSONの構文が正しくありません")
+                return invalid(UiMessage(R.string.import_error_json_syntax))
             }
         currentCoroutineContext().ensureActive()
 
@@ -76,35 +78,45 @@ class LibraryJsonImporter(
                     field = "schemaVersion",
                     reason =
                         if (schemaVersion > LibraryExporter.SCHEMA_VERSION) {
-                            "このアプリでは新しいスキーマバージョン${schemaVersion}を読み込めません"
+                            UiMessage(R.string.import_error_schema_too_new, schemaVersion)
                         } else {
-                            "スキーマバージョン${schemaVersion}はサポートしていません"
+                            UiMessage(R.string.import_error_schema_unsupported, schemaVersion)
                         },
                 ),
             )
         }
         val exportedAt = root.requiredLong("exportedAt", null, errors)
         if (exportedAt != null && exportedAt < 0) {
-            errors.addCapped(rootError("exportedAt", "0以上のUnix epoch millisecondsを指定してください"))
+            errors.addCapped(rootError("exportedAt", UiMessage(R.string.import_error_exported_at)))
         }
         val declaredBookCount = root.requiredLong("bookCount", null, errors)
         if (declaredBookCount != null && declaredBookCount !in 0..limits.maxRecords.toLong()) {
-            errors.addCapped(rootError("bookCount", "0〜${limits.maxRecords}件の範囲で指定してください"))
+            errors.addCapped(rootError(
+                    "bookCount",
+                    UiMessage(R.string.import_error_book_count_range, limits.maxRecords),
+                ))
         }
         val schemaVersionInt = schemaVersion?.toInt() ?: 0
         val importTags = mutableListOf<UnvalidatedImportTag>()
         if (schemaVersionInt >= 4 && !unsupportedSchema) {
             val tagsElement = root["tags"] as? JsonArray
             if (tagsElement == null) {
-                errors.addCapped(rootError("tags", "配列として指定してください"))
+                errors.addCapped(rootError("tags", UiMessage(R.string.import_error_expect_array)))
             } else if (tagsElement.size > MAX_TAG_DEFINITIONS) {
-                errors.addCapped(rootError("tags", "タグは${MAX_TAG_DEFINITIONS}件以下にしてください"))
+                errors.addCapped(rootError(
+                    "tags",
+                    UiMessage(R.string.import_error_tag_limit, MAX_TAG_DEFINITIONS),
+                ))
             } else {
                 tagsElement.forEachIndexed { index, element ->
                     val tag = element as? JsonObject
                     if (tag == null) {
                         errors.addCapped(
-                            ImportValidationError(index + 1, "tags", "タグはオブジェクトにしてください"),
+                            ImportValidationError(
+                                index + 1,
+                                "tags",
+                                UiMessage(R.string.import_error_tag_object),
+                            ),
                         )
                         return@forEachIndexed
                     }
@@ -120,13 +132,16 @@ class LibraryJsonImporter(
         val books = root["books"] as? JsonArray
         val tooManyBooks = books != null && books.size > limits.maxRecords
         if (books == null) {
-            errors.addCapped(rootError("books", "配列として指定してください"))
+            errors.addCapped(rootError("books", UiMessage(R.string.import_error_expect_array)))
         } else {
             if (tooManyBooks) {
-                errors.addCapped(rootError("books", "蔵書件数は${limits.maxRecords}件以下にしてください"))
+                errors.addCapped(rootError(
+                    "books",
+                    UiMessage(R.string.import_error_too_many_records, limits.maxRecords),
+                ))
             }
             if (declaredBookCount != null && declaredBookCount != books.size.toLong()) {
-                errors.addCapped(rootError("bookCount", "booksの実際の件数と一致しません"))
+                errors.addCapped(rootError("bookCount", UiMessage(R.string.import_error_book_count_mismatch)))
             }
         }
         if (unsupportedSchema || schemaVersion == null || books == null || tooManyBooks) {
@@ -162,7 +177,11 @@ class LibraryJsonImporter(
     ): UnvalidatedLibraryBook? {
         val book = element as? JsonObject
         if (book == null) {
-            errors.addCapped(recordError(recordNumber, null, "蔵書レコードはオブジェクトにしてください"))
+            errors.addCapped(recordError(
+                    recordNumber,
+                    null,
+                    UiMessage(R.string.import_error_book_record_object),
+                ))
             return null
         }
         val before = errors.size
@@ -176,7 +195,7 @@ class LibraryJsonImporter(
             }
         requiredFields.forEach { field ->
             if (field !in book) {
-                errors.addCapped(recordError(recordNumber, field, "項目がありません"))
+                errors.addCapped(recordError(recordNumber, field, UiMessage(R.string.import_error_field_missing)))
             }
         }
 
@@ -248,18 +267,30 @@ class LibraryJsonImporter(
         val value = this[field] ?: return null
         val array = value as? JsonArray
         if (array == null) {
-            errors.addCapped(recordError(recordNumber, field, "文字列の配列として指定してください"))
+            errors.addCapped(recordError(
+                recordNumber,
+                field,
+                UiMessage(R.string.import_error_expect_string_array),
+            ))
             return null
         }
         if (array.size > MAX_TAG_DEFINITIONS) {
-            errors.addCapped(recordError(recordNumber, field, "タグは${MAX_TAG_DEFINITIONS}件以下にしてください"))
+            errors.addCapped(recordError(
+                recordNumber,
+                field,
+                UiMessage(R.string.import_error_tag_limit, MAX_TAG_DEFINITIONS),
+            ))
             return null
         }
         val values = mutableListOf<String>()
         array.forEach { element ->
             val primitive = element as? JsonPrimitive
             if (primitive == null || !primitive.isString) {
-                errors.addCapped(recordError(recordNumber, field, "文字列の配列として指定してください"))
+                errors.addCapped(recordError(
+                recordNumber,
+                field,
+                UiMessage(R.string.import_error_expect_string_array),
+            ))
                 return@forEach
             }
             values += primitive.content
@@ -331,7 +362,11 @@ class LibraryJsonImporter(
     ) {
         (value.keys - knownFields).forEach { field ->
             errors.addCapped(
-                ImportValidationError(recordNumber, field.safeForError(), "未知の項目です"),
+                ImportValidationError(
+                    recordNumber,
+                    field.safeForError(),
+                    UiMessage(R.string.import_error_unknown_field),
+                ),
             )
         }
     }
@@ -364,14 +399,22 @@ class LibraryJsonImporter(
     ): Long? {
         val value = this[field]
         if (value == null) {
-            errors.addCapped(ImportValidationError(recordNumber, field, "項目がありません"))
+            errors.addCapped(ImportValidationError(
+                recordNumber,
+                field,
+                UiMessage(R.string.import_error_field_missing),
+            ))
             return null
         }
         if (value is JsonNull && nullable) return null
         val primitive = value as? JsonPrimitive
         val result = primitive?.takeUnless(JsonPrimitive::isString)?.longOrNull
         if (result == null) {
-            errors.addCapped(ImportValidationError(recordNumber, field, "整数として指定してください"))
+            errors.addCapped(ImportValidationError(
+                recordNumber,
+                field,
+                UiMessage(R.string.import_error_expect_integer),
+            ))
         }
         return result
     }
@@ -386,7 +429,7 @@ class LibraryJsonImporter(
         if (value is JsonNull && nullable) return null
         val primitive = value as? JsonPrimitive
         if (primitive == null || !primitive.isString) {
-            errors.addCapped(recordError(recordNumber, field, "文字列として指定してください"))
+            errors.addCapped(recordError(recordNumber, field, UiMessage(R.string.import_error_expect_string)))
             return null
         }
         return primitive.content
@@ -398,20 +441,20 @@ class LibraryJsonImporter(
         if (size < MAX_ERRORS) add(error)
     }
 
-    private fun invalid(reason: String) =
+    private fun invalid(reason: UiMessage) =
         LibraryJsonParseResult.Invalid(
             listOf(ImportValidationError(null, null, reason)),
         )
 
     private fun rootError(
         field: String,
-        reason: String,
+        reason: UiMessage,
     ) = ImportValidationError(null, field, reason)
 
     private fun recordError(
         record: Int,
         field: String?,
-        reason: String,
+        reason: UiMessage,
     ) = ImportValidationError(record, field, reason)
 
     private class SourceTooLargeException : IllegalArgumentException()

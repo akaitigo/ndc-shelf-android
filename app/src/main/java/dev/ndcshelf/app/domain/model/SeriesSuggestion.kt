@@ -4,11 +4,11 @@ data class SeriesSuggestion(
     val workId: String,
     val sourceTitle: String,
     val proposedSeriesName: String,
-    val proposedVolumeLabel: String,
+    val proposedVolumeLabel: String?,
     val proposedType: SeriesMembershipType,
     val confidence: SeriesSuggestionConfidence,
     val rule: SeriesSuggestionRule,
-    val orderHint: Double? = proposedVolumeLabel.toSeriesOrderHint(),
+    val orderHint: Double? = proposedVolumeLabel?.toSeriesOrderHint(),
 ) {
     val requiresUserConfirmation: Boolean = true
 }
@@ -106,7 +106,7 @@ object SeriesSuggestionParser {
             workId = workId,
             sourceTitle = sourceTitle,
             proposedSeriesName = sourceTitle,
-            proposedVolumeLabel = "巻番号なし",
+            proposedVolumeLabel = null,
             proposedType = SeriesMembershipType.OTHER,
             confidence = SeriesSuggestionConfidence.LOW,
             rule = SeriesSuggestionRule.MANUAL_ENTRY,

@@ -1,9 +1,11 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -57,7 +59,10 @@ class LibraryImportCommitterTest {
             val result = committer.commit(preview(listOf(existing), listOf(addition)))
 
             assertEquals(listOf(existing), stored)
-            assertEquals("蔵書のインポートに失敗しました", (result as ImportApplyResult.Failure).message)
+            assertEquals(
+            UiMessage(R.string.import_apply_failed),
+            (result as ImportApplyResult.Failure).message,
+        )
         }
 
     @Test

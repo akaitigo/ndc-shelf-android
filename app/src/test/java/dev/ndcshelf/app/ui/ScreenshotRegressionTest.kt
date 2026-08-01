@@ -38,13 +38,17 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * 主要画面のライト・ダーク・大文字スクリーンショット回帰テスト。
+ * 主要画面のライト・ダーク・大文字・多言語スクリーンショット回帰テスト。
  * 匿名fixtureだけを使用し、実在ISBN・氏名・棚位置を含めない。
  * golden画像は app/roborazzi/ にコミットし、CIの verifyRoborazziDebug が差分検出する。
+ *
+ * ロケールはqualifiersで明示する。既定は日本語（values-ja）で、
+ * 英語（values）と擬似ロケール en-XA / ar-XB のケースを個別に持つ。
+ * 擬似ロケールは app/build.gradle.kts の `isPseudoLocalesEnabled` で生成する。
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+@Config(sdk = [35], qualifiers = JA + BASE_DEVICE)
 class ScreenshotRegressionTest {
     @get:Rule
     val composeRule = createComposeRule()
@@ -83,8 +87,42 @@ class ScreenshotRegressionTest {
      * medium幅（NavigationRail + 1ペイン + 最大幅720dp）。
      * 代表サイズは docs/ADAPTIVE_LAYOUT.md の表に対応する。
      */
+    /** 英語（values/、デフォルトロケール）。未翻訳・切れの検出用。 */
     @Test
-    @Config(qualifiers = "w720dp-h1024dp-normal-notlong-notround-any-320dpi-keyshidden-nonav")
+    @Config(qualifiers = EN + BASE_DEVICE)
+    fun libraryEnglish() = captureScreen("library_en") { LibraryFixture() }
+
+    @Test
+    @Config(qualifiers = EN + BASE_DEVICE)
+    fun onboardingEnglish() = captureScreen("onboarding_en") { OnboardingFixture() }
+
+    @Test
+    @Config(qualifiers = EN + BASE_DEVICE)
+    fun insightsEnglish() = captureScreen("insights_en") { InsightsFixture() }
+
+    /**
+     * 擬似ロケール en-XA（アクセント付き・伸長）。
+     * 未リソース化の直書き文字列はアクセントが付かないので、goldenで見分けられる。
+     */
+    @Test
+    @Config(qualifiers = "en-rXA" + BASE_DEVICE)
+    fun libraryPseudoAccented() = captureScreen("library_pseudo_en_xa") { LibraryFixture() }
+
+    @Test
+    @Config(qualifiers = "en-rXA" + BASE_DEVICE)
+    fun onboardingPseudoAccented() = captureScreen("onboarding_pseudo_en_xa") { OnboardingFixture() }
+
+    /** 擬似ロケール ar-XB（RTL・双方向）。start/end指定の崩れを検出する。 */
+    @Test
+    @Config(qualifiers = "ar-rXB-ldrtl" + BASE_DEVICE)
+    fun libraryPseudoRtl() = captureScreen("library_pseudo_ar_xb") { LibraryFixture() }
+
+    @Test
+    @Config(qualifiers = "ar-rXB-ldrtl" + BASE_DEVICE)
+    fun onboardingPseudoRtl() = captureScreen("onboarding_pseudo_ar_xb") { OnboardingFixture() }
+
+    @Test
+    @Config(qualifiers = JA + "-w720dp-h1024dp-normal-notlong-notround-any-320dpi-keyshidden-nonav")
     fun libraryMediumRail() =
         captureScreen("library_medium_rail") {
             AdaptiveShellFixture(AdaptiveLayout.Medium) { LibraryFixture() }
@@ -92,7 +130,7 @@ class ScreenshotRegressionTest {
 
     /** expanded幅（NavigationRail + list-detail 2ペイン。詳細を選択済みの状態）。 */
     @Test
-    @Config(qualifiers = "w1280dp-h800dp-normal-notlong-notround-any-320dpi-keyshidden-nonav")
+    @Config(qualifiers = JA + "-w1280dp-h800dp-normal-notlong-notround-any-320dpi-keyshidden-nonav")
     fun libraryExpandedTwoPane() =
         captureScreen("library_expanded_two_pane") {
             AdaptiveShellFixture(AdaptiveLayout.Expanded) {
@@ -129,6 +167,10 @@ class ScreenshotRegressionTest {
         const val OUTPUT_DIRECTORY = "roborazzi"
     }
 }
+
+private const val JA = "ja-rJP"
+private const val EN = "en-rUS"
+private const val BASE_DEVICE = "-w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav"
 
 /**
  * 大画面のナビゲーション（NavigationRail）と最大幅制約を含めて撮影するためのシェル。

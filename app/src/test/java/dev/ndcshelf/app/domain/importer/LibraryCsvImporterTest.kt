@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExportFormat
 import dev.ndcshelf.app.domain.export.LibraryExporter
 import dev.ndcshelf.app.domain.model.ClassificationSource
@@ -7,6 +8,7 @@ import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -113,7 +115,7 @@ class LibraryCsvImporterTest {
         assertEquals("copy:generated", record.copyId)
         assertEquals("work:isbn:9784820418078", record.workId)
         assertEquals("edition:isbn:9784820418078", record.editionId)
-        assertTrue(result.warnings.any { it.field == "notes" && it.reason.contains("無視") })
+        assertTrue(result.warnings.any { it.field == "notes" && it.reason.resId == R.string.import_error_csv_unknown_column })
     }
 
     @Test
@@ -124,8 +126,8 @@ class LibraryCsvImporterTest {
                 "readingStatus,addedAt\n本,本,著者,9784820418078,NDL,PHYSICAL,棚,READING,1",
         ) as LibraryCsvParseResult.Invalid
 
-        assertTrue(missing.errors.any { it.field == "primaryAuthor" && it.reason.contains("必須列") })
-        assertTrue(duplicate.errors.any { it.reason.contains("構文") })
+        assertTrue(missing.errors.any { it.field == "primaryAuthor" && it.reason.resId == R.string.import_error_csv_required_column })
+        assertTrue(duplicate.errors.any { it.reason.resId == R.string.import_error_csv_syntax })
     }
 
     @Test
@@ -137,7 +139,7 @@ class LibraryCsvImporterTest {
 
         assertTrue(
             result.errors.any {
-                it.recordNumber == 1 && it.field == "addedAt" && it.reason.contains("整数")
+                it.recordNumber == 1 && it.field == "addedAt" && it.reason.resId == R.string.import_error_expect_integer
             },
         )
     }
@@ -150,7 +152,7 @@ class LibraryCsvImporterTest {
         val result = parse(source) as LibraryCsvParseResult.Invalid
 
         assertTrue(
-            result.errors.any { it.recordNumber == 1 && it.reason.contains("列数") },
+            result.errors.any { it.recordNumber == 1 && it.reason.resId == R.string.import_error_csv_column_count },
         )
     }
 
@@ -162,7 +164,7 @@ class LibraryCsvImporterTest {
         val result = parse(source) as LibraryCsvParseResult.Invalid
 
         assertEquals(100, result.errors.size)
-        assertTrue(result.errors.all { it.reason.contains("列数") })
+        assertTrue(result.errors.all { it.reason.resId == R.string.import_error_csv_column_count })
         assertEquals(100, result.errors.last().recordNumber)
     }
 
@@ -173,7 +175,7 @@ class LibraryCsvImporterTest {
 
         val result = parse(source) as LibraryCsvParseResult.Invalid
 
-        assertTrue(result.errors.any { it.reason.contains("構文") })
+        assertTrue(result.errors.any { it.reason.resId == R.string.import_error_csv_syntax })
     }
 
     @Test
@@ -210,9 +212,9 @@ class LibraryCsvImporterTest {
             ByteArrayInputStream(byteArrayOf(0xC3.toByte(), 0x28)),
         ) as LibraryCsvParseResult.Invalid
 
-        assertTrue(oversized.errors.any { it.reason.contains("8バイト") })
-        assertTrue(tooMany.errors.any { it.reason.contains("0件以下") })
-        assertTrue(malformed.errors.any { it.reason.contains("UTF-8") })
+        assertTrue(oversized.errors.any { it.reason == UiMessage(R.string.import_error_file_too_large, 8L) })
+        assertTrue(tooMany.errors.any { it.reason == UiMessage(R.string.import_error_too_many_records, 0) })
+        assertTrue(malformed.errors.any { it.reason.resId == R.string.import_error_csv_encoding })
     }
 
     private suspend fun parse(source: String): LibraryCsvParseResult = importer().parse(

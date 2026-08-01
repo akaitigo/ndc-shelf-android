@@ -1,10 +1,13 @@
 package dev.ndcshelf.app.domain.search
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
 import dev.ndcshelf.app.domain.model.NdcCategory
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.Tag
 import dev.ndcshelf.app.domain.model.TagNameRules
+import dev.ndcshelf.app.domain.text.UiMessage
+import dev.ndcshelf.app.ui.text.labelRes
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -17,27 +20,34 @@ sealed interface SearchInterpretationChip {
     val id: String
 
     /** チップ表示用のテキストラベル。 */
-    val label: String
+    val label: UiMessage
 
     data class Status(
         val status: ReadingStatus,
     ) : SearchInterpretationChip {
         override val id: String get() = "status:${status.name}"
-        override val label: String get() = status.label
+        override val label: UiMessage get() = UiMessage(status.labelRes)
     }
 
     data class Ndc(
         val category: NdcCategory,
     ) : SearchInterpretationChip {
         override val id: String get() = "ndc:${category.digit}"
-        override val label: String get() = "NDC ${category.digit}類 ${category.label}"
+        override val label: UiMessage
+            get() =
+                UiMessage(
+                    R.string.nl_search_chip_ndc,
+                    category.digit,
+                    UiMessage(category.labelRes),
+                )
     }
 
     data class Location(
         val locationQuery: String,
     ) : SearchInterpretationChip {
         override val id: String get() = "location:$locationQuery"
-        override val label: String get() = "場所: $locationQuery"
+        override val label: UiMessage
+            get() = UiMessage(R.string.nl_search_chip_location, locationQuery)
     }
 
     data class Added(
@@ -46,7 +56,8 @@ sealed interface SearchInterpretationChip {
         val beforeMillis: Long,
     ) : SearchInterpretationChip {
         override val id: String get() = "added:$rangeLabel"
-        override val label: String get() = "追加: $rangeLabel"
+        override val label: UiMessage
+            get() = UiMessage(R.string.nl_search_chip_added, rangeLabel)
     }
 
     data class TagRef(
@@ -54,7 +65,8 @@ sealed interface SearchInterpretationChip {
         val tagName: String,
     ) : SearchInterpretationChip {
         override val id: String get() = "tag:$tagId"
-        override val label: String get() = "タグ: $tagName"
+        override val label: UiMessage
+            get() = UiMessage(R.string.nl_search_chip_tag, tagName)
     }
 }
 

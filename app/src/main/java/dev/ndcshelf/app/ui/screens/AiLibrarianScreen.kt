@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
@@ -279,7 +280,7 @@ private fun AiLibrarianScopeCard(
             }
         }
         val targetCount = state.targetBooks.size
-        Text(stringResource(R.string.ai_librarian_target_count, targetCount))
+        Text(pluralStringResource(R.plurals.ai_librarian_target_count, targetCount, targetCount))
         if (targetCount == 0) {
             Text(
                 text = stringResource(R.string.ai_librarian_target_empty),
@@ -289,8 +290,9 @@ private fun AiLibrarianScopeCard(
         }
         Text(
             text =
-                stringResource(
-                    R.string.ai_librarian_item_limit_notice,
+                pluralStringResource(
+                    R.plurals.ai_librarian_item_limit_notice,
+                    AiLibrarianLimits.MAX_ITEMS_PER_REQUEST,
                     AiLibrarianLimits.MAX_ITEMS_PER_REQUEST,
                 ),
             style = MaterialTheme.typography.bodySmall,
@@ -443,7 +445,11 @@ private fun AiLibrarianAnswerCard(
         }
         val referencedTitles = answer.referencedTitles
         Text(
-            text = stringResource(R.string.ai_librarian_answer_references, referencedTitles.size),
+            text = pluralStringResource(
+                    R.plurals.ai_librarian_answer_references,
+                    referencedTitles.size,
+                    referencedTitles.size,
+                ),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -503,8 +509,9 @@ private fun AiLibrarianHistoryCard(
                     Text(entry.question, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         text =
-                            stringResource(
-                                R.string.ai_librarian_history_entry,
+                            pluralStringResource(
+                                R.plurals.ai_librarian_history_entry,
+                                entry.itemCount,
                                 formatHistoryDate(entry.askedAtMillis),
                                 entry.itemCount,
                             ),
@@ -544,19 +551,24 @@ private fun AiLibrarianPreviewDialog(
                 Text(stringResource(R.string.ai_librarian_preview_destination, destinationLabel))
                 Text(
                     text =
-                        stringResource(
-                            R.string.ai_librarian_preview_books,
+                        pluralStringResource(
+                            R.plurals.ai_librarian_preview_books,
+                            draft.references.size,
                             draft.references.size,
                         ),
                     fontWeight = FontWeight.Bold,
                 )
                 draft.references.take(MAX_PREVIEW_BOOKS).forEach { reference ->
-                    Text("・${reference.title}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        stringResource(R.string.consent_bullet_item, reference.title),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 if (draft.references.size > MAX_PREVIEW_BOOKS) {
                     Text(
-                        stringResource(
-                            R.string.ai_librarian_preview_more,
+                        pluralStringResource(
+                            R.plurals.ai_librarian_preview_more,
+                            draft.references.size - MAX_PREVIEW_BOOKS,
                             draft.references.size - MAX_PREVIEW_BOOKS,
                         ),
                     )
@@ -637,15 +649,17 @@ private fun AiLibrarianFailure.message(): String =
         }
 
         AiLibrarianFailure.ITEM_LIMIT_EXCEEDED -> {
-            stringResource(
-                R.string.ai_librarian_failure_item_limit,
+            pluralStringResource(
+                R.plurals.ai_librarian_failure_item_limit,
+                AiLibrarianLimits.MAX_ITEMS_PER_REQUEST,
                 AiLibrarianLimits.MAX_ITEMS_PER_REQUEST,
             )
         }
 
         AiLibrarianFailure.DAILY_LIMIT_REACHED -> {
-            stringResource(
-                R.string.ai_librarian_failure_daily_limit,
+            pluralStringResource(
+                R.plurals.ai_librarian_failure_daily_limit,
+                AiLibrarianLimits.MAX_QUESTIONS_PER_DAY,
                 AiLibrarianLimits.MAX_QUESTIONS_PER_DAY,
             )
         }

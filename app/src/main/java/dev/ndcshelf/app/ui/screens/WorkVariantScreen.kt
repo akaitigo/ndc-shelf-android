@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -53,6 +54,7 @@ import dev.ndcshelf.app.domain.model.EditionVariant
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.WorkVariant
 import dev.ndcshelf.app.domain.model.WorkVariantSuggestion
+import dev.ndcshelf.app.ui.text.resolve
 
 @Composable
 internal fun WorkVariantScreen(
@@ -188,7 +190,7 @@ internal fun WorkVariantScreen(
                         ) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(
-                                    suggestion.reason,
+                                    suggestion.reason.resolve(),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
@@ -307,12 +309,14 @@ private fun WorkVariantCard(work: WorkVariant) {
 @Composable
 private fun EditionLine(edition: EditionVariant) {
     val unknown = stringResource(R.string.work_variant_unknown)
+    val physical = stringResource(R.string.book_detail_media_physical)
+    val digital = stringResource(R.string.book_detail_media_digital)
     val media =
         edition.mediaTypes
             .joinToString("/") {
                 when (it) {
-                    MediaType.PHYSICAL -> "紙"
-                    MediaType.DIGITAL -> "電子"
+                    MediaType.PHYSICAL -> physical
+                    MediaType.DIGITAL -> digital
                 }
             }.ifEmpty { unknown }
     Text(
@@ -331,7 +335,15 @@ private fun EditionLine(edition: EditionVariant) {
         style = MaterialTheme.typography.bodySmall,
     )
     Text(
-        "$media ・ ${stringResource(R.string.work_variant_owned, edition.ownedCopyCount)}",
+        stringResource(
+            R.string.work_variant_edition_summary,
+            media,
+            pluralStringResource(
+                R.plurals.work_variant_owned,
+                edition.ownedCopyCount,
+                edition.ownedCopyCount,
+            ),
+        ),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

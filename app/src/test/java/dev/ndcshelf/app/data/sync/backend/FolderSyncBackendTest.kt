@@ -1,8 +1,10 @@
 package dev.ndcshelf.app.data.sync.backend
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.sync.SyncBackendErrorKind
 import dev.ndcshelf.app.domain.sync.SyncBackendException
 import dev.ndcshelf.app.domain.sync.SyncCasResult
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
@@ -110,7 +112,10 @@ class FolderSyncBackendTest {
             val receipt = backend.requestRemoteDeletion()
             assertEquals(0, receipt.remainingObjectCount)
             assertNotNull(receipt.completedAtMillis)
-            assertTrue(receipt.physicalDeletionNote.isNotBlank())
+            assertEquals(
+                UiMessage(R.string.sync_purge_receipt_detail),
+                receipt.physicalDeletionNote,
+            )
             assertFalse(backend.libraryExists())
             assertNull(backend.getHead())
             assertEquals(receipt, backend.getDeletionReceipt())

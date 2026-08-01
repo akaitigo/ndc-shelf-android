@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.domain.text.UiMessage
+
 data class LocationTree(
     val rooms: List<LocationRoom> = emptyList(),
 ) {
@@ -47,7 +49,7 @@ enum class MoveDirection { UP, DOWN }
 
 sealed interface LocationMutationResult {
     data object Success : LocationMutationResult
-    data class InvalidName(val reason: String) : LocationMutationResult
+    data class InvalidName(val reason: UiMessage) : LocationMutationResult
     data object DuplicateName : LocationMutationResult
     data object NotFound : LocationMutationResult
     data class InUse(val copyCount: Int) : LocationMutationResult
