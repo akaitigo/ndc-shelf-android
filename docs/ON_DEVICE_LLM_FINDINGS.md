@@ -145,3 +145,42 @@ adb shell "cat /sdcard/Android/data/dev.ndcshelf.app.ai/files/llm-prefill.txt"
   繰り返し計測するときは `adb install` ＋ `am instrument` を直接使う
 - モデルはPCから `adb push` ＋ `run-as` で配置できる。UI操作を経ずに計測環境を復元できる
 - `adb shell "run-as ... cat"` はバイナリを壊す（改行変換）。**`adb exec-out` を使う**
+
+## 再設計の方針（B）
+
+実測とCodexとの議論から、次の順で作り直す。**コンセプト（所有する本すべてを踏まえて助言する）を
+崩さないこと**が制約。
+
+### 使うべきランタイム機能
+
+1. **`ThinkingConfig(enableThinking = false)`** — 推論モードを正式に止める。
+   実測で11.9秒→4.2秒。文字列 `/no_think` の付加は不要になる
+2. **`ResponseFormat.json(schema)` + `enableResponseFormat`** — 出力形式を文法で強制する。
+   プロンプトで「JSONだけ出力してください」と依頼する現在の実装は0.6Bには守れない
+   （`{"id":"bN"}` のプレースホルダーをそのまま返した）
+3. **`tools` + `automaticToolCalling`** — LLM自身に蔵書検索させる。
+   `@Tool` / `@ToolParam` アノテーションでKotlinの関数を公開できる。
+   **これが使えると蔵書数の制約が消える**（promptに載るのは検索結果だけ）
+
+### 蔵書表現
+
+書誌JSONではなく1冊1行へ。`b1|書名` で27冊483文字（実測7.6秒）。
+内容紹介を持たせる場合は全件をpromptへ載せられないため、
+**全件を端末内で検索 → 質問に効く数冊を中身ごと渡す**形にする。
+全件が検索対象なのでコンセプトは保たれる。
+
+### 先に作るもの
+
+**固定の評価セット（100〜300問）**。形式成功率・選択の妥当性・p50/p95・peak RSSを
+同時に比較できないと、モデル変更やfew-shot追加が改善なのか判断できない。
+計測ハーネスは揃っているので、評価セットを足せば回せる。
+
+### 未検証で残っている選択肢
+
+- **TinySwallow-1.5B-Instruct**（Apache-2.0・日本語特化・1.57 GB）
+- **llama.cpp の自前ビルド** — Maven非公開でも、自分でビルドした `.so` の同梱は依存検証の
+  対象外。GGUFが使えるためモデルの幅が最大になり、ARM最適化でprefillが改善する可能性がある。
+  採用ゲートを先に決めること（prefill 1.5倍以上、peak PSS 25%減または1.5 GB未満など）
+- **MediaPipe `tasks-genai`**（Google Maven・`.task`形式）。公式にmaintenance-onlyだが動作は実測済み
+- **ONNX Runtime**（`com.microsoft.onnxruntime:onnxruntime-android:1.22.0` はMaven Centralにある）。
+  生成ループを自前で書く必要があるが、モデルの幅は最も広い
