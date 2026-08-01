@@ -1,6 +1,8 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 
 internal class LibraryImportCommitter(
@@ -28,7 +30,7 @@ internal class LibraryImportCommitter(
         } catch (_: StalePreviewException) {
             ImportApplyResult.StalePreview
         } catch (_: Exception) {
-            ImportApplyResult.Failure("蔵書のインポートに失敗しました")
+            ImportApplyResult.Failure(UiMessage(R.string.import_apply_failed))
         }
 
     private class StalePreviewException : IllegalStateException()

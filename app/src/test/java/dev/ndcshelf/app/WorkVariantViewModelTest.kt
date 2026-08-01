@@ -6,6 +6,7 @@ import dev.ndcshelf.app.domain.model.WorkVariantSuggestion
 import dev.ndcshelf.app.domain.model.WorkVariantSuggestionConfidence
 import dev.ndcshelf.app.domain.repository.WorkGroupMutationResult
 import dev.ndcshelf.app.domain.repository.WorkGroupRepository
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -113,7 +114,7 @@ class WorkVariantViewModelTest {
                     WorkVariantSuggestion(
                         WorkVariant(targetId, "作品（文庫版）", "著者", emptyList()),
                         WorkVariantSuggestionConfidence.HIGH,
-                        "タイトルと著者が一致",
+                        UiMessage(R.string.work_variant_reason_title_author),
                     ),
                 )
             } ?: emptyList()

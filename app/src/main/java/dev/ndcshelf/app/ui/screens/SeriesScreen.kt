@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -291,8 +292,9 @@ private fun SeriesCatalogCard(
                 if (overview.missingCandidateCount > 0) {
                     Text(
                         text =
-                            stringResource(
-                                R.string.series_missing_candidates,
+                            pluralStringResource(
+                                R.plurals.series_missing_candidates,
+                                overview.missingCandidateCount,
                                 overview.missingCandidateCount,
                             ),
                         style = MaterialTheme.typography.labelLarge,
@@ -719,9 +721,9 @@ private fun SeriesVolume.stateDescription(): String =
     when (state) {
         SeriesVolumeState.OWNED -> {
             when {
-                isRead -> stringResource(R.string.series_state_owned_read, ownedCopyCount)
-                readingCopyCount > 0 -> stringResource(R.string.series_state_owned_reading, ownedCopyCount)
-                else -> stringResource(R.string.series_state_owned, ownedCopyCount)
+                isRead -> pluralStringResource(R.plurals.series_state_owned_read, ownedCopyCount, ownedCopyCount)
+                readingCopyCount > 0 -> pluralStringResource(R.plurals.series_state_owned_reading, ownedCopyCount, ownedCopyCount)
+                else -> pluralStringResource(R.plurals.series_state_owned, ownedCopyCount, ownedCopyCount)
             }
         }
 

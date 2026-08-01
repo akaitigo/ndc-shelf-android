@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -50,6 +51,7 @@ import dev.ndcshelf.app.domain.model.SavedSearch
 import dev.ndcshelf.app.domain.model.TagColorRole
 import dev.ndcshelf.app.domain.model.TagNameRules
 import dev.ndcshelf.app.domain.model.TagWithUsage
+import dev.ndcshelf.app.ui.text.labelRes
 
 /**
  * タグ（手動コレクション）と保存済み検索（検索条件コレクション）の管理画面。
@@ -130,8 +132,9 @@ internal fun TagManagementScreen(
                 },
                 text = {
                     Text(
-                        stringResource(
-                            R.string.tag_delete_confirm_message,
+                        pluralStringResource(
+                            R.plurals.tag_delete_confirm_message,
+                            target.taggedWorkCount,
                             target.tag.name,
                             target.taggedWorkCount,
                         ),
@@ -368,8 +371,12 @@ private fun TagRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(tagWithUsage.tag.name, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "${tagWithUsage.tag.colorRole.label}・" +
-                            stringResource(R.string.tag_usage_count, tagWithUsage.taggedWorkCount),
+                        stringResource(tagWithUsage.tag.colorRole.labelRes) + "\u30fb" +
+                            pluralStringResource(
+                                R.plurals.tag_usage_count,
+                                tagWithUsage.taggedWorkCount,
+                                tagWithUsage.taggedWorkCount,
+                            ),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -433,7 +440,7 @@ private fun TagEditorDialog(
                             selected = color == candidate,
                             onClick = { color = candidate },
                             leadingIcon = { TagColorSwatch(candidate) },
-                            label = { Text(candidate.label) },
+                            label = { Text(stringResource(candidate.labelRes)) },
                         )
                     }
                 }

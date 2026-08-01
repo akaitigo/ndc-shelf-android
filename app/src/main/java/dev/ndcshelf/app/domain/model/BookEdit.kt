@@ -1,5 +1,7 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.text.UiMessage
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -37,7 +39,7 @@ data class ValidatedBookEdit(
 
 data class BookEditValidationError(
     val field: BookEditField,
-    val reason: String,
+    val reason: UiMessage,
 )
 
 enum class BookEditField {
@@ -93,7 +95,7 @@ class BookEditValidator(
         if (ndcCode != null && !NDC_CODE_REGEX.matches(ndcCode)) {
             errors += BookEditValidationError(
                 BookEditField.NDC_CODE,
-                "NDCコードは3桁と任意の小数部で指定してください",
+                UiMessage(R.string.validation_invalid_ndc),
             )
         }
         if (errors.isNotEmpty()) return BookEditValidationResult.Invalid(errors)
@@ -125,7 +127,7 @@ class BookEditValidator(
     ): String? {
         val normalized = value.trim()
         if (normalized.isEmpty()) {
-            errors += BookEditValidationError(field, "必須項目です")
+            errors += BookEditValidationError(field, UiMessage(R.string.validation_required))
             return null
         }
         validateText(normalized, field, maxLength, errors)
@@ -150,10 +152,13 @@ class BookEditValidator(
         errors: MutableList<BookEditValidationError>,
     ) {
         if (value.length > maxLength) {
-            errors += BookEditValidationError(field, "${maxLength}文字以下にしてください")
+            errors += BookEditValidationError(
+                field,
+                UiMessage(R.string.validation_max_length, maxLength),
+            )
         }
         if ('\u0000' in value) {
-            errors += BookEditValidationError(field, "NUL文字は使用できません")
+            errors += BookEditValidationError(field, UiMessage(R.string.validation_no_nul))
         }
     }
 
@@ -165,7 +170,10 @@ class BookEditValidator(
         if (normalized.isEmpty()) return null
         val year = normalized.toIntOrNull()
         if (year == null) {
-            errors += BookEditValidationError(BookEditField.PUBLISHED_YEAR, "整数で指定してください")
+            errors += BookEditValidationError(
+                BookEditField.PUBLISHED_YEAR,
+                UiMessage(R.string.validation_year_integer),
+            )
             return null
         }
         val maxYear = Calendar.getInstance(TimeZone.getTimeZone("UTC")).run {
@@ -175,7 +183,7 @@ class BookEditValidator(
         if (year !in MIN_PUBLISHED_YEAR..maxYear) {
             errors += BookEditValidationError(
                 BookEditField.PUBLISHED_YEAR,
-                "${MIN_PUBLISHED_YEAR}〜${maxYear}の範囲で指定してください",
+                UiMessage(R.string.validation_year_range, MIN_PUBLISHED_YEAR, maxYear),
             )
             return null
         }

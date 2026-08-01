@@ -56,8 +56,12 @@ class ConsentScreenTest {
             .assertIsDisplayed()
         seriesGrantButton().performClick()
 
-        composeRule.onNodeWithText("・年代記").assertExists()
-        composeRule.onNodeWithText("・銀河の歴史").assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.consent_bullet_item, "年代記"))
+            .assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.consent_bullet_item, "銀河の歴史"))
+            .assertExists()
         assertNull(granted)
 
         composeRule.onNodeWithText(context.getString(R.string.consent_cancel_button)).performClick()

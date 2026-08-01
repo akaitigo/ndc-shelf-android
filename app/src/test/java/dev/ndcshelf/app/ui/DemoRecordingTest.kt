@@ -52,7 +52,10 @@ import java.time.Duration
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+@Config(
+    sdk = [35],
+    qualifiers = "ja-rJP-w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav",
+)
 class DemoRecordingTest {
     @get:Rule
     val composeRule = createComposeRule()

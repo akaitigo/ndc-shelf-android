@@ -92,6 +92,7 @@ import dev.ndcshelf.app.domain.search.SearchInterpretationChip
 import dev.ndcshelf.app.domain.search.applyInterpretation
 import dev.ndcshelf.app.domain.sync.SyncEngineStatus
 import dev.ndcshelf.app.domain.sync.SyncStatusRepository
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -1191,8 +1192,10 @@ class MainViewModel(
                 when (repository.moveBookWithinTier(copyId, direction)) {
                     ShelfMoveResult.Moved -> ShelfMoveUiState.Moved
                     ShelfMoveResult.Boundary -> ShelfMoveUiState.Boundary
-                    ShelfMoveResult.NotFound -> ShelfMoveUiState.Error("棚内の本が見つかりません")
-                    ShelfMoveResult.Failure -> ShelfMoveUiState.Error("棚内の順序を変更できませんでした")
+                    ShelfMoveResult.NotFound ->
+                        ShelfMoveUiState.Error(UiMessage(R.string.shelf_move_error_not_found))
+                    ShelfMoveResult.Failure ->
+                        ShelfMoveUiState.Error(UiMessage(R.string.shelf_move_error_failure))
                 }
         }
     }
@@ -1229,19 +1232,19 @@ class MainViewModel(
                     }
 
                     LocationMutationResult.DuplicateName -> {
-                        LocationMutationUiState.Error("同じ階層に同名の場所があります")
+                        LocationMutationUiState.Error(UiMessage(R.string.location_error_duplicate_name))
                     }
 
                     LocationMutationResult.NotFound -> {
-                        LocationMutationUiState.Error("場所が見つかりません")
+                        LocationMutationUiState.Error(UiMessage(R.string.location_error_not_found))
                     }
 
                     LocationMutationResult.InvalidDestination -> {
-                        LocationMutationUiState.Error("移動先の段を選び直してください")
+                        LocationMutationUiState.Error(UiMessage(R.string.location_error_invalid_move_target))
                     }
 
                     LocationMutationResult.Failure -> {
-                        LocationMutationUiState.Error("場所を更新できませんでした")
+                        LocationMutationUiState.Error(UiMessage(R.string.location_error_failure))
                     }
                 }
         }
@@ -1825,7 +1828,7 @@ sealed interface LocationMutationUiState {
     ) : LocationMutationUiState
 
     data class Error(
-        val message: String,
+        val message: UiMessage,
     ) : LocationMutationUiState
 }
 
@@ -1841,7 +1844,7 @@ sealed interface ShelfMoveUiState {
     data object Boundary : ShelfMoveUiState
 
     data class Error(
-        val message: String,
+        val message: UiMessage,
     ) : ShelfMoveUiState
 }
 
@@ -2179,7 +2182,7 @@ sealed interface TagMutationUiState {
     data object Done : TagMutationUiState
 
     data class Invalid(
-        val message: String,
+        val message: UiMessage,
     ) : TagMutationUiState
 
     data object Duplicate : TagMutationUiState

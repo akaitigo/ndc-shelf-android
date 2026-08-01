@@ -56,9 +56,9 @@ class InsightsScreenTest {
         composeRule
             .onNodeWithText(context.getString(R.string.insights_privacy_note))
             .assertIsDisplayed()
-        scrollTo(context.getString(R.string.insights_reason_unread, 420))
+        scrollTo(context.resources.getQuantityString(R.plurals.insights_reason_unread, 420, 420L))
         composeRule
-            .onNodeWithText(context.getString(R.string.insights_reason_unread, 420))
+            .onNodeWithText(context.resources.getQuantityString(R.plurals.insights_reason_unread, 420, 420L))
             .assertIsDisplayed()
     }
 
@@ -92,7 +92,13 @@ class InsightsScreenTest {
             )
         setContent(state)
 
-        val julyDescription = context.getString(R.string.insights_trend_bar_description, 2026, 7, 2)
+        val julyDescription = context.resources.getQuantityString(
+            R.plurals.insights_trend_bar_description,
+            2,
+            2026,
+            7,
+            2,
+        )
         composeRule
             .onNodeWithTag("insights-list")
             .performScrollToNode(hasContentDescription(julyDescription))
@@ -145,7 +151,14 @@ class InsightsScreenTest {
         setContent(state)
 
         val description =
-            context.getString(R.string.insights_ndc_row_description, 9, "文学", 2, 100)
+            context.resources.getQuantityString(
+                R.plurals.insights_ndc_row_description,
+                2,
+                9,
+                context.getString(R.string.ndc_category_9),
+                2,
+                100,
+            )
         composeRule.onNodeWithContentDescription(description).assertIsDisplayed()
     }
 

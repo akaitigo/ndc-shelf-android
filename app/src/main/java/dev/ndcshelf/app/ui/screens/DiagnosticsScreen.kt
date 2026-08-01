@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsSection
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsSnapshot
+import dev.ndcshelf.app.ui.text.labelRes
 import java.text.DateFormat
 import java.util.Date
 

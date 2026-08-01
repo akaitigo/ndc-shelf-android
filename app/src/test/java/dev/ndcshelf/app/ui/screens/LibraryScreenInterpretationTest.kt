@@ -73,7 +73,14 @@ class LibraryScreenInterpretationTest {
             .onNodeWithText(context.getString(R.string.nl_search_interpretation_label))
             .assertIsDisplayed()
         composeRule.onNodeWithTag(interpretationChipTag(statusChip.id)).assertIsDisplayed()
-        composeRule.onNodeWithText("NDC 4類 自然科学").assertIsDisplayed()
+        composeRule
+            .onNodeWithText(
+                context.getString(
+                    R.string.nl_search_chip_ndc,
+                    4,
+                    context.getString(R.string.ndc_category_4),
+                ),
+            ).assertIsDisplayed()
 
         // 空結果時は解釈チップの解除を促すガイダンスを表示する。
         composeRule
@@ -83,7 +90,10 @@ class LibraryScreenInterpretationTest {
         // ×アイコンにはチップ名入りのcontentDescriptionを付け、タップで個別解除する。
         composeRule
             .onNodeWithContentDescription(
-                context.getString(R.string.nl_search_chip_dismiss, "未読"),
+                context.getString(
+                    R.string.nl_search_chip_dismiss,
+                    context.getString(R.string.reading_status_unread),
+                ),
                 useUnmergedTree = true,
             ).assertExists()
         composeRule.onNodeWithTag(interpretationChipTag(statusChip.id)).performClick()
@@ -123,7 +133,11 @@ class LibraryScreenInterpretationTest {
                 .isEmpty(),
         )
         // 解釈がない検索は従来の空結果メッセージのまま。
-        composeRule.onNodeWithText("該当する本がありません").assertExists()
-        composeRule.onNodeWithText("検索条件を変えてみてください").assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.library_empty_searching_title))
+            .assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.library_empty_searching_body))
+            .assertExists()
     }
 }

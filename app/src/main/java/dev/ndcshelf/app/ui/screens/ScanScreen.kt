@@ -70,6 +70,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -99,6 +100,8 @@ import dev.ndcshelf.app.domain.model.PurchaseTransition
 import dev.ndcshelf.app.domain.model.ScanAttemptOutcome
 import dev.ndcshelf.app.domain.model.ScanSession
 import dev.ndcshelf.app.ui.components.CameraPreview
+import dev.ndcshelf.app.ui.text.localResources
+import dev.ndcshelf.app.ui.text.resolve
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.delay
@@ -431,7 +434,7 @@ fun ScanScreen(
         if (mode == ScanMode.BOOKSTORE) {
             item {
                 Text(
-                    text = stringResource(R.string.bookstore_saved_title, wishlist.size),
+                    text = pluralStringResource(R.plurals.bookstore_saved_title, wishlist.size, wishlist.size),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -476,7 +479,7 @@ fun ScanScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "書誌情報とNDC分類の一部は、国立国会図書館サーチAPIを利用しています。",
+                    text = stringResource(R.string.scan_ndl_attribution),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -562,7 +565,7 @@ internal fun ScanSessionPanel(
             }
             when (state) {
                 is ScanSessionUiState.Undone -> Text(
-                    stringResource(R.string.scan_session_undone, state.count),
+                    pluralStringResource(R.plurals.scan_session_undone, state.count, state.count),
                     color = MaterialTheme.colorScheme.primary,
                 )
                 ScanSessionUiState.Conflict -> Text(
@@ -790,7 +793,7 @@ internal fun ScanResultCard(
                 ),
             ) {
                 Text(
-                    text = "読み取ると自動で本棚に追加します。登録済みなら重複を知らせます。",
+                    text = stringResource(R.string.scan_auto_add_notice),
                     modifier = Modifier.padding(14.dp),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -801,7 +804,10 @@ internal fun ScanResultCard(
             ResultSurface {
                 CircularProgressIndicator(modifier = Modifier.size(28.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("書誌情報を取得中", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.scan_fetching_metadata),
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Text(
                         state.isbn,
                         style = MaterialTheme.typography.bodySmall,
@@ -819,7 +825,10 @@ internal fun ScanResultCard(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("本棚に追加しました", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.scan_added_to_library),
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Text(state.title, style = MaterialTheme.typography.bodyMedium)
                 }
                 IconButton(onClick = onClear) {
@@ -838,7 +847,7 @@ internal fun ScanResultCard(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        stringResource(R.string.scan_duplicate_owned, state.copyCount),
+                        pluralStringResource(R.plurals.scan_duplicate_owned, state.copyCount, state.copyCount),
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(state.title, style = MaterialTheme.typography.bodyMedium)
@@ -998,14 +1007,16 @@ private fun ManualRegistrationDialog(
                         )
                     }
                 }
+                val errorResources = localResources()
                 when (state) {
                     is ManualRegistrationUiState.Invalid -> Text(
-                        state.errors.joinToString("\n") { it.reason },
+                        state.errors.joinToString("\n") { it.reason.resolve(errorResources) },
                         color = MaterialTheme.colorScheme.error,
                     )
                     is ManualRegistrationUiState.Duplicate -> Text(
-                        stringResource(
-                            R.string.manual_registration_duplicate,
+                        pluralStringResource(
+                            R.plurals.manual_registration_duplicate,
+                            state.copyCount,
                             state.title,
                             state.copyCount,
                         ),
@@ -1188,7 +1199,7 @@ private fun BookstoreBookResult(
             ) {
                 Column {
                     Text(
-                        stringResource(R.string.bookstore_owned_count, book.ownedCopyCount),
+                        pluralStringResource(R.plurals.bookstore_owned_count, book.ownedCopyCount, book.ownedCopyCount),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary,
@@ -1252,7 +1263,12 @@ private fun WishlistCard(book: BookstoreBook, onClick: () -> Unit) {
             Text(book.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(book.primaryAuthor, style = MaterialTheme.typography.bodyMedium)
             Text(
-                stringResource(R.string.bookstore_list_meta, book.isbn13, book.ownedCopyCount),
+                pluralStringResource(
+                    R.plurals.bookstore_list_meta,
+                    book.ownedCopyCount,
+                    book.isbn13,
+                    book.ownedCopyCount,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1321,7 +1337,7 @@ private fun ManualIsbnEntry(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "カメラが使えないとき",
+            text = stringResource(R.string.scan_manual_entry_section),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -1333,8 +1349,8 @@ private fun ManualIsbnEntry(
                 }.take(17)
             },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("ISBNを手入力") },
-            placeholder = { Text("9784820418078") },
+            label = { Text(stringResource(R.string.scan_manual_isbn_label)) },
+            placeholder = { Text(stringResource(R.string.scan_manual_isbn_placeholder)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number,
@@ -1347,7 +1363,7 @@ private fun ManualIsbnEntry(
             modifier = Modifier.fillMaxWidth(),
             enabled = isbn.isNotBlank() && !isLoading,
         ) {
-            Text("ISBNから登録")
+            Text(stringResource(R.string.scan_manual_isbn_submit))
         }
     }
 }

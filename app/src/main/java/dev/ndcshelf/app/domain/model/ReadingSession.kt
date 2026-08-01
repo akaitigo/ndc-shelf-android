@@ -1,5 +1,8 @@
 package dev.ndcshelf.app.domain.model
 
+import dev.ndcshelf.app.R
+import dev.ndcshelf.app.domain.text.UiMessage
+
 /**
  * 読書セッション。開始・中断・再開・読了を1セッションの状態遷移として表し、
  * 再読は同じコピーへの新しいセッション追加として表す。
@@ -19,12 +22,10 @@ data class ReadingSession(
     val updatedAt: Long,
 )
 
-enum class ReadingSessionStatus(
-    val label: String,
-) {
-    READING("読書中"),
-    PAUSED("中断"),
-    FINISHED("読了"),
+enum class ReadingSessionStatus {
+    READING,
+    PAUSED,
+    FINISHED,
 }
 
 /**
@@ -127,7 +128,7 @@ enum class ReadingSessionField {
 
 data class ReadingSessionValidationError(
     val field: ReadingSessionField,
-    val message: String,
+    val message: UiMessage,
 )
 
 sealed interface ReadingSessionValidationResult {
@@ -177,7 +178,7 @@ class ReadingSessionValidator {
             errors +=
                 ReadingSessionValidationError(
                     ReadingSessionField.FINISHED_DAY,
-                    "読了日は開始日より前にできません",
+                    UiMessage(R.string.validation_finished_before_started),
                 )
         }
 
@@ -185,7 +186,7 @@ class ReadingSessionValidator {
             errors +=
                 ReadingSessionValidationError(
                     ReadingSessionField.FINISHED_DAY,
-                    "読了日は読了状態のセッションにだけ設定できます",
+                    UiMessage(R.string.validation_finished_requires_finished_status),
                 )
         }
 
@@ -193,7 +194,7 @@ class ReadingSessionValidator {
             errors +=
                 ReadingSessionValidationError(
                     ReadingSessionField.RATING,
-                    "評価は$MIN_RATING〜$MAX_RATING で入力してください",
+                    UiMessage(R.string.validation_rating_range, MIN_RATING, MAX_RATING),
                 )
         }
 
@@ -202,11 +203,14 @@ class ReadingSessionValidator {
             errors +=
                 ReadingSessionValidationError(
                     ReadingSessionField.NOTE,
-                    "メモは$MAX_NOTE_LENGTH 文字以内で入力してください",
+                    UiMessage(R.string.validation_note_max_length, MAX_NOTE_LENGTH),
                 )
         }
         if ('\u0000' in note) {
-            errors += ReadingSessionValidationError(ReadingSessionField.NOTE, "メモに使用できない文字があります")
+            errors += ReadingSessionValidationError(
+                    ReadingSessionField.NOTE,
+                    UiMessage(R.string.validation_note_charset),
+                )
         }
 
         if (errors.isNotEmpty()) return ReadingSessionValidationResult.Invalid(errors)
@@ -225,7 +229,7 @@ class ReadingSessionValidator {
         const val MIN_RATING = 1
         const val MAX_RATING = 5
         const val MAX_NOTE_LENGTH = 2000
-        private const val DATE_FORMAT_MESSAGE =
-            "日付は 2026 / 2026-07 / 2026-07-29 のいずれかの形式で入力してください"
+        private val DATE_FORMAT_MESSAGE =
+            UiMessage(R.string.validation_partial_day_format)
     }
 }

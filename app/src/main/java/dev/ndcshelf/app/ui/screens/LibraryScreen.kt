@@ -70,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -110,9 +111,12 @@ import dev.ndcshelf.app.domain.model.TagNameRules
 import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.domain.repository.ShelfMoveDirection
 import dev.ndcshelf.app.domain.search.SearchInterpretationChip
+import dev.ndcshelf.app.domain.text.UiMessage
 import dev.ndcshelf.app.ui.adaptive.AdaptiveLayout
 import dev.ndcshelf.app.ui.adaptive.EmptyDetailPane
 import dev.ndcshelf.app.ui.components.BookCover
+import dev.ndcshelf.app.ui.text.labelRes
+import dev.ndcshelf.app.ui.text.resolve
 import java.text.DateFormat
 import java.util.Date
 
@@ -324,8 +328,9 @@ fun LibraryScreen(
                 }
                 Text(
                     text =
-                        stringResource(
-                            R.string.library_subtitle,
+                        pluralStringResource(
+                            R.plurals.library_subtitle,
+                            libraryStats?.totalCount ?: books.size,
                             libraryStats?.totalCount ?: books.size,
                         ),
                     style = MaterialTheme.typography.bodyMedium,
@@ -406,7 +411,11 @@ fun LibraryScreen(
                     ) {
                         // 選択件数は長押しのたびに変わるため、live regionで自動読み上げする。
                         Text(
-                            stringResource(R.string.tag_bulk_selected_count, bulkSelectedCopyIds.size),
+                            pluralStringResource(
+                                R.plurals.tag_bulk_selected_count,
+                                bulkSelectedCopyIds.size,
+                                bulkSelectedCopyIds.size,
+                            ),
                             modifier =
                                 Modifier
                                     .weight(1f)
@@ -618,11 +627,15 @@ private fun InterpretationChipsRow(
                 selected = true,
                 onClick = { onDismissChip(chip.id) },
                 modifier = Modifier.testTag(interpretationChipTag(chip.id)),
-                label = { Text(chip.label) },
+                label = { Text(chip.label.resolve()) },
                 trailingIcon = {
                     Icon(
                         Icons.Rounded.Clear,
-                        contentDescription = stringResource(R.string.nl_search_chip_dismiss, chip.label),
+                        contentDescription =
+                            stringResource(
+                                R.string.nl_search_chip_dismiss,
+                                chip.label.resolve(),
+                            ),
                         modifier = Modifier.size(InputChipDefaults.IconSize),
                     )
                 },
@@ -822,7 +835,7 @@ private fun LibrarySearchControls(
                 FilterChip(
                     selected = status == candidate,
                     onClick = { onStatusChange(candidate) },
-                    label = { Text(candidate.label) },
+                    label = { Text(stringResource(candidate.labelRes)) },
                 )
             }
         }
@@ -976,8 +989,15 @@ private fun BookCard(
                 )
                 Text(
                     text =
-                        "${book.copyLabel} ・ " +
-                            stringResource(R.string.book_copy_count, editionCopyCount),
+                        stringResource(
+                            R.string.book_card_copy_summary,
+                            book.copyLabel,
+                            pluralStringResource(
+                                R.plurals.book_copy_count,
+                                editionCopyCount,
+                                editionCopyCount,
+                            ),
+                        ),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -988,7 +1008,7 @@ private fun BookCard(
                     book.ndcCode?.let { code ->
                         NdcBadge(
                             code = code,
-                            category = book.ndcCategory?.label,
+                            category = book.ndcCategory?.let { stringResource(it.labelRes) },
                         )
                     }
                     StatusBadge(book.readingStatus)
@@ -1031,7 +1051,10 @@ private fun NdcBadge(
         color = MaterialTheme.colorScheme.tertiaryContainer,
     ) {
         Text(
-            text = "NDC $code${category?.let { " · $it" }.orEmpty()}",
+            text =
+                category
+                    ?.let { stringResource(R.string.library_ndc_chip_with_category, code, it) }
+                    ?: stringResource(R.string.library_ndc_chip, code),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1046,7 +1069,7 @@ private fun StatusBadge(status: ReadingStatus) {
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Text(
-            text = status.label,
+            text = stringResource(status.labelRes),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1081,7 +1104,14 @@ private fun EmptyLibrary(
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = if (isSearching) "該当する本がありません" else "最初の1冊を登録しよう",
+                text =
+                    stringResource(
+                        if (isSearching) {
+                            R.string.library_empty_searching_title
+                        } else {
+                            R.string.library_empty_title
+                        },
+                    ),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1089,8 +1119,8 @@ private fun EmptyLibrary(
                 text =
                     when {
                         hasInterpretation -> stringResource(R.string.nl_search_empty_hint)
-                        isSearching -> "検索条件を変えてみてください"
-                        else -> "下の「スキャン」から本のバーコードを読み取れます"
+                        isSearching -> stringResource(R.string.library_empty_searching_body)
+                        else -> stringResource(R.string.library_empty_body)
                     },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1153,7 +1183,9 @@ private fun EditBookSheet(
             .orEmpty()
     val formattedAddedAt =
         remember(book.addedAt) {
-            DateFormat.getDateTimeInstance().format(Date(book.addedAt))
+            DateFormat
+                .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                .format(Date(book.addedAt))
         }
     val unsetLocation = stringResource(R.string.location_unset_value)
     val orderedTierBooks =
@@ -1187,7 +1219,7 @@ private fun EditBookSheet(
         }
     val targetTierBooks = locationTierId?.let(candidateBooksByTier::get).orEmpty()
 
-    fun error(field: BookEditField): String? = errors.firstOrNull { it.field == field }?.reason
+    fun error(field: BookEditField): UiMessage? = errors.firstOrNull { it.field == field }?.reason
 
     fun reset() {
         title = book.title
@@ -1274,7 +1306,7 @@ private fun EditBookSheet(
                 }
             }
             Text(
-                text = stringResource(R.string.book_edit_isbn, book.isbn13 ?: "ISBNなし"),
+                text = stringResource(R.string.book_edit_isbn, book.isbn13 ?: stringResource(R.string.book_detail_no_isbn)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1288,7 +1320,7 @@ private fun EditBookSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = stringResource(R.string.book_copy_count, editionCopyCount),
+                text = pluralStringResource(R.plurals.book_copy_count, editionCopyCount, editionCopyCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -1298,7 +1330,7 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_copy_label)) },
                 isError = error(BookEditField.COPY_LABEL) != null,
-                supportingText = error(BookEditField.COPY_LABEL)?.let { message -> { Text(message) } },
+                supportingText = error(BookEditField.COPY_LABEL)?.let { message -> { Text(message.resolve()) } },
                 enabled = !busy,
                 singleLine = true,
             )
@@ -1312,7 +1344,7 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_book_title)) },
                 isError = error(BookEditField.TITLE) != null,
-                supportingText = error(BookEditField.TITLE)?.let { message -> { Text(message) } },
+                supportingText = error(BookEditField.TITLE)?.let { message -> { Text(message.resolve()) } },
                 enabled = !busy,
                 singleLine = true,
             )
@@ -1324,7 +1356,7 @@ private fun EditBookSheet(
                 isError = error(BookEditField.PRIMARY_AUTHOR) != null,
                 supportingText =
                     error(BookEditField.PRIMARY_AUTHOR)?.let { message ->
-                        { Text(message) }
+                        { Text(message.resolve()) }
                     },
                 enabled = !busy,
                 singleLine = true,
@@ -1335,7 +1367,7 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_publisher)) },
                 isError = error(BookEditField.PUBLISHER) != null,
-                supportingText = error(BookEditField.PUBLISHER)?.let { message -> { Text(message) } },
+                supportingText = error(BookEditField.PUBLISHER)?.let { message -> { Text(message.resolve()) } },
                 enabled = !busy,
                 singleLine = true,
             )
@@ -1347,7 +1379,7 @@ private fun EditBookSheet(
                 isError = error(BookEditField.PUBLISHED_YEAR) != null,
                 supportingText =
                     error(BookEditField.PUBLISHED_YEAR)?.let { message ->
-                        { Text(message) }
+                        { Text(message.resolve()) }
                     },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 enabled = !busy,
@@ -1359,7 +1391,7 @@ private fun EditBookSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.book_edit_ndc_code)) },
                 isError = error(BookEditField.NDC_CODE) != null,
-                supportingText = error(BookEditField.NDC_CODE)?.let { message -> { Text(message) } },
+                supportingText = error(BookEditField.NDC_CODE)?.let { message -> { Text(message.resolve()) } },
                 enabled = !busy,
                 singleLine = true,
             )
@@ -1371,7 +1403,7 @@ private fun EditBookSheet(
                 isError = error(BookEditField.NDC_EDITION) != null,
                 supportingText =
                     error(BookEditField.NDC_EDITION)?.let { message ->
-                        { Text(message) }
+                        { Text(message.resolve()) }
                     },
                 enabled = !busy,
                 singleLine = true,
@@ -1396,7 +1428,7 @@ private fun EditBookSheet(
                 placeholder = { Text(stringResource(R.string.book_edit_location_example)) },
                 leadingIcon = { Icon(Icons.Rounded.LocationOn, contentDescription = null) },
                 isError = error(BookEditField.LOCATION) != null,
-                supportingText = error(BookEditField.LOCATION)?.let { message -> { Text(message) } },
+                supportingText = error(BookEditField.LOCATION)?.let { message -> { Text(message.resolve()) } },
                 enabled = !busy && locationTierId == null,
                 singleLine = true,
             )
@@ -1497,7 +1529,7 @@ private fun EditBookSheet(
                         enabled = rightNeighbor != null && !moving,
                     ) { Text(stringResource(R.string.shelf_order_move_right)) }
                 }
-                (shelfMoveState as? ShelfMoveUiState.Error)?.let { Text(it.message) }
+                (shelfMoveState as? ShelfMoveUiState.Error)?.let { Text(it.message.resolve()) }
             }
             Text(
                 text = stringResource(R.string.book_edit_reading_status),
@@ -1511,7 +1543,7 @@ private fun EditBookSheet(
                     FilterChip(
                         selected = status == candidate,
                         onClick = { status = candidate },
-                        label = { Text(candidate.label) },
+                        label = { Text(stringResource(candidate.labelRes)) },
                         enabled = !busy,
                     )
                 }
@@ -1589,7 +1621,7 @@ private fun EditBookSheet(
                     stringResource(
                         R.string.book_delete_confirm_message,
                         book.title,
-                        book.isbn13 ?: "ISBNなし",
+                        book.isbn13 ?: stringResource(R.string.book_detail_no_isbn),
                     ),
                 )
             },
@@ -1629,16 +1661,54 @@ private fun EditBookSheet(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.reconciliation_preview_warning))
-                    Text("タイトル: ${book.title} → ${preview.candidate.title}")
-                    Text("著者: ${book.primaryAuthor} → ${preview.candidate.primaryAuthor}")
-                    Text("ISBN: ${book.isbn13 ?: "なし"} → ${preview.candidate.isbn13}")
-                    Text("出版社: ${book.publisher ?: "なし"} → ${preview.candidate.publisher ?: "なし"}")
-                    Text("出版年: ${book.publishedYear ?: "なし"} → ${preview.candidate.publishedYear ?: "なし"}")
-                    Text("NDC: ${book.ndcCode ?: "なし"} → ${preview.candidate.ndcCode ?: "なし"}")
+                    val none = stringResource(R.string.reconciliation_diff_none)
+                    Text(
+                        stringResource(
+                            R.string.reconciliation_diff_title,
+                            book.title,
+                            preview.candidate.title,
+                        ),
+                    )
+                    Text(
+                        stringResource(
+                            R.string.reconciliation_diff_author,
+                            book.primaryAuthor,
+                            preview.candidate.primaryAuthor,
+                        ),
+                    )
+                    Text(
+                        stringResource(
+                            R.string.reconciliation_diff_isbn,
+                            book.isbn13 ?: none,
+                            preview.candidate.isbn13,
+                        ),
+                    )
+                    Text(
+                        stringResource(
+                            R.string.reconciliation_diff_publisher,
+                            book.publisher ?: none,
+                            preview.candidate.publisher ?: none,
+                        ),
+                    )
+                    Text(
+                        stringResource(
+                            R.string.reconciliation_diff_year,
+                            book.publishedYear?.toString() ?: none,
+                            preview.candidate.publishedYear?.toString() ?: none,
+                        ),
+                    )
+                    Text(
+                        stringResource(
+                            R.string.reconciliation_diff_ndc,
+                            book.ndcCode ?: none,
+                            preview.candidate.ndcCode ?: none,
+                        ),
+                    )
                     if (preview.existingEditionId != null) {
                         Text(
-                            stringResource(
-                                R.string.reconciliation_merge_notice,
+                            pluralStringResource(
+                                R.plurals.reconciliation_merge_notice,
+                                preview.existingCopyCount,
                                 preview.existingCopyCount,
                                 preview.currentEditionCopyCount,
                             ),
@@ -1647,8 +1717,9 @@ private fun EditBookSheet(
                     }
                     if (preview.existingEditionId == null && preview.currentEditionCopyCount > 1) {
                         Text(
-                            stringResource(
-                                R.string.reconciliation_shared_notice,
+                            pluralStringResource(
+                                R.plurals.reconciliation_shared_notice,
+                                preview.currentEditionCopyCount,
                                 preview.currentEditionCopyCount,
                             ),
                             color = MaterialTheme.colorScheme.error,
@@ -1766,7 +1837,7 @@ private fun LocationManagerSheet(
                         shelf.tiers.forEach { tier ->
                             LocationItemRow(
                                 name = tier.name,
-                                detail = stringResource(R.string.location_copy_count, tier.copyCount),
+                                detail = pluralStringResource(R.plurals.location_copy_count, tier.copyCount, tier.copyCount),
                                 enabled = !busy,
                                 modifier = Modifier.padding(start = 20.dp),
                                 onEdit = { editor = LocationEditorTarget(LocationLevel.TIER, tier.id, initialName = tier.name) },
@@ -1781,7 +1852,7 @@ private fun LocationManagerSheet(
                 }
             }
             (mutationState as? LocationMutationUiState.Error)?.let { state ->
-                Text(state.message, color = MaterialTheme.colorScheme.error)
+                Text(state.message.resolve(), color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -1860,7 +1931,7 @@ private fun LocationManagerSheet(
             title = { Text(stringResource(R.string.location_in_use_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.location_in_use_message, state.copyCount))
+                    Text(pluralStringResource(R.plurals.location_in_use_message, state.copyCount, state.copyCount))
                     FilterChip(
                         selected = replacementTierId == null,
                         onClick = { replacementTierId = null },

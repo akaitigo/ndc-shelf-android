@@ -1,6 +1,8 @@
 package dev.ndcshelf.app.domain.importer
 
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.export.LibraryExporter
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -31,27 +33,27 @@ class LibraryCsvImporter(
         val bytes = try {
             readLimited(input)
         } catch (_: SourceTooLargeException) {
-            return invalid("入力ファイルは${limits.maxSourceBytes}バイト以下にしてください")
+            return invalid(UiMessage(R.string.import_error_file_too_large, limits.maxSourceBytes))
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            return invalid("CSVファイルを読み込めませんでした")
+            return invalid(UiMessage(R.string.import_error_csv_unreadable))
         }
 
         val source = try {
             decodeUtf8(bytes)
         } catch (_: Exception) {
-            return invalid("CSVファイルはUTF-8で保存してください")
+            return invalid(UiMessage(R.string.import_error_csv_encoding))
         }
         currentCoroutineContext().ensureActive()
-        if (source.isEmpty()) return invalid("ヘッダー行がありません")
+        if (source.isEmpty()) return invalid(UiMessage(R.string.import_error_csv_no_header))
 
         return try {
             parseSource(source, bytes.size.toLong())
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            invalid("CSVの構文が正しくありません")
+            invalid(UiMessage(R.string.import_error_csv_syntax))
         }
     }
 
@@ -75,12 +77,16 @@ class LibraryCsvImporter(
             for (record in parser) {
                 currentCoroutineContext().ensureActive()
                 if (records.size >= limits.maxRecords) {
-                    return invalid("蔵書件数は${limits.maxRecords}件以下にしてください")
+                    return invalid(UiMessage(R.string.import_error_too_many_records, limits.maxRecords))
                 }
                 val row = record.recordNumber.toInt()
                 if (record.size() != headers.size) {
                     headerErrors.errors.addCapped(
-                        ImportValidationError(row, null, "列数がヘッダーと一致しません"),
+                        ImportValidationError(
+                            row,
+                            null,
+                            UiMessage(R.string.import_error_csv_column_count),
+                        ),
                     )
                     if (headerErrors.errors.size >= MAX_ERRORS) break
                     continue
@@ -124,11 +130,15 @@ class LibraryCsvImporter(
         val errors = mutableListOf<ImportValidationError>()
         val warnings = mutableListOf<ImportValidationError>()
         REQUIRED_COLUMNS.filterNot(headers::contains).forEach { column ->
-            errors.addCapped(ImportValidationError(null, column, "必須列がありません"))
+            errors.addCapped(ImportValidationError(null, column, UiMessage(R.string.import_error_csv_required_column)))
         }
         (headers - LibraryExporter.CSV_COLUMNS.toSet()).forEach { column ->
             warnings.addCapped(
-                ImportValidationError(null, column.safeForError(), "未知の列は無視されます"),
+                ImportValidationError(
+                    null,
+                    column.safeForError(),
+                    UiMessage(R.string.import_error_csv_unknown_column),
+                ),
             )
         }
         return HeaderValidation(errors, warnings)
@@ -147,7 +157,7 @@ class LibraryCsvImporter(
     ): Long? {
         val value = value(column)?.takeIf(String::isNotBlank) ?: return null
         return value.toLongOrNull() ?: run {
-            errors.addCapped(ImportValidationError(row, column, "整数として指定してください"))
+            errors.addCapped(ImportValidationError(row, column, UiMessage(R.string.import_error_expect_integer)))
             null
         }
     }
@@ -200,7 +210,7 @@ class LibraryCsvImporter(
         if (size < MAX_ERRORS) add(error)
     }
 
-    private fun invalid(reason: String) = LibraryCsvParseResult.Invalid(
+    private fun invalid(reason: UiMessage) = LibraryCsvParseResult.Invalid(
         listOf(ImportValidationError(null, null, reason)),
     )
 

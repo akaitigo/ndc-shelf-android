@@ -2,6 +2,7 @@ package dev.ndcshelf.app.data.repository
 
 import android.database.sqlite.SQLiteConstraintException
 import androidx.room.withTransaction
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.data.local.AppDatabase
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
@@ -24,6 +25,7 @@ import dev.ndcshelf.app.domain.sync.SyncMutation
 import dev.ndcshelf.app.domain.sync.SyncMutationJournal
 import dev.ndcshelf.app.data.sync.syncDelete
 import dev.ndcshelf.app.data.sync.toSyncUpsert
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import java.text.Normalizer
 import java.util.Locale
@@ -217,7 +219,12 @@ private fun suggestion(source: WorkVariant, candidate: WorkVariant): WorkVariant
         } else {
             WorkVariantSuggestionConfidence.MEDIUM
         },
-        reason = if (sameAuthor) "タイトルと著者が一致" else "版表記を除いたタイトルが一致",
+        reason =
+            if (sameAuthor) {
+                UiMessage(R.string.work_variant_reason_title_author)
+            } else {
+                UiMessage(R.string.work_variant_reason_title_only)
+            },
     )
 }
 

@@ -15,9 +15,11 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.test.core.app.ApplicationProvider
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LocationRoom
@@ -31,6 +33,15 @@ import org.junit.Rule
 import org.junit.Test
 
 class LibraryLocationScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+    private fun copySummary(copyLabel: String): String =
+        context.getString(
+            R.string.book_card_copy_summary,
+            copyLabel,
+            context.resources.getQuantityString(R.plurals.book_copy_count, 2, 2),
+        )
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -38,9 +49,10 @@ class LibraryLocationScreenTest {
     fun locationManagerShowsEmptyAndNestedNodes() {
         setLibraryContent(emptyList())
 
-        composeRule.onNodeWithText("置き場所を管理").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.location_manage_action)).performClick()
 
-        composeRule.onNodeWithText("従来の自由入力は自動変換されません", substring = true)
+        composeRule
+            .onNodeWithText(context.getString(R.string.location_manager_description))
             .assertIsDisplayed()
         composeRule.onNodeWithText("書斎").assertIsDisplayed()
         composeRule.onNodeWithText("本棚A").assertIsDisplayed()
@@ -54,7 +66,7 @@ class LibraryLocationScreenTest {
         composeRule.onNodeWithText("テスト本").performClick()
         openCopyEditor("所蔵本")
 
-        composeRule.onNodeWithText("登録済みの段").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.location_registered_tier)).performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("書斎 / 本棚A / 上段")
             .onFirst()
             .performScrollTo()
@@ -88,11 +100,17 @@ class LibraryLocationScreenTest {
         composeRule.onNodeWithText("中央の本").performClick()
         openCopyEditor("中央用")
 
-        composeRule.onNodeWithText("左: 左の本").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("右: 右の本").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("左へ移動").performScrollTo().assertIsEnabled()
-        composeRule.onNodeWithText("右へ移動").performScrollTo().assertIsEnabled()
-        composeRule.onNodeWithText("棚へ入れる位置").performScrollTo().assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.shelf_order_left_neighbor, "左の本"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.shelf_order_right_neighbor, "右の本"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.shelf_order_move_left)).performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.shelf_order_move_right)).performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.shelf_order_insert_title)).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -120,13 +138,19 @@ class LibraryLocationScreenTest {
 
         composeRule.onNodeWithText("テスト本").performClick()
         openCopyEditor("所蔵本")
-        composeRule.onNodeWithText("「上段の本」の後").assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.shelf_order_insert_after, "上段の本"))
+            .assertExists()
 
         composeRule.onNodeWithText("書斎 / 本棚A / 下段")
             .performSemanticsAction(SemanticsActions.OnClick)
 
-        composeRule.onNodeWithText("「下段の本」の後").assertExists()
-        composeRule.onNodeWithText("「上段の本」の後").assertDoesNotExist()
+        composeRule
+            .onNodeWithText(context.getString(R.string.shelf_order_insert_after, "下段の本"))
+            .assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.shelf_order_insert_after, "上段の本"))
+            .assertDoesNotExist()
     }
 
     @Test
@@ -137,13 +161,13 @@ class LibraryLocationScreenTest {
         )
         setLibraryContent(books)
 
-        composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
-        composeRule.onNodeWithText("貸出用 ・ 同じ版を2冊所蔵").assertIsDisplayed()
+        composeRule.onNodeWithText(copySummary("保存用")).assertIsDisplayed()
+        composeRule.onNodeWithText(copySummary("貸出用")).assertIsDisplayed()
 
-        composeRule.onNodeWithText("保存用 ・ 同じ版を2冊所蔵").performClick()
+        composeRule.onNodeWithText(copySummary("保存用")).performClick()
         openCopyEditor("保存用")
-        composeRule.onNodeWithText("コピーごとの情報").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("同じ版で共通の情報").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.book_copy_details)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.book_edition_details)).performScrollTo().assertIsDisplayed()
     }
 
     private fun setLibraryContent(books: List<LibraryBook>) {
@@ -172,7 +196,13 @@ class LibraryLocationScreenTest {
 
     private fun openCopyEditor(copyLabel: String) {
         val description =
-            "$copyLabel、場所 書斎 / 本棚A / 上段、未読、紙。タップして編集"
+            context.getString(
+                R.string.book_detail_copy_description,
+                copyLabel,
+                "書斎 / 本棚A / 上段",
+                context.getString(R.string.reading_status_unread),
+                context.getString(R.string.book_detail_media_physical),
+            )
         composeRule.onNodeWithTag(BOOK_DETAIL_TEST_TAG)
             .performScrollToNode(hasContentDescription(description))
         composeRule.onNodeWithContentDescription(

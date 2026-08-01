@@ -144,7 +144,7 @@ class RoomSeriesRepositoryIntegrationTest {
             suggestions.map { suggestion ->
                 SeriesConfirmationDraft(
                     workId = suggestion.workId,
-                    volumeLabel = suggestion.proposedVolumeLabel,
+                    volumeLabel = requireNotNull(suggestion.proposedVolumeLabel),
                     type = suggestion.proposedType,
                     sourceTitle = suggestion.sourceTitle,
                     origin = SeriesMembershipOrigin.TITLE_SUGGESTION,
@@ -171,7 +171,7 @@ class RoomSeriesRepositoryIntegrationTest {
         assertEquals(listOf("membership-2"), database.seriesDao().getAllMemberships().map { it.id })
 
         val manual = requireNotNull(repository.suggestionFor("manual"))
-        assertEquals("巻番号なし", manual.proposedVolumeLabel)
+        assertNull(manual.proposedVolumeLabel)
         assertEquals(SeriesMembershipType.OTHER, manual.proposedType)
     }
 

@@ -13,9 +13,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.test.core.app.ApplicationProvider
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
@@ -28,6 +30,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class BookDetailScreenTest {
+    private val appContext = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -65,29 +69,44 @@ class BookDetailScreenTest {
 
         composeRule.onNodeWithTag(BOOK_DETAIL_TEST_TAG).assertIsDisplayed()
         composeRule.onNodeWithText(first.title).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("${first.title} の表紙なし").assertIsDisplayed()
-        scrollDetailTo(hasText("未分類"))
-        composeRule.onNodeWithText("未分類").assertIsDisplayed()
-        scrollDetailTo(hasText("所有コピー 2冊"))
-        composeRule.onNodeWithText("所有コピー 2冊").assertIsDisplayed()
-        scrollDetailTo(hasText("紙・電子"))
-        composeRule.onNodeWithText("紙・電子").assertIsDisplayed()
-        scrollDetailTo(hasText("NDLから再取得・照合"))
-        composeRule.onNodeWithText("NDLから再取得・照合").assertIsDisplayed()
-        scrollDetailTo(hasText("シリーズを整理"))
-        composeRule.onNodeWithText("シリーズを整理")
+        composeRule
+            .onNodeWithContentDescription(appContext.getString(R.string.book_cover_missing, first.title))
+            .assertIsDisplayed()
+        scrollDetailTo(hasText(appContext.getString(R.string.book_detail_unclassified)))
+        composeRule.onNodeWithText(appContext.getString(R.string.book_detail_unclassified)).assertIsDisplayed()
+        val copiesHeading =
+            appContext.resources.getQuantityString(R.plurals.book_detail_copies_section, 2, 2)
+        scrollDetailTo(hasText(copiesHeading))
+        composeRule.onNodeWithText(copiesHeading).assertIsDisplayed()
+        val mediaLabels =
+            listOf(
+                appContext.getString(R.string.book_detail_media_physical),
+                appContext.getString(R.string.book_detail_media_digital),
+            ).joinToString(appContext.getString(R.string.value_list_separator))
+        scrollDetailTo(hasText(mediaLabels))
+        composeRule.onNodeWithText(mediaLabels).assertIsDisplayed()
+        scrollDetailTo(hasText(appContext.getString(R.string.book_detail_reconcile)))
+        composeRule.onNodeWithText(appContext.getString(R.string.book_detail_reconcile)).assertIsDisplayed()
+        scrollDetailTo(hasText(appContext.getString(R.string.book_detail_series_action)))
+        composeRule.onNodeWithText(appContext.getString(R.string.book_detail_series_action))
             .assertIsDisplayed()
             .performClick()
         assertEquals(first.workId, managedWorkId)
-        scrollDetailTo(hasText("版違いを管理"))
-        composeRule.onNodeWithText("版違いを管理")
+        scrollDetailTo(hasText(appContext.getString(R.string.book_detail_variant_action)))
+        composeRule.onNodeWithText(appContext.getString(R.string.book_detail_variant_action))
             .assertIsDisplayed()
             .performClick()
         assertEquals(first.workId, managedVariantWorkId)
-        scrollDetailTo(hasContentDescription("保存用、場所 書庫、未読、電子。タップして編集"))
-        composeRule.onNodeWithContentDescription(
-            "保存用、場所 書庫、未読、電子。タップして編集",
-        ).performClick()
+        val savedCopyDescription =
+            appContext.getString(
+                R.string.book_detail_copy_description,
+                "保存用",
+                "書庫",
+                appContext.getString(R.string.reading_status_unread),
+                appContext.getString(R.string.book_detail_media_digital),
+            )
+        scrollDetailTo(hasContentDescription(savedCopyDescription))
+        composeRule.onNodeWithContentDescription(savedCopyDescription).performClick()
         assertEquals("copy-2", editedCopyId)
     }
 
@@ -148,6 +167,8 @@ class BookDetailScreenTest {
 }
 
 class BookDetailRestorationTest {
+    private val appContext = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectedEditionSurvivesSavedStateRestorationAndBackReturnsToLibrary() =
@@ -161,8 +182,8 @@ class BookDetailRestorationTest {
             restoration.emulateSaveAndRestore()
 
             onNodeWithTag(BOOK_DETAIL_TEST_TAG).assertIsDisplayed()
-            onNodeWithContentDescription("本棚へ戻る").performClick()
-            onNodeWithText("My Library").assertIsDisplayed()
+            onNodeWithContentDescription(appContext.getString(R.string.book_detail_back)).performClick()
+            onNodeWithText(appContext.getString(R.string.library_title)).assertIsDisplayed()
         }
 
     @androidx.compose.runtime.Composable

@@ -26,6 +26,7 @@ import dev.ndcshelf.app.domain.repository.TagMutationResult
 import dev.ndcshelf.app.domain.repository.TagRepository
 import dev.ndcshelf.app.domain.repository.UpdateBookResult
 import dev.ndcshelf.app.domain.search.SearchInterpretationChip
+import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -107,7 +108,10 @@ class MainViewModelNaturalLanguageSearchTest {
             val result = viewModel.librarySearchResult.value
             assertEquals("未読の自然科学", result.criteria.query)
             assertEquals(
-                listOf("未読", "NDC 4類 自然科学"),
+                listOf(
+                    UiMessage(R.string.reading_status_unread),
+                    UiMessage(R.string.nl_search_chip_ndc, 4, UiMessage(R.string.ndc_category_4)),
+                ),
                 result.interpretationChips.map(SearchInterpretationChip::label),
             )
             collection.cancel()
@@ -135,7 +139,13 @@ class MainViewModelNaturalLanguageSearchTest {
             assertEquals(4, effective.ndcTopClass)
             assertEquals("未読", effective.query)
             assertEquals(
-                listOf("NDC 4類 自然科学"),
+                listOf(
+                    UiMessage(
+                        R.string.nl_search_chip_ndc,
+                        4,
+                        UiMessage(R.string.ndc_category_4),
+                    ),
+                ),
                 viewModel.librarySearchResult.value.interpretationChips
                     .map(SearchInterpretationChip::label),
             )
@@ -200,7 +210,7 @@ class MainViewModelNaturalLanguageSearchTest {
             assertNull(explicit.readingStatus)
             assertEquals(setOf("tag-unread"), explicit.tagIds)
             assertEquals(
-                listOf("タグ: 未読"),
+                listOf(UiMessage(R.string.nl_search_chip_tag, "未読")),
                 viewModel.librarySearchResult.value.interpretationChips
                     .map(SearchInterpretationChip::label),
             )

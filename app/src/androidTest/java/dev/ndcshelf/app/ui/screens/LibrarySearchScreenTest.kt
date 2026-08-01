@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResult
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils
 import com.google.android.apps.common.testing.accessibility.framework.checks.ImageContrastCheck
@@ -19,6 +20,7 @@ import com.google.android.apps.common.testing.accessibility.framework.integratio
 import dev.ndcshelf.app.BookDeleteUiState
 import dev.ndcshelf.app.BookEditUiState
 import dev.ndcshelf.app.LocationMutationUiState
+import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
@@ -35,6 +37,8 @@ import org.junit.Rule
 import org.junit.Test
 
 class LibrarySearchScreenTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -64,8 +68,8 @@ class LibrarySearchScreenTest {
             onSortChange = { sort = it },
         )
 
-        composeRule.onNode(hasText("読書中") and hasClickAction()).performClick()
-        composeRule.onNodeWithText("タイトル").performClick()
+        composeRule.onNode(hasText(context.getString(R.string.insights_metric_reading)) and hasClickAction()).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.library_sort_title)).performClick()
 
         assertEquals(ReadingStatus.READING, status)
         assertEquals(LibrarySort.TITLE, sort)

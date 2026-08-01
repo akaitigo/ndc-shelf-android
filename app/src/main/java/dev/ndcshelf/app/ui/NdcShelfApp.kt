@@ -428,8 +428,9 @@ fun NdcShelfApp(
         val message =
             when (val state = libraryExportState) {
                 is LibraryExportUiState.Success -> {
-                    resources.getString(
-                        R.string.export_success,
+                    resources.getQuantityString(
+                        R.plurals.export_success,
+                        state.bookCount,
                         state.bookCount,
                     )
                 }
@@ -596,7 +597,7 @@ fun NdcShelfApp(
         val message =
             when (val state = tagMutationState) {
                 TagMutationUiState.Done -> resources.getString(R.string.tag_mutation_done)
-                is TagMutationUiState.Invalid -> state.message
+                is TagMutationUiState.Invalid -> state.message.resolve(resources)
                 TagMutationUiState.Duplicate -> resources.getString(R.string.tag_mutation_duplicate)
                 TagMutationUiState.LimitReached -> resources.getString(R.string.tag_mutation_limit)
                 TagMutationUiState.NotFound -> resources.getString(R.string.tag_mutation_not_found)
@@ -613,15 +614,20 @@ fun NdcShelfApp(
         when (val state = databaseBackupState) {
             is DatabaseBackupUiState.Created -> {
                 snackbarHostState.showSnackbar(
-                    resources.getString(R.string.database_backup_created, state.copyCount),
+                    resources.getQuantityString(
+                        R.plurals.database_backup_created,
+                        state.copyCount,
+                        state.copyCount,
+                    ),
                 )
                 viewModel.dismissDatabaseBackup()
             }
 
             is DatabaseBackupUiState.Restored -> {
                 snackbarHostState.showSnackbar(
-                    resources.getString(
-                        R.string.database_restore_success,
+                    resources.getQuantityString(
+                        R.plurals.database_restore_success,
+                        state.restoredCopyCount,
                         state.restoredCopyCount,
                         state.automaticBackupName,
                     ),
