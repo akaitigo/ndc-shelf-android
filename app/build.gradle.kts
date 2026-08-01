@@ -236,7 +236,11 @@ val verifyReleaseBundleSize by tasks.registering {
     dependsOn("bundleRelease")
 
     // 実測17,590,996バイト（2026-07-29、R8有効・未署名）+20%を上限とする。
+    // 直近の実測は18,409,960バイト（2026-08-01、同条件）。
     // 根拠と更新手順はdocs/PERFORMANCE_BUDGETS.mdに記載。
+    // 端末内LLM runtimeを採用する場合は30,000,000バイト以上が必要になる
+    // （実測はdocs/adr/0009-on-device-llm-librarian.md）。予算の引き上げには
+    // maintainerの承認と上記docの更新を伴うこと。
     val budgetBytes = 21_000_000L
     val bundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
     inputs.file(bundle)

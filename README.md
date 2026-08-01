@@ -184,7 +184,7 @@ SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLと�
 - [x] オプトインのシリーズ新刊候補確認
 - [ ] シリーズ統合
 - [ ] バックアップ同期（任意・オプトイン）
-- [ ] AI司書（任意・オプトイン）
+- [ ] AI司書（任意・オプトイン。規則ベースの提案で提供中。自然文で提案する端末内LLMは、推論エンジンとモデルを未同梱のため利用できません。詳細は[ADR 0009](docs/adr/0009-on-device-llm-librarian.md)）
 
 詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。将来の任意同期は、実装前に固定した[公開protocol](docs/SYNC_PROTOCOL.md)と[脅威モデル](docs/SYNC_THREAT_MODEL.md)に従います。
 

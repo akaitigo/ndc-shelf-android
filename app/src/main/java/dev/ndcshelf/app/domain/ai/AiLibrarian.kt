@@ -145,20 +145,40 @@ enum class AiLibrarianReason {
     LIBRARY_OVERVIEW,
 }
 
-/** 回答の1ブロック。[refs]は[AiLibrarianItem.ref]の並び。 */
+/**
+ * 回答の1ブロック。[refs]は[AiLibrarianItem.ref]の並び。
+ *
+ * [comment]は端末内LLMが生成した自然文で、検証済みの[refs]に対する補足だけを持つ。
+ * 規則ベースの[OnDeviceHeuristicLibrarian]は常にnullを返す。
+ */
 data class AiLibrarianAnswerEntry(
     val label: String?,
     val reason: AiLibrarianReason,
     val refs: List<String>,
+    val comment: String? = null,
 )
 
+/** 回答を生成した経路。UIは自然文が生成物であることをこの値で明示する。 */
+enum class AiLibrarianAnswerSource {
+    /** 端末内の決定的ヒューリスティック。 */
+    HEURISTIC,
+
+    /** 端末内LLM。 */
+    ON_DEVICE_LLM,
+}
+
 /**
- * プロバイダの回答。自然文の断定を持たず、参照refと理由コードだけを返すため、
- * UIは常に参照本と不確実性の注記を添えて表示できる。
+ * プロバイダの回答。参照refと理由コードを常に持ち、自然文（[summary]・
+ * [AiLibrarianAnswerEntry.comment]）は任意の付加情報として扱う。
+ * UIは自然文の有無に関わらず参照本と不確実性の注記を添えて表示する。
  */
 data class AiLibrarianAnswer(
     val intent: AiLibrarianIntent,
     val entries: List<AiLibrarianAnswerEntry>,
+    val summary: String? = null,
+    val source: AiLibrarianAnswerSource = AiLibrarianAnswerSource.HEURISTIC,
+    /** 端末内LLMから縮退した場合の理由。縮退していなければnull。 */
+    val degradedFrom: AiLibrarianProviderErrorKind? = null,
 ) {
     val referencedRefs: List<String>
         get() = entries.flatMap(AiLibrarianAnswerEntry::refs).distinct()
@@ -168,6 +188,9 @@ data class AiLibrarianAnswer(
 enum class AiLibrarianProviderId {
     /** 端末内の決定的ヒューリスティック。ネットワーク通信を行わない。 */
     ON_DEVICE_HEURISTIC,
+
+    /** 端末内LLM。推論経路でネットワークAPIを使用しない（docs/adr/0009）。 */
+    ON_DEVICE_LLM,
 }
 
 /**

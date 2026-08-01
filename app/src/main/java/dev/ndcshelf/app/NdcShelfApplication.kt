@@ -14,10 +14,13 @@ import dev.ndcshelf.app.background.AndroidSeriesReleaseNotifier
 import dev.ndcshelf.app.background.AndroidSeriesWatchScheduler
 import dev.ndcshelf.app.data.backup.RoomDatabaseBackupManager
 import dev.ndcshelf.app.data.consent.RoomConsentRepository
+import dev.ndcshelf.app.data.diagnostics.DiagnosticsLlmTelemetrySink
 import dev.ndcshelf.app.data.diagnostics.DiagnosticsLoggingBookMetadataService
 import dev.ndcshelf.app.data.diagnostics.FileDiagnosticsLogger
 import dev.ndcshelf.app.data.diagnostics.RoomDiagnosticsSnapshotCollector
+import dev.ndcshelf.app.data.local.AndroidLlmDeviceProbe
 import dev.ndcshelf.app.data.local.AppDatabase
+import dev.ndcshelf.app.data.local.FileLlmModelStore
 import dev.ndcshelf.app.data.local.SharedPreferencesAiLibrarianStore
 import dev.ndcshelf.app.data.local.SharedPreferencesInsightsExclusionStore
 import dev.ndcshelf.app.data.local.SharedPreferencesLibrarySearchSettingsStore
@@ -40,6 +43,13 @@ import dev.ndcshelf.app.domain.ai.AiLibrarianHistoryStore
 import dev.ndcshelf.app.domain.ai.AiLibrarianProvider
 import dev.ndcshelf.app.domain.ai.AiLibrarianUsageStore
 import dev.ndcshelf.app.domain.ai.OnDeviceHeuristicLibrarian
+import dev.ndcshelf.app.domain.ai.llm.FallbackAiLibrarianProvider
+import dev.ndcshelf.app.domain.ai.llm.LlmCapabilityChecker
+import dev.ndcshelf.app.domain.ai.llm.LlmModelCatalog
+import dev.ndcshelf.app.domain.ai.llm.LlmModelStore
+import dev.ndcshelf.app.domain.ai.llm.LlmTelemetrySink
+import dev.ndcshelf.app.domain.ai.llm.OnDeviceLlmLibrarian
+import dev.ndcshelf.app.domain.ai.llm.UnavailableLlmRuntime
 import dev.ndcshelf.app.domain.consent.ConsentRepository
 import dev.ndcshelf.app.domain.diagnostics.DiagnosticsLogger
 import dev.ndcshelf.app.domain.insights.InsightsExclusionStore
@@ -200,11 +210,50 @@ class AppContainer(
 
     val librarySearchSettings = SharedPreferencesLibrarySearchSettingsStore(application)
 
+    /** 端末内LLMのモデル配置。OSクラウドbackup・D2D対象外のnoBackup領域へ置く。 */
+    val llmModelStore: LlmModelStore =
+        FileLlmModelStore(application.noBackupFilesDir.resolve("llm-models"))
+
+    private val llmDeviceProbe = AndroidLlmDeviceProbe(application)
+
+    private val llmTelemetrySink: LlmTelemetrySink = DiagnosticsLlmTelemetrySink(diagnosticsLogger)
+
     /**
-     * AI司書のプロバイダ。本版は端末内で完結する決定的実装だけを提供し、
-     * クラウドのAIプロバイダは接続しない（docs/adr/0007-optin-ai-librarian.md）。
+     * 端末内LLMのAI司書プロバイダ。台帳（[LlmModelCatalog]）に承認済みモデルが
+     * 無い、または端末条件を満たさない場合は起動せず、規則ベースの
+     * [OnDeviceHeuristicLibrarian]へ縮退する（docs/adr/0009-on-device-llm-librarian.md）。
      */
-    val aiLibrarianProvider: AiLibrarianProvider = OnDeviceHeuristicLibrarian()
+    private val onDeviceLlmLibrarian =
+        OnDeviceLlmLibrarian(
+            capabilityProvider = {
+                LlmCapabilityChecker.evaluate(
+                    profile = llmDeviceProbe.profile(),
+                    model = LlmModelCatalog.defaultModel,
+                    enabled = true,
+                )
+            },
+            modelStore = llmModelStore,
+            runtime = UnavailableLlmRuntime,
+            telemetry = llmTelemetrySink,
+        )
+
+    /**
+     * AI司書のプロバイダ。端末内LLMを第一候補にし、非対応端末・モデル未取得・
+     * 初期化失敗・出力検証失敗では規則ベース実装の検証済み回答へ縮退する。
+     * どちらの経路も端末外へデータを送信しない（docs/adr/0007・0009）。
+     */
+    val aiLibrarianProvider: AiLibrarianProvider =
+        FallbackAiLibrarianProvider(
+            preferred = onDeviceLlmLibrarian,
+            fallback = OnDeviceHeuristicLibrarian(),
+            preferredEnabled = {
+                LlmCapabilityChecker.canAcquire(
+                    profile = llmDeviceProbe.profile(),
+                    model = LlmModelCatalog.defaultModel,
+                    enabled = true,
+                )
+            },
+        )
 
     private val aiLibrarianStore = SharedPreferencesAiLibrarianStore(application)
 

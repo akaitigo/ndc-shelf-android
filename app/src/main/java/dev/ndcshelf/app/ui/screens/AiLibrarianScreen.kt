@@ -707,6 +707,7 @@ internal val AiLibrarianProviderId.labelRes: Int
     get() =
         when (this) {
             AiLibrarianProviderId.ON_DEVICE_HEURISTIC -> R.string.ai_librarian_destination_on_device
+            AiLibrarianProviderId.ON_DEVICE_LLM -> R.string.ai_librarian_destination_on_device_llm
         }
 
 internal val AiLibrarianIntent.headlineRes: Int

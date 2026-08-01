@@ -121,6 +121,25 @@ WorkとSeriesは独立し、`SeriesMembership`で0対多を表現します。巻
 
 タグ名は**信頼できない入力**として扱う。表示はComposeの`Text`によるプレーンテキスト描画だけを使い、HTML・マークアップ・リンクとして解釈しない。将来の自然言語検索(#40)・再発見(#41)がタグを利用する場合も、タグ名をプロンプトやログへ命令として渡さず、引用データとして分離すること（AIへの入力は同意ゲート(#43)配下）。エクスポート・バックアップの対象は、JSON v4（タグ定義と蔵書ごとのタグ名、往復可能）、完全バックアップ形式v14（ID・付与・保存済み検索を含む正本）で、CSVは18列互換維持のため対象外とする（docs/EXPORT_FORMAT.md）。保存済み検索はタグIDを参照するため、内部IDを持たないJSONエクスポートへは含めず、完全バックアップだけで移行する。
 
+## AI司書と端末内LLM
+
+AI司書の入口は`domain/ai`の`AiLibrarianProvider`だけで、UI・Room・蔵書Repositoryへ依存しません。実装は3つあります。
+
+- `OnDeviceHeuristicLibrarian`: 規則ベースの決定的実装（ADR 0007）。縮退先として常に残します。
+- `domain/ai/llm`の`OnDeviceLlmLibrarian`: 端末内LLM実装（ADR 0009）。推論runtimeは`LlmInferenceRuntime`の背後へ隔離し、JVMテストではfake runtimeで契約・上限・出力検証・失敗分類を検証します。
+- `domain/ai/llm`の`FallbackAiLibrarianProvider`: LLMを第一候補にし、失敗時に検証済みのヒューリスティック回答へ縮退する合成プロバイダ。縮退理由は`AiLibrarianAnswer.degradedFrom`で伝え、未検証の部分回答は表示しません。キャンセルは縮退させずそのまま伝播します。
+
+端末内LLM経路の不変条件は次のとおりです。
+
+- **allowlist**: `LlmModelCatalog`に無いモデルは取得も読み込みもできません。定義（`LlmModelDefinition`）は構築時にURLポリシー・SHA-256形式・サイズ上限・必要空き容量を検査します。
+- **能力判定（fail-closed）**: `LlmCapabilityChecker`がAPI level・ABI・物理RAM・空き容量・low-RAM端末・runtimeの有無を検査し、一つでも欠ければ`Unsupported`を返します。取得の可否も同じ条件で判定するため、起動できない端末へ大容量モデルをダウンロードさせません。minSdk 23は維持し、非対応端末では機能そのものを提供しません。
+- **原子的な導入**: `data/local`の`FileLlmModelStore`が`noBackupFilesDir/llm-models`配下の一時領域へ書き出しながらサイズ上限とSHA-256を計算し、両方が一致した場合だけrenameで有効化します。失敗時は一時ファイルだけを消し、直前の検証済みモデルを保持します。旧versionの削除は新versionの有効化確定後です。
+- **通信の分離**: モデル取得だけが`data/remote`の`LlmModelDownloadSource`（OkHttp、redirect拒否）を通ります。推論経路はAndroidのネットワークAPIを使用しません（`docs/NETWORK_BOUNDARY.md`）。
+- **データ隔離と出力検証**: `LlmPromptBuilder`が固定の`AI_LIBRARIAN_SYSTEM_INSTRUCTION`と固定の出力形式指示だけを連結し、質問文と書誌はJSONの値としてescapeします。`LlmAnswerParser`は既知のintent/reason、要求内のref、件数・文字数上限をすべて満たす出力だけを受け入れ、一点でも外れれば全体を破棄します（切り詰めません）。
+- **診断**: `data/diagnostics`の`DiagnosticsLlmTelemetrySink`が、失敗分類をallowlistの`DiagnosticCode`（`ON_DEVICE_LLM`カテゴリ）へ記録し、model id/version・hash先頭16桁・runtime版・所要時間・文字数は揮発する端末内バッファにだけ保持します。質問文・書誌・回答は構造上入りません。
+
+推論runtimeとモデルは**未採用**で、`LlmModelCatalog.models`は空、`AppContainer`は`UnavailableLlmRuntime`を渡すため、現時点のAI司書は常にヒューリスティックへ縮退します。採用条件と実測値はADR 0009、台帳運用は[LOCAL_LLM_MODELS.md](LOCAL_LLM_MODELS.md)を正本とします。
+
 ## 分析（Insights）
 
 分析タブの読書傾向（積読期間、NDC類、読了推移）とランダム再発見は、`domain/insights`の`LibraryInsightsCalculator`が蔵書・読書セッション・除外リスト・現在時刻・乱数seedを引数に取る純粋関数として集計します。集計は端末内だけで行い外部送信せず、候補には保存済みの事実だけから導いた「選ばれた理由」を必ず添えます。読了日つきの履歴が閾値未満の指標はグラフを表示せず、必要なデータを説明します（fail-safeな断定回避）。

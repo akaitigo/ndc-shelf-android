@@ -14,6 +14,9 @@ enum class DiagnosticCategory {
     SCAN,
     SYNC,
     DOCUMENT_PROVIDER,
+
+    /** 端末内LLM（AI司書）。質問文・書誌・回答は記録しない。 */
+    ON_DEVICE_LLM,
 }
 
 /** 記録できる事象の全列挙。ここに無い事象は記録できない（fail-closed）。 */
@@ -38,6 +41,15 @@ enum class DiagnosticCode(
     SYNC_CONFLICT_RECORDED(DiagnosticCategory.SYNC),
     SAF_OPEN_FAILED(DiagnosticCategory.DOCUMENT_PROVIDER),
     SAF_WRITE_FAILED(DiagnosticCategory.DOCUMENT_PROVIDER),
+    LLM_DEVICE_UNSUPPORTED(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_MODEL_MISSING(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_MODEL_CHECKSUM_MISMATCH(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_MODEL_DOWNLOAD_FAILED(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_MODEL_INSTALLED(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_INITIALIZATION_FAILED(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_INFERENCE_FAILED(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_INVALID_OUTPUT(DiagnosticCategory.ON_DEVICE_LLM),
+    LLM_DEGRADED_TO_HEURISTIC(DiagnosticCategory.ON_DEVICE_LLM),
 }
 
 data class DiagnosticEvent(
