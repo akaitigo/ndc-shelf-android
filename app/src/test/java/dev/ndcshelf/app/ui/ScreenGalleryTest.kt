@@ -30,10 +30,16 @@ import org.robolectric.annotation.GraphicsMode
  * READMEと配布ページへ掲載する、スキャン・シリーズ画面のスクリーンショット回帰。
  * 主要画面（本棚・分類・オンボーディング）は[ScreenshotRegressionTest]が担当する。
  * 匿名fixtureだけを使い、実在ISBN・氏名・棚位置・通知内容を含めない。
+ *
+ * 掲載用のため、ロケールは日本語（`values-ja`）に固定する。
+ * 英語・擬似ロケールの回帰は[ScreenshotRegressionTest]が担当する（docs/I18N.md）。
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+@Config(
+    sdk = [35],
+    qualifiers = "ja-rJP-w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav",
+)
 class ScreenGalleryTest {
     @get:Rule
     val composeRule = createComposeRule()
