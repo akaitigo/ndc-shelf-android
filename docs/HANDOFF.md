@@ -132,3 +132,33 @@ sqlite3 /tmp/lib.db "select e.isbn13, w.title from owned_copies c
 ```
 
 **取得したISBNと書名は個人の蔵書データ。ログや公開文書へ残さない。**
+
+## 過去のセッションを読む
+
+作業の経緯を掘り返したいときの手順。**生の記録をそのまま読ませてはいけない。**
+Claude Code のセッション記録は数十MB（このプロジェクトの最長は22.4MB / 7,834行）あり、
+どの文脈にも載らない。中身の大半はビルドログやUIダンプなどのツール出力で、読む価値も薄い。
+
+まず `docs/HANDOFF.md` と `docs/ON_DEVICE_LLM_FINDINGS.md` を読むこと。
+生ログは、そこに書かれていない細部を確認したいときだけ使う。
+
+```bash
+S=~/.claude/projects/-home-ryusei-code/<session-id>.jsonl
+
+# 会話だけを時系列で（22.4MB → 約278KB）
+python3 tools/read_session.py "$S"
+
+# 利用者の指示だけ（何を依頼されたかの一覧。約60KB）
+python3 tools/read_session.py "$S" --user-only
+
+# 語で絞る（前後の文脈つき）
+python3 tools/read_session.py "$S" --grep prefill --context 2
+
+# 実行したコマンドの一覧
+python3 tools/read_session.py "$S" --commands
+```
+
+セッションIDは `~/.claude/projects/-home-ryusei-code/` のファイル名。
+`ls -lt` で新しい順に並ぶ。同じセッションの続きをやるなら `claude --resume <session-id>`。
+
+**記録には個人の蔵書データ（実在のISBN・書名）が含まれる。抽出結果を公開文書へ貼らない。**
