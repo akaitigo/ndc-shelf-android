@@ -6,9 +6,12 @@ NDC Shelf is a privacy-first Android app for scanning ISBN barcodes, retrieving
 book metadata, and managing a personal library by Nippon Decimal
 Classification (NDC).
 
-The current stable baseline is `v0.1.2` (`versionCode = 3`). It was verified on
-a Pixel 7 running Android 16: the app launches and the ISBN scan → NDL metadata
-lookup → local shelf registration flow works.
+The current release candidate is `v0.6.0` (`versionCode = 8`) — the first build
+distributed as a signed APK through GitHub Releases. Earlier tags exist but no
+APK was ever published for them.
+
+Read `docs/HANDOFF.md` first. It carries the live state: what is in flight, what
+was measured on a physical device, and what the next task is.
 
 ## Stack and structure
 
@@ -22,17 +25,31 @@ lookup → local shelf registration flow works.
 
 ## Build and validation
 
-Use the repository Gradle wrapper:
+Use the repository Gradle wrapper. **The app has two product flavors**
+(`standard` and `ai`), so task names carry the flavor:
 
 ```bash
-./gradlew testDebugUnitTest
-./gradlew lintDebug
-./gradlew assembleDebug
+./gradlew verifyV06ReleaseConfiguration verifyBackupPolicy verifyLicenseReport \
+  :app:cyclonedxDirectBom verifyRoborazziStandardDebug lintStandardDebug \
+  assembleStandardDebug assembleAiDebug lintAiDebug
 ```
 
-The project requires JDK 17 and Android SDK 37. For scanner or camera changes,
-also verify the debug APK on a physical Android device. Report clearly when a
-check could not run because the SDK, emulator, or device was unavailable.
+That command mirrors the CI `verify` job. Also run the shell gates:
+
+```bash
+.github/scripts/verify-translations.sh
+git diff --exit-code -- app/schemas
+```
+
+The project requires **JDK 17** (`$HOME/.local/share/mise/installs/java/temurin-17.0.20+8`
+on the maintainer's machine — GraalVM 21 fails with a `JdkImageTransform` error)
+and Android SDK 37. For scanner or camera changes, also verify the debug APK on
+a physical Android device. Report clearly when a check could not run because the
+SDK, emulator, or device was unavailable.
+
+`standard` is the distributed flavor. `ai` bundles an on-device LLM runtime; it
+is built and size-checked in CI but **not attached to releases** — see
+`docs/ON_DEVICE_LLM_FINDINGS.md` for the measurements behind that decision.
 
 ## Implementation rules
 
@@ -48,7 +65,12 @@ check could not run because the SDK, emulator, or device was unavailable.
 - Keep UI state in the ViewModel/repository flow; Composables should not access
   Room or remote services directly.
 - New user-facing text belongs in Android string resources.
-- New dependencies require a clear need and a compatible license.
+- New dependencies require a clear need and a compatible license. Any dependency
+  change must regenerate `gradle/verification-metadata.xml`
+  (`./gradlew --write-verification-metadata sha256 <tasks>`), otherwise CI fails.
+- CI gates must fail closed. Two gates silently passed with zero inputs in the
+  past (`verify-action-pins.sh` and the OSV scan); when adding a check, make it
+  fail when it has nothing to inspect.
 
 ## Change hygiene
 

@@ -117,7 +117,14 @@ releaseビルドは毎PRのverifyには重いため必須ジョブへは入れ�
 
 `standard` の主なサイズ要因はML Kitバーコードモデルと `libbarhopper_v3.so`（4 ABI）。
 `ai` の増分はLiteRT-LMの `liblitertlm_jni.so`（arm64-v8a、21,199,264 B）。他ABIは
-フレーバーの `abiFilters` で除外している。超過時はABI別配信・依存の見直しを先に検討し、
+フレーバーの `abiFilters` で除外している。
+
+AABへのネイティブデバッグシンボル同梱は `release { ndk { debugSymbolLevel = "none" } }` で
+無効にしている。有効だと `liblitertlm_jni.so.sym` がライブラリ本体と同じ約9.2 MB
+追加され、APKには含まれないのにAABだけが膨らむ。さらにシンボル抽出にはNDKが必要な
+ため、NDKの無い環境では生成されず**ローカルとCIで計測値が食い違う**（v0.6.0の
+リリース失敗の原因）。対象は他社製のprebuiltライブラリで、シンボルを保持しても
+自前で修正できない。超過時はABI別配信・依存の見直しを先に検討し、
 正当な増加であればこの表と `releaseApkBudgets` / `releaseBundleBudgets` の定数を更新する。
 
 ### runtime選定時の実測（2026-08-01、参考）

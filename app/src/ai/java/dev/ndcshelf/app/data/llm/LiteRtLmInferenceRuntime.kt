@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.data.llm
 
+import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -55,7 +56,8 @@ class LiteRtLmInferenceRuntime : LlmInferenceRuntime {
                 ).apply { initialize() }
             } catch (cancellation: CancellationException) {
                 throw cancellation
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+                logFailure("engineInitialize", error)
                 throw LlmRuntimeException(LlmFailureKind.INITIALIZATION_FAILED)
             }
         return LiteRtLmSession(engine)
@@ -82,7 +84,8 @@ class LiteRtLmInferenceRuntime : LlmInferenceRuntime {
                         ).also { created -> conversation = created }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
-                } catch (_: Throwable) {
+                } catch (error: Throwable) {
+                    logFailure("createConversation", error)
                     throw LlmRuntimeException(LlmFailureKind.INITIALIZATION_FAILED)
                 }
 
@@ -97,7 +100,8 @@ class LiteRtLmInferenceRuntime : LlmInferenceRuntime {
                     if (continuation.isActive) continuation.resume(text)
                 } catch (cancellation: CancellationException) {
                     if (continuation.isActive) continuation.resumeWithException(cancellation)
-                } catch (_: Throwable) {
+                } catch (error: Throwable) {
+                    logFailure("sendMessage", error)
                     if (continuation.isActive) {
                         continuation.resumeWithException(
                             LlmRuntimeException(LlmFailureKind.INFERENCE_FAILED),
@@ -116,6 +120,26 @@ class LiteRtLmInferenceRuntime : LlmInferenceRuntime {
 
     private companion object {
         const val RUNTIME_VERSION = "litert-lm/0.15.0"
+
+        const val LOG_TAG = "NdcShelfLlm"
+
+        /**
+         * 失敗の切り分けに必要な最小限だけを記録する。
+         *
+         * 例外のメッセージには入力（質問文・書誌）が混ざりうるため出力しない。
+         * 記録するのは例外のクラス名と、原因例外のクラス名、発生位置の先頭1フレームだけ。
+         */
+        fun logFailure(
+            stage: String,
+            error: Throwable,
+        ) {
+            val frame = error.stackTrace.firstOrNull()?.let { f -> "${f.className}.${f.methodName}" } ?: "unknown"
+            val causes =
+                generateSequence(error.cause) { c -> c.cause }
+                    .take(3)
+                    .joinToString(" <- ") { c -> c.javaClass.name }
+            Log.e(LOG_TAG, "$stage failed: ${error.javaClass.name} at $frame causes=[$causes]")
+        }
 
         /** greedy decoding。構造化JSONを返させるため揺らぎを最小にする。 */
         val GREEDY_SAMPLER = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0)

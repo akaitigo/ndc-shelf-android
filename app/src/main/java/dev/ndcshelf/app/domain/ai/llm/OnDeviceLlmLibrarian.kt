@@ -73,6 +73,9 @@ class OnDeviceLlmLibrarian(
                 }
                 verifiedModels += modelKey
             }
+            // 推論runtimeは重み最適化キャッシュをここへ書く。存在しないと
+            // 毎回キャッシュを作れず初期化が遅くなるため、開く前に必ず用意する。
+            runCatching { runtimeCacheDir.mkdirs() }
             val session =
                 try {
                     runtime.open(
