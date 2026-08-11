@@ -64,7 +64,7 @@ class LibraryLocationScreenTest {
         setLibraryContent(listOf(book()))
 
         composeRule.onNodeWithText("テスト本").performClick()
-        openCopyEditor("所蔵本")
+        openCopyEditor(context.getString(R.string.copy_label_default))
 
         composeRule.onNodeWithText(context.getString(R.string.location_registered_tier)).performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("書斎 / 本棚A / 上段")
@@ -137,7 +137,7 @@ class LibraryLocationScreenTest {
         setLibraryContent(books)
 
         composeRule.onNodeWithText("テスト本").performClick()
-        openCopyEditor("所蔵本")
+        openCopyEditor(context.getString(R.string.copy_label_default))
         composeRule
             .onNodeWithText(context.getString(R.string.shelf_order_insert_after, "上段の本"))
             .assertExists()
