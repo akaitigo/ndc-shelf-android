@@ -112,7 +112,8 @@ class RoomLocationRepositoryIntegrationTest {
 
         val copy = database.libraryDao().findCopyById("copy")
         assertNull(copy?.tierId)
-        assertEquals("未設定", copy?.location)
+        // 未設定は端末ロケールに依存しない空文字で保存する。
+        assertEquals("", copy?.location)
     }
 
     private suspend fun insertBook(tierId: String, location: String = "以前の自由入力") {

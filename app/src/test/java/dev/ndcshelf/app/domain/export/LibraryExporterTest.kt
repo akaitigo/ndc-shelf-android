@@ -32,7 +32,8 @@ class LibraryExporterTest {
         assertTrue(output.contains("\"publisher\": null"))
         assertTrue(output.contains("\"classificationSource\": \"NDL\""))
         assertTrue(output.contains("\"readingStatus\": \"READING\""))
-        assertTrue(output.contains("\"copyLabel\": \"所蔵本\""))
+        // 未設定の所蔵ラベルは空文字でexportする（表示時にlocalizeするため）。
+        assertTrue(output.contains("\"copyLabel\": \"\""))
         assertFalse(output.startsWith("\uFEFF"))
     }
 

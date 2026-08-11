@@ -36,6 +36,7 @@ import dev.ndcshelf.app.domain.model.BookEditValidator
 import dev.ndcshelf.app.domain.model.BookstoreBook
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibraryDefaults
 import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
 import dev.ndcshelf.app.domain.model.LibraryStats
 import dev.ndcshelf.app.domain.model.ManualBookDraft
@@ -393,7 +394,7 @@ class DefaultLibraryRepository(
                         id = copyId,
                         editionId = editionId,
                         mediaType = MediaType.PHYSICAL.name,
-                        location = "未設定",
+                        location = LibraryDefaults.UNSET_LOCATION,
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
                         copyLabel = "1冊目",
@@ -424,7 +425,7 @@ class DefaultLibraryRepository(
                 ndcEdition = metadata.ndcEdition,
                 classificationSource = source,
                 mediaType = MediaType.PHYSICAL,
-                location = "未設定",
+                location = LibraryDefaults.UNSET_LOCATION,
                 readingStatus = ReadingStatus.UNREAD,
                 addedAt = addedAt,
                 copyLabel = "1冊目",
@@ -482,7 +483,7 @@ class DefaultLibraryRepository(
                         id = copyId,
                         editionId = editionId,
                         mediaType = validated.mediaType.name,
-                        location = "未設定",
+                        location = LibraryDefaults.UNSET_LOCATION,
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
                         copyLabel = "1冊目",
@@ -506,7 +507,7 @@ class DefaultLibraryRepository(
                         ndcEdition = validated.ndcEdition,
                         classificationSource = classificationSource,
                         mediaType = validated.mediaType,
-                        location = "未設定",
+                        location = LibraryDefaults.UNSET_LOCATION,
                         readingStatus = ReadingStatus.UNREAD,
                         addedAt = addedAt,
                         copyLabel = "1冊目",
@@ -798,7 +799,7 @@ class DefaultLibraryRepository(
                         id = copyId,
                         editionId = existing.editionId,
                         mediaType = MediaType.PHYSICAL.name,
-                        location = "未設定",
+                        location = LibraryDefaults.UNSET_LOCATION,
                         readingStatus = ReadingStatus.UNREAD.name,
                         addedAt = addedAt,
                         copyLabel = normalizedLabel,
@@ -809,7 +810,7 @@ class DefaultLibraryRepository(
                     existing.toDomain().copy(
                         copyId = copyId,
                         mediaType = MediaType.PHYSICAL,
-                        location = "未設定",
+                        location = LibraryDefaults.UNSET_LOCATION,
                         readingStatus = ReadingStatus.UNREAD,
                         addedAt = addedAt,
                         locationTierId = null,
@@ -943,7 +944,7 @@ class DefaultLibraryRepository(
                             id = idFactory(),
                             editionId = editionId,
                             mediaType = MediaType.PHYSICAL.name,
-                            location = "未設定",
+                            location = LibraryDefaults.UNSET_LOCATION,
                             readingStatus = ReadingStatus.UNREAD.name,
                             addedAt = now,
                             copyLabel = "${currentCopyCount + 1}冊目",

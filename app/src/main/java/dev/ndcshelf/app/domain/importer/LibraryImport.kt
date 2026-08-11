@@ -4,6 +4,7 @@ import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.ClassificationSource
 import dev.ndcshelf.app.domain.model.LibraryBook
+import dev.ndcshelf.app.domain.model.LibraryDefaults
 import dev.ndcshelf.app.domain.model.MediaType
 import dev.ndcshelf.app.domain.model.ReadingStatus
 import dev.ndcshelf.app.domain.model.Tag
@@ -439,14 +440,18 @@ class LibraryImportPlanner(
                 NDC_EDITION_MAX_LENGTH,
                 errors,
             )
+        // 置き場所は未設定を許す。保存値は端末ロケールに依存しない空文字。
+        // 旧exportの'未設定'はここでは変換しない。利用者が棚名として"未設定"と
+        // 入力している場合と区別できず、exportの往復を壊すため。
+        // 端末内DBの旧値はMIGRATION_16_17が変換する。
         val location =
-            requiredText(
+            optionalText(
                 recordNumber,
                 "location",
                 record.location,
                 limits.maxLocationLength,
                 errors,
-            )
+            ) ?: LibraryDefaults.UNSET_LOCATION
         val classificationSource =
             enumValue<ClassificationSource>(
                 recordNumber,
@@ -484,14 +489,15 @@ class LibraryImportPlanner(
             )
         val publishedYear = normalizePublishedYear(recordNumber, record.publishedYear, errors)
         val addedAt = normalizeAddedAt(recordNumber, record.addedAt, errors)
+        // 所蔵ラベルも未設定を許す。表示時に copy_label_default でlocalizeする。
         val copyLabel =
-            requiredText(
+            optionalText(
                 recordNumber,
                 "copyLabel",
-                record.copyLabel ?: DEFAULT_COPY_LABEL,
+                record.copyLabel,
                 MAX_COPY_LABEL_LENGTH,
                 errors,
-            )
+            ) ?: LibraryDefaults.UNSET_COPY_LABEL
 
         if (errors.size != before) return null
         return LibraryBook(
@@ -509,10 +515,10 @@ class LibraryImportPlanner(
             classificationSource = requireNotNull(classificationSource),
             bibliographicSource = requireNotNull(bibliographicSource),
             mediaType = requireNotNull(mediaType),
-            location = requireNotNull(location),
+            location = location,
             readingStatus = requireNotNull(readingStatus),
             addedAt = requireNotNull(addedAt),
-            copyLabel = requireNotNull(copyLabel),
+            copyLabel = copyLabel,
         )
     }
 
@@ -762,7 +768,7 @@ class LibraryImportPlanner(
         const val NDC_CODE_MAX_LENGTH = 32
         const val NDC_EDITION_MAX_LENGTH = 32
         const val MAX_COPY_LABEL_LENGTH = 100
-        const val DEFAULT_COPY_LABEL = "所蔵本"
+        const val DEFAULT_COPY_LABEL = LibraryDefaults.UNSET_COPY_LABEL
         const val MIN_PUBLISHED_YEAR = 1
         const val MAX_CLOCK_SKEW_MILLIS = 24 * 60 * 60 * 1000L
         val NDC_CODE_REGEX = Regex("""\d{3}(?:\.\d+)?""")

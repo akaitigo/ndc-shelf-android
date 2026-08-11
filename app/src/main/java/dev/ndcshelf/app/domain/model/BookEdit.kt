@@ -18,7 +18,7 @@ data class BookEditDraft(
     val locationInsertAfterCopyId: String? = null,
     val locationInsertAtStart: Boolean = false,
     val locationPositionSpecified: Boolean = false,
-    val copyLabel: String = "所蔵本",
+    val copyLabel: String = LibraryDefaults.UNSET_COPY_LABEL,
 )
 
 data class ValidatedBookEdit(
@@ -79,18 +79,20 @@ class BookEditValidator(
             NDC_MAX_LENGTH,
             errors,
         )
-        val location = required(
-            draft.location,
+        // 置き場所と所蔵ラベルは未設定を許す。保存値は端末ロケールに依存しない空文字とし、
+        // 表示側が location_unset_value / copy_label_default でlocalizeする。
+        val location = optional(
+            LibraryDefaults.normalizeLocation(draft.location),
             BookEditField.LOCATION,
             MAX_LOCATION_LENGTH,
             errors,
-        )
-        val copyLabel = required(
-            draft.copyLabel,
+        ) ?: LibraryDefaults.UNSET_LOCATION
+        val copyLabel = optional(
+            LibraryDefaults.normalizeCopyLabel(draft.copyLabel),
             BookEditField.COPY_LABEL,
             MAX_COPY_LABEL_LENGTH,
             errors,
-        )
+        ) ?: LibraryDefaults.UNSET_COPY_LABEL
         val publishedYear = validatePublishedYear(draft.publishedYear, errors)
         if (ndcCode != null && !NDC_CODE_REGEX.matches(ndcCode)) {
             errors += BookEditValidationError(
@@ -108,13 +110,13 @@ class BookEditValidator(
                 publishedYear = publishedYear,
                 ndcCode = ndcCode,
                 ndcEdition = ndcEdition,
-                location = requireNotNull(location),
+                location = location,
                 readingStatus = draft.readingStatus,
                 locationTierId = draft.locationTierId,
                 locationInsertAfterCopyId = draft.locationInsertAfterCopyId,
                 locationInsertAtStart = draft.locationInsertAtStart,
                 locationPositionSpecified = draft.locationPositionSpecified,
-                copyLabel = requireNotNull(copyLabel),
+                copyLabel = copyLabel,
             ),
         )
     }

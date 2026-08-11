@@ -49,7 +49,8 @@ class BookEditValidatorTest {
         assertTrue(result.errors.any { it.field == BookEditField.PRIMARY_AUTHOR })
         assertTrue(result.errors.any { it.field == BookEditField.PUBLISHED_YEAR })
         assertTrue(result.errors.any { it.field == BookEditField.NDC_CODE })
-        assertTrue(result.errors.any { it.field == BookEditField.LOCATION })
+        // 置き場所の空欄は「未設定」であってエラーではない。
+        assertTrue(result.errors.none { it.field == BookEditField.LOCATION })
     }
 
     @Test
@@ -66,14 +67,24 @@ class BookEditValidatorTest {
     }
 
     @Test
-    fun `copy label is trimmed and validated independently`() {
+    fun `copy label is trimmed and blank means unset`() {
         val valid = validator.validate(draft().copy(copyLabel = "  保存用  "))
             as BookEditValidationResult.Valid
+        // 空白だけの入力は「未設定」。端末ロケールに依存しない空文字で保存し、
+        // 表示側がcopy_label_defaultでlocalizeする。
         val blank = validator.validate(draft().copy(copyLabel = " "))
-            as BookEditValidationResult.Invalid
+            as BookEditValidationResult.Valid
 
         assertEquals("保存用", valid.edit.copyLabel)
-        assertTrue(blank.errors.any { it.field == BookEditField.COPY_LABEL })
+        assertEquals("", blank.edit.copyLabel)
+    }
+
+    @Test
+    fun `blank location means unset instead of a validation error`() {
+        val blank = validator.validate(draft(location = "  "))
+            as BookEditValidationResult.Valid
+
+        assertEquals("", blank.edit.location)
     }
 
     private fun draft(

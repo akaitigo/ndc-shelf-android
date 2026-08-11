@@ -98,7 +98,8 @@ class AppDatabaseMigrationTest {
         assertEquals(emptyList<LocationRoomEntity>(), runBlocking { database.locationDao().getRooms() })
         assertEquals("READING", row.readingStatus)
         assertEquals(1_700_000_000_000L, row.addedAt)
-        assertEquals("所蔵本", row.copyLabel)
+        // v16→v17でロケール非依存の空文字へ寄せる。表示はcopy_label_defaultが担う。
+        assertEquals("", row.copyLabel)
     }
 
     @Test
@@ -198,7 +199,9 @@ class AppDatabaseMigrationTest {
                 assertEquals("旧位置", cursor.getString(0))
                 assertEquals("READING", cursor.getString(1))
                 assertEquals(42L, cursor.getLong(2))
-                assertEquals("所蔵本", cursor.getString(3))
+                // v3→v4は当時の既定値'所蔵本'を書き込むが、v16→v17がロケール非依存の
+                // 空文字へ寄せる。表示側がcopy_label_defaultでlocalizeする。
+                assertEquals("", cursor.getString(3))
             }
         migrated.close()
     }
@@ -672,6 +675,64 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
+    fun version16To17NormalizesLocaleDependentUnsetValues() {
+        // v16以前は未設定の置き場所を日本語literalで保存し、英語ロケールの端末では
+        // localizeされた"Not set"が保存されていた。所蔵ラベルの既定も'所蔵本'だった。
+        // 保存値がロケールに依存すると、同じ「未設定」が端末ごとに別の値になる。
+        migrationHelper.createDatabase(V16_DATABASE, 16).apply {
+            execSQL("INSERT INTO book_works VALUES ('work', '匿名の本', '匿名著者')")
+            execSQL(
+                "INSERT INTO book_editions VALUES " +
+                    "('edition', 'work', '9784101010014', NULL, NULL, NULL, NULL, NULL, 'UNKNOWN', 'NDL')",
+            )
+            // 日本語端末で未設定にした行・英語端末で未設定にした行・利用者が実際に
+            // 入力した行・利用者が付けたラベルの4通りを入れる。
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-ja', 'edition', 'PHYSICAL', '未設定', 'UNREAD', 1, NULL, NULL, '所蔵本')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-en', 'edition', 'PHYSICAL', 'Not set', 'UNREAD', 2, NULL, NULL, '所蔵本')",
+            )
+            execSQL(
+                "INSERT INTO owned_copies VALUES " +
+                    "('copy-real', 'edition', 'PHYSICAL', '書斎 / 棚A / 上段', 'READING', 3, NULL, NULL, '保存用')",
+            )
+            close()
+        }
+
+        val migrated =
+            migrationHelper.runMigrationsAndValidate(
+                V16_DATABASE,
+                APP_DATABASE_VERSION,
+                true,
+                *AppDatabase.MIGRATIONS.toTypedArray(),
+            )
+
+        migrated
+            .query("SELECT id, location, copyLabel FROM owned_copies ORDER BY id")
+            .use { cursor ->
+                val rows = mutableListOf<Triple<String, String, String>>()
+                while (cursor.moveToNext()) {
+                    rows += Triple(cursor.getString(0), cursor.getString(1), cursor.getString(2))
+                }
+                assertEquals(
+                    listOf(
+                        // 英語端末で保存された"Not set"も未設定として正規化する。
+                        Triple("copy-en", "", ""),
+                        // 日本語literalの未設定と既定ラベルは空文字へ寄せる。
+                        Triple("copy-ja", "", ""),
+                        // 利用者が実際に入力した値は書き換えない。
+                        Triple("copy-real", "書斎 / 棚A / 上段", "保存用"),
+                    ),
+                    rows,
+                )
+            }
+        migrated.close()
+    }
+
+    @Test
     fun version15To16AddsEmptySyncKeyTablesWithoutChangingDomainData() {
         migrationHelper.createDatabase(V15_DATABASE, 15).apply {
             execSQL("INSERT INTO book_works VALUES ('work', '同期前の本', '匿名著者')")
@@ -837,6 +898,7 @@ class AppDatabaseMigrationTest {
         const val V13_DATABASE = "migration-v13"
         const val V14_DATABASE = "migration-v14"
         const val V15_DATABASE = "migration-v15"
+        const val V16_DATABASE = "migration-v16"
         const val CORRUPT_DATABASE = "migration-corrupt"
         const val SCHEMA_ASSET_FOLDER = "dev.ndcshelf.app.data.local.AppDatabase"
 
