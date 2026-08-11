@@ -1,4 +1,4 @@
-# 引き継ぎ（2026-08-02 時点）
+# 引き継ぎ（2026-08-11 時点）
 
 作業を引き継ぐエージェントは、まずこの文書を読む。**古くなったら更新すること。**
 
@@ -7,26 +7,28 @@
 全Issueを完了し、**オープンなのは #55（v1.0最終ゲート）と #58（ロードマップ）の2件だけ**。
 #58 は #55 の完了で閉じる。
 
-配布はまだ一度も行われていない。**v0.6.0 が初の署名付きAPK配布**になる。
+stable版の配布はまだ一度も行われていない。**v0.6.0 が初の署名付きAPK配布**で、
+現在はpre-releaseとして署名付きAPKを公開済み（実機検証が済むまでpre-releaseのまま）。
 
-### 進行中: v0.6.0 の配布
+### 完了: v0.6.0 の配布物生成
 
-タグ `v0.6.0`（`2c889ed`）とGitHub Release（pre-release）は作成済み。
-**Release APK ワークフローがオーナーの承認待ちで止まっている。**
+タグ `v0.6.0`（`2c889ed`）とGitHub Release（pre-release）を作成し、
+**Release APK ワークフローは 2026-08-02 に承認・成功済み**
+（[run 30724429364](https://github.com/akaitigo/ndc-shelf-android/actions/runs/30724429364)）。
 
-- 承認先: `gh run list --workflow "Release APK"` で最新のrunを見る
-- 承認するとAPK・SHA256SUMS・署名情報・mapping・SBOM・NOTICESがReleaseへ添付される
-- **承認はオーナーが行う。エージェントは押さない**
+Releaseには次の7点が添付済み: `ndc-shelf-v0.6.0.apk`・`ndc-shelf-v0.6.0.aab`・
+`SHA256SUMS.txt`・`apk-signature-v0.6.0.txt`・`mapping-v0.6.0.txt`・
+`ndc-shelf.cdx.json`（SBOM）・`THIRD-PARTY-NOTICES.json`。
+署名はv1／v2／v3の3方式で検証成功し、証明書SHA-256はREADME掲載値と一致する（2026-08-11照合）。
 
-承認後にやること:
+**残るのはオーナーによる実機導入だけ。** エージェントには実機がないため実行できない。
 
-1. `gh release view v0.6.0 --json assets` でAPKの添付を確認する
-2. オーナーが実機へ導入し、動作を確認する
-3. `docs/releases/V1.0_RELEASE_CHECKLIST.md` の未チェック項目を埋める
+1. オーナーが実機へサイドロードし、v0.1.2からの更新インストールを含めて動作を確認する
+2. `docs/releases/V1.0_RELEASE_CHECKLIST.md` の未チェック項目を埋める
 
 ## 次にやること（この順で合意済み）
 
-### A. v0.6.0 を配布可能にする ← 承認待ちで停止中
+### A. v0.6.0 の実機検証 ← オーナーの実機作業待ち
 
 ### C. 書籍の内容情報をAPI取得する
 
