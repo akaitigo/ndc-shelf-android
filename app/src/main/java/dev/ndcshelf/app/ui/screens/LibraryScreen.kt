@@ -96,6 +96,7 @@ import dev.ndcshelf.app.ShelfMoveUiState
 import dev.ndcshelf.app.domain.model.BibliographicSource
 import dev.ndcshelf.app.domain.model.BookEditDraft
 import dev.ndcshelf.app.domain.model.BookEditField
+import dev.ndcshelf.app.domain.model.LibraryDefaults
 import dev.ndcshelf.app.domain.model.LibraryBook
 import dev.ndcshelf.app.domain.model.LibrarySearchCriteria
 import dev.ndcshelf.app.domain.model.LibrarySort
@@ -117,6 +118,8 @@ import dev.ndcshelf.app.ui.adaptive.EmptyDetailPane
 import dev.ndcshelf.app.ui.components.BookCover
 import dev.ndcshelf.app.ui.text.labelRes
 import dev.ndcshelf.app.ui.text.resolve
+import dev.ndcshelf.app.ui.text.orDefaultCopyLabel
+import dev.ndcshelf.app.ui.text.orUnsetLocationLabel
 import java.text.DateFormat
 import java.util.Date
 
@@ -991,7 +994,7 @@ private fun BookCard(
                     text =
                         stringResource(
                             R.string.book_card_copy_summary,
-                            book.copyLabel,
+                            book.copyLabel.orDefaultCopyLabel(),
                             pluralStringResource(
                                 R.plurals.book_copy_count,
                                 editionCopyCount,
@@ -1021,7 +1024,8 @@ private fun BookCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = book.location,
+                        // 保存値は端末ロケールに依存しない空文字。表示のたびにlocalizeする。
+                        text = book.location.orUnsetLocationLabel(),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1187,7 +1191,6 @@ private fun EditBookSheet(
                 .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
                 .format(Date(book.addedAt))
         }
-    val unsetLocation = stringResource(R.string.location_unset_value)
     val orderedTierBooks =
         remember(allBooks, book.locationTierId) {
             allBooks
@@ -1442,7 +1445,9 @@ private fun EditBookSheet(
                     onClick = {
                         locationTierId = null
                         positionSpecified = true
-                        location = unsetLocation
+                        // localizeされた文言を保存すると、端末のロケール次第で
+                        // 保存値が変わってしまう（英語端末では"Not set"が入っていた）。
+                        location = LibraryDefaults.UNSET_LOCATION
                     },
                     label = { Text(stringResource(R.string.location_unset_or_free)) },
                     enabled = !busy,

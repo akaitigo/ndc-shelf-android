@@ -5,6 +5,7 @@ import androidx.room.ColumnInfo
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import dev.ndcshelf.app.domain.model.LibraryDefaults
 
 @Entity(tableName = "book_works")
 data class BookWorkEntity(
@@ -285,7 +286,7 @@ data class OwnedCopyEntity(
     val addedAt: Long,
     val tierId: String? = null,
     val shelfOrderKey: String? = null,
-    val copyLabel: String = "所蔵本",
+    val copyLabel: String = LibraryDefaults.UNSET_COPY_LABEL,
 )
 
 @Entity(

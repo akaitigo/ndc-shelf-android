@@ -19,6 +19,7 @@ import dev.ndcshelf.app.data.local.TagEntity
 import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
+import dev.ndcshelf.app.domain.model.LibraryDefaults
 import dev.ndcshelf.app.scanner.Isbn
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -165,7 +166,7 @@ internal class DatabaseBackupCodec(
                         manifest.requiredInt("savedSearchCount")
                     },
             )
-        val snapshot = decodePayload(parseObject(payloadBytes), formatVersion)
+        val snapshot = decodePayload(parseObject(payloadBytes), formatVersion, databaseVersion)
         if (metadata.workCount != snapshot.works.size ||
             metadata.editionCount != snapshot.editions.size ||
             metadata.copyCount != snapshot.copies.size ||
@@ -603,7 +604,12 @@ internal class DatabaseBackupCodec(
     private fun decodePayload(
         payload: JsonObject,
         formatVersion: Int,
+        databaseVersion: Int,
     ): DatabaseSnapshot {
+        // v16以前のbackupは未設定を日本語literal（英語端末では"Not set"）で保存していた。
+        // そのまま復元すると端末内DBへ言語依存の値が戻るため、当時のbackupだけ正規化する。
+        // v17以降のbackupは既に空文字なので触らない（往復の無損失性を保つ）。
+        val normalizesLegacyUnsetValues = databaseVersion < LOCALE_INDEPENDENT_UNSET_DB_VERSION
         val schemaVersion = payload["schemaVersion"]?.jsonPrimitive?.intOrNull ?: 1
         if (schemaVersion > CURRENT_PAYLOAD_SCHEMA_VERSION) unsupported("Newer payload schema")
         if (schemaVersion != formatVersion) invalid("Format and payload schema versions differ")
@@ -653,7 +659,12 @@ internal class DatabaseBackupCodec(
                     mediaType =
                         value.optionalString("mediaType")
                             ?: if (formatVersion == 1) "PHYSICAL" else invalid("Missing mediaType"),
-                    location = value.requiredString("location"),
+                    // v17より前のbackupには日本語literalの未設定値が入っている。
+                    // 復元時に正規化しないと、英語ロケールの端末へ日本語が混入する。
+                    location =
+                        value.requiredString("location").let { raw ->
+                            if (normalizesLegacyUnsetValues) LibraryDefaults.normalizeLocation(raw) else raw
+                        },
                     readingStatus =
                         value.optionalString("readingStatus")
                             ?: if (formatVersion == 1) "UNREAD" else invalid("Missing readingStatus"),
@@ -662,9 +673,15 @@ internal class DatabaseBackupCodec(
                     shelfOrderKey = value.optionalString("shelfOrderKey"),
                     copyLabel =
                         if (schemaVersion < 5) {
-                            "所蔵本"
+                            LibraryDefaults.UNSET_COPY_LABEL
                         } else {
-                            value.requiredString("copyLabel")
+                            value.requiredString("copyLabel").let { raw ->
+                                if (normalizesLegacyUnsetValues) {
+                                    LibraryDefaults.normalizeCopyLabel(raw)
+                                } else {
+                                    raw
+                                }
+                            }
                         },
                 )
             }
@@ -1033,9 +1050,10 @@ internal class DatabaseBackupCodec(
         ) {
             invalid("Invalid shelf order key")
         }
+        // 空文字は「未設定」を表すロケール非依存の保存値なので許す。
+        // 表示側がcopy_label_defaultでlocalizeする。
         if (snapshot.copies.any { copy ->
-                copy.copyLabel.isBlank() ||
-                    copy.copyLabel.length > MAX_COPY_LABEL_LENGTH ||
+                copy.copyLabel.length > MAX_COPY_LABEL_LENGTH ||
                     '\u0000' in copy.copyLabel
             }
         ) {
@@ -1361,6 +1379,9 @@ internal class DatabaseBackupCodec(
     companion object {
         const val CURRENT_FORMAT_VERSION = 14
         private const val CURRENT_PAYLOAD_SCHEMA_VERSION = 14
+
+        /** 未設定値をロケール非依存の空文字へ寄せたdatabase version。 */
+        private const val LOCALE_INDEPENDENT_UNSET_DB_VERSION = 17
         private const val MAX_COPY_LABEL_LENGTH = 100
         private const val MAX_READING_NOTE_LENGTH = 2_000
         private const val MAX_RECORDED_ISBN_LENGTH = 32

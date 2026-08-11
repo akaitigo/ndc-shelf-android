@@ -608,6 +608,7 @@
     <string name="location_registered_tier">登録済みの段</string>
     <string name="location_unset_or_free">未設定・自由入力</string>
     <string name="location_unset_value">未設定</string>
+    <string name="copy_label_default">所蔵本</string>
     <string name="location_in_use_title">使用中の場所です</string>
     <plurals name="location_in_use_message">
         <item quantity="other">%1$d冊の移動先を選ぶか、未設定に戻してください。</item>

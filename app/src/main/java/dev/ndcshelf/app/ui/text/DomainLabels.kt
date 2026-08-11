@@ -1,6 +1,8 @@
 package dev.ndcshelf.app.ui.text
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import dev.ndcshelf.app.R
 import dev.ndcshelf.app.domain.model.NdcCategory
 import dev.ndcshelf.app.domain.model.ReadingSessionStatus
@@ -71,3 +73,21 @@ fun ndcCategoryLabelRes(digit: Int): Int =
 @get:StringRes
 val NdcCategory.labelRes: Int
     get() = ndcCategoryLabelRes(digit)
+
+/**
+ * 置き場所の保存値を表示用へ写像する。
+ *
+ * 保存値は端末ロケールに依存しない空文字（[dev.ndcshelf.app.domain.model.LibraryDefaults.UNSET_LOCATION]）。
+ * 保存値をそのまま表示すると、v16以前に書き込まれた日本語literalが
+ * 英語ロケールの画面へ出てしまう。
+ */
+@Composable
+fun String.orUnsetLocationLabel(): String = ifBlank { stringResource(R.string.location_unset_value) }
+
+/**
+ * 所蔵ラベルの保存値を表示用へ写像する。
+ *
+ * 利用者が付けていない場合は空文字で保存し、表示のたびにlocalizeする。
+ */
+@Composable
+fun String.orDefaultCopyLabel(): String = ifBlank { stringResource(R.string.copy_label_default) }

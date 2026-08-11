@@ -76,6 +76,8 @@ import dev.ndcshelf.app.domain.model.TagWithUsage
 import dev.ndcshelf.app.ui.components.BookCover
 import dev.ndcshelf.app.ui.text.labelRes
 import dev.ndcshelf.app.ui.text.resolve
+import dev.ndcshelf.app.ui.text.orDefaultCopyLabel
+import dev.ndcshelf.app.ui.text.orUnsetLocationLabel
 import dev.ndcshelf.app.ui.theme.NdcShelfTheme
 import java.text.DateFormat
 import java.util.Date
@@ -445,8 +447,8 @@ private fun CopyDetailCard(
     val description =
         stringResource(
             R.string.book_detail_copy_description,
-            copy.copyLabel,
-            copy.location,
+            copy.copyLabel.orDefaultCopyLabel(),
+            copy.location.orUnsetLocationLabel(),
             stringResource(copy.readingStatus.labelRes),
             copy.mediaType.label(),
         )
@@ -472,9 +474,9 @@ private fun CopyDetailCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Text(copy.copyLabel, style = MaterialTheme.typography.titleMedium)
+                Text(copy.copyLabel.orDefaultCopyLabel(), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    copy.location,
+                    copy.location.orUnsetLocationLabel(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -516,7 +518,7 @@ private fun ReadingSessionCard(
                     stringResource(
                         R.string.reading_history_entry_with_copy,
                         stringResource(session.status.labelRes),
-                        session.copyLabel,
+                        session.copyLabel.orDefaultCopyLabel(),
                     )
                 } else {
                     stringResource(session.status.labelRes)
@@ -646,7 +648,7 @@ private fun ReadingSessionEditorDialog(
                             FilterChip(
                                 selected = copyId == copy.copyId,
                                 onClick = { copyId = copy.copyId },
-                                label = { Text(copy.copyLabel) },
+                                label = { Text(copy.copyLabel.orDefaultCopyLabel()) },
                             )
                         }
                     }

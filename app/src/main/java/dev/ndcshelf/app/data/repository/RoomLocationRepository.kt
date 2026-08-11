@@ -19,6 +19,7 @@ import dev.ndcshelf.app.domain.sync.SyncMutation
 import dev.ndcshelf.app.domain.sync.SyncMutationJournal
 import dev.ndcshelf.app.data.sync.syncDelete
 import dev.ndcshelf.app.data.sync.toSyncUpsert
+import dev.ndcshelf.app.domain.model.LibraryDefaults
 import dev.ndcshelf.app.domain.text.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -312,6 +313,6 @@ class RoomLocationRepository(
 
     companion object {
         private const val MAX_NAME_LENGTH = 100
-        private const val UNSET_LOCATION = "未設定"
+        private const val UNSET_LOCATION = LibraryDefaults.UNSET_LOCATION
     }
 }

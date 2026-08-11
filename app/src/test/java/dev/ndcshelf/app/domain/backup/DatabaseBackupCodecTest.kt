@@ -1,5 +1,6 @@
 package dev.ndcshelf.app.domain.backup
 
+import dev.ndcshelf.app.data.local.APP_DATABASE_VERSION
 import dev.ndcshelf.app.data.local.BookEditionEntity
 import dev.ndcshelf.app.data.local.BookWorkEntity
 import dev.ndcshelf.app.data.local.LocationRoomEntity
@@ -20,6 +21,7 @@ import dev.ndcshelf.app.data.local.WishlistItemEntity
 import dev.ndcshelf.app.data.local.WorkGroupEntity
 import dev.ndcshelf.app.data.local.WorkGroupMembershipEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -90,7 +92,7 @@ class DatabaseBackupCodecTest {
                                 "manual-copy-1",
                                 "manual-edition-1",
                                 "PHYSICAL",
-                                "未設定",
+                                "",
                                 "UNREAD",
                                 2,
                             ),
@@ -98,7 +100,7 @@ class DatabaseBackupCodecTest {
                                 "manual-copy-2",
                                 "manual-edition-2",
                                 "DIGITAL",
-                                "未設定",
+                                "",
                                 "UNREAD",
                                 3,
                             ),
@@ -299,12 +301,36 @@ class DatabaseBackupCodecTest {
                 .single()
                 .readingStatus,
         )
+        // 旧formatにはcopyLabelが無い。ロケール非依存の空文字（未設定）で補う。
         assertEquals(
-            "所蔵本",
+            "",
             preview.snapshot.copies
                 .single()
                 .copyLabel,
         )
+        // 旧backupの日本語literalな置き場所も未設定として正規化する。
+        assertEquals(
+            "",
+            preview.snapshot.copies
+                .single()
+                .location,
+        )
+    }
+
+    @Test
+    fun `current backup keeps a location that happens to read as unset`() {
+        // v17以降のbackupは既に空文字で未設定を表すため、利用者が実際に
+        // 「未設定」という棚名を付けていた場合はそのまま復元する。
+        val snapshot =
+            sampleSnapshot().let { sample ->
+                sample.copy(copies = sample.copies.map { it.copy(location = "未設定") })
+            }
+        val currentCodec = DatabaseBackupCodec(currentDatabaseVersion = APP_DATABASE_VERSION)
+        val (archive, _) = currentCodec.encode(snapshot, "test", 1)
+
+        val preview = currentCodec.decode(ByteArrayInputStream(archive))
+
+        assertTrue(preview.snapshot.copies.all { it.location == "未設定" })
     }
 
     @Test
@@ -568,18 +594,26 @@ class DatabaseBackupCodecTest {
     }
 
     @Test
-    fun `invalid copy label is rejected before backup or restore`() {
-        val invalid =
+    fun `unset copy label is accepted but malformed labels are rejected`() {
+        // 空文字は「未設定」を表すロケール非依存の保存値なので、backupを拒否しない。
+        val unset =
             sampleSnapshot().copy(
-                copies = sampleSnapshot().copies.map { it.copy(copyLabel = " ") },
+                copies = sampleSnapshot().copies.map { it.copy(copyLabel = "") },
             )
+        codec.encode(unset, "0.1.2", 1)
 
-        val error =
-            assertThrows(BackupCodecException::class.java) {
-                codec.encode(invalid, "0.1.2", 1)
-            }
-
-        assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+        // 長すぎるラベルとNULバイトは引き続き拒否する。
+        listOf("x".repeat(101), "壊\u0000れた").forEach { label ->
+            val invalid =
+                sampleSnapshot().copy(
+                    copies = sampleSnapshot().copies.map { it.copy(copyLabel = label) },
+                )
+            val error =
+                assertThrows(BackupCodecException::class.java) {
+                    codec.encode(invalid, "0.1.2", 1)
+                }
+            assertEquals(DatabaseBackupFailure.INTEGRITY_FAILED, error.failure)
+        }
     }
 
     @Test

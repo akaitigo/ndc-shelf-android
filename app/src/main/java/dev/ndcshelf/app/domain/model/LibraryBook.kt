@@ -19,7 +19,7 @@ data class LibraryBook(
     val addedAt: Long,
     val locationTierId: String? = null,
     val shelfOrderKey: String? = null,
-    val copyLabel: String = "所蔵本",
+    val copyLabel: String = LibraryDefaults.UNSET_COPY_LABEL,
     val bibliographicSource: BibliographicSource = BibliographicSource.NDL,
 ) {
     val ndcCategory: NdcCategory?

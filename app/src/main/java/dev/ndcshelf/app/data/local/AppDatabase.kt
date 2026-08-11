@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val APP_DATABASE_VERSION = 16
+const val APP_DATABASE_VERSION = 17
 
 @Database(
     entities = [
@@ -69,6 +69,7 @@ abstract class AppDatabase : RoomDatabase() {
                 MIGRATION_13_14,
                 MIGRATION_14_15,
                 MIGRATION_15_16,
+                MIGRATION_16_17,
             )
     }
 
@@ -94,6 +95,28 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun diagnosticsDao(): dev.ndcshelf.app.data.diagnostics.DiagnosticsDao
 }
+
+// Issue #55: 置き場所と所蔵ラベルの「未設定」を端末ロケールに依存しない空文字へ寄せる。
+//
+// v16までは未設定の置き場所を日本語literalの'未設定'、所蔵ラベルの既定を'所蔵本'として
+// 保存し、画面はその保存値をそのまま表示していた。そのため英語ロケールの利用者へ日本語が
+// 残り、さらにLibraryScreenがlocalizeされた文言を書き込んでいたので、英語端末で未設定に
+// した行には'Not set'が入っていた。**同じ「未設定」が端末のロケール次第で別の値になる**
+// 状態だったため、既存行をここで正規化する。
+//
+// 表示は`location_unset_value`と`copy_label_default`で行う。列の型・制約は変えないので
+// テーブル再構築は不要（v16のschemaもdefaultValueを記録していない）。
+private val MIGRATION_16_17 =
+    object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "UPDATE owned_copies SET location = '' WHERE location IN ('未設定', 'Not set')",
+            )
+            db.execSQL(
+                "UPDATE owned_copies SET copyLabel = '' WHERE copyLabel = '所蔵本'",
+            )
+        }
+    }
 
 // Issue #38: E2EE同期の鍵state・device registry cache・招待・quarantineを追加する。
 // 鍵の平文は保存せず、Keystore wrapping keyで暗号化したblobだけを置く。

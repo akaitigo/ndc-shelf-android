@@ -114,8 +114,9 @@ class LibraryJsonImporterTest {
                     ImportConflictPolicy.SKIP_EXISTING,
                 ) as ImportPreviewResult.Valid
 
+            // schema 1にはcopyLabelが無い。ロケール非依存の空文字（未設定）で補う。
             assertEquals(
-                "所蔵本",
+                "",
                 planned.preview.additions
                     .single()
                     .copyLabel,

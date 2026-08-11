@@ -636,6 +636,7 @@
     <string name="location_registered_tier">Registered shelves</string>
     <string name="location_unset_or_free">Not set / free text</string>
     <string name="location_unset_value">Not set</string>
+    <string name="copy_label_default">Owned copy</string>
     <string name="location_in_use_title">This location is in use</string>
     <plurals name="location_in_use_message">
         <item quantity="one">Choose where to move %1$d copy, or reset it to “Not set”.</item>
