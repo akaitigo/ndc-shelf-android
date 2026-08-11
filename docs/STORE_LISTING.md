@@ -24,10 +24,22 @@ NDC Shelfはアカウント、広告、開発者独自のアクセス解析・�
 - カメラ画像は端末外へ送信せず、保存もしない。
 - ストアの「収集」「共有」「一時的処理」の最新定義に照らして、ISBN送信、ML Kitメトリクス、OS管理バックアップの回答を公開直前に再判定する。
 
-## v0.2公開前ゲート
+## 公開前ゲート
 
-- [v0.2リリースチェックリスト](releases/V0.2_RELEASE_CHECKLIST.md)の実機証跡を全て完了する。
-- [v0.2ロールバック手順](releases/V0.2_ROLLBACK.md)と`CHANGELOG.md`を公開担当者が確認する。
+現行の正本は[v1.0完成判定チェックリスト](releases/V1.0_RELEASE_CHECKLIST.md)。v0.2〜v0.4の
+チェックリストは当時の中間版の記録として残しているが、いずれもAPKを配布しなかったため
+リリースゲートとしては#55へ統合済み（[ロードマップ Issue #58](https://github.com/akaitigo/ndc-shelf-android/issues/58)）。
+
+- [v1.0完成判定チェックリスト](releases/V1.0_RELEASE_CHECKLIST.md)の実機証跡を全て完了する。
+- [リリースプロセス](RELEASE_PROCESS.md)の停止・ロールバック手順と`CHANGELOG.md`を公開担当者が確認する。
 - `release-compliance` artifactのSBOMでSDK Indexと提供元のData safety guidanceを再確認し、確認日・対象version・判断をリリースPRへ記録する。
 - OSV-ScannerとDependency Reviewに未解決の検出がなく、NOTICEをレビュー済みであることを確認する。
 - NDL Searchの最新利用条件を確認し、営利利用・法人配布・継続的大規模利用に該当する場合は必要な申請・連絡を完了する。
+- READMEの[既知の制約](../README.md#既知の制約)が実装と一致していることを確認する。
+
+## 配布物
+
+GitHub Releasesへ添付するのは`standard`のAPK 1種類だけ（ADR 0009）。端末内LLMを同梱する
+`ai`フレーバーはビルドとサイズ検証だけ継続し、配布しない。掲載文でAI司書に触れる場合は
+「端末内の規則ベースで提案し、外部送信はない」と書き、言語モデルによる自然文提案が
+含まれる誤解を与えないこと。

@@ -203,6 +203,25 @@ SRU APIには `recordPacking=xml` を明示し、DC-NDLの書誌要素をXMLと�
 
 詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。将来の任意同期は、実装前に固定した[公開protocol](docs/SYNC_PROTOCOL.md)と[脅威モデル](docs/SYNC_THREAT_MODEL.md)に従います。
 
+## 既知の制約
+
+導入前に知っておいてほしい制約をまとめます。詳細は各リンク先を参照してください。
+
+- **端末内LLMによる自然文の提案は配布物に含まれていません。** 実装はありますが、実機検証（Pixel 7）で
+  実用に足りないことが分かったため配布していません。AI司書は規則ベースで動作します
+  （[実測](docs/ON_DEVICE_LLM_FINDINGS.md) / [ADR 0009](docs/adr/0009-on-device-llm-librarian.md)）。
+- **複数端末の同期はまだ提供していません。** 端末をまたぐ持ち運びは、データ画面の
+  エクスポート／完全バックアップと、移行先でのインポート／復元で行ってください。
+- **自動更新はありません。** 新版の告知はGitHub Releasesで行います。更新は同じ署名鍵のAPKを
+  上書きインストールしてください。
+- **v0.1.2からの更新には制約があります。** v0.1.2はGitHub Releasesで配布しておらず、
+  開発用の鍵で署名されているため、配布用APKで上書き更新できません。v0.1.2を自分でビルドして
+  使っていた場合は、エクスポートしてから新規インストールし、インポートしてください。
+- **書誌情報は国立国会図書館サーチに依存します。** 同サービスに登録のないISBNは自動取得できず、
+  手入力での登録・補正が必要です。発売予定の完全性・正確性は保証しません。
+- **現在配布しているのはpre-releaseです。** stable版の配布は実機ゲートの完了後に行います
+  （[v1.0完成判定チェックリスト](docs/releases/V1.0_RELEASE_CHECKLIST.md)）。
+
 ## コントリビューション
 
 IssueやPull Requestを歓迎します。開発を始める前に [CONTRIBUTING.md](CONTRIBUTING.md)、[Repository governance](docs/REPOSITORY_GOVERNANCE.md)、[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) をご確認ください。脆弱性は公開Issueにせず、[SECURITY.md](SECURITY.md) の手順で報告してください。
