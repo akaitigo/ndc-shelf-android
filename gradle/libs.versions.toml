@@ -35,7 +35,7 @@ window = "1.5.0"
 # AGP 9対応が入った1.5系alphaを使う（Macrobenchmark実行はCI必須ジョブ外）。
 benchmark = "1.5.0-alpha07"
 profileinstaller = "1.4.1"
-uiautomator = "2.3.0"
+uiautomator = "2.4.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
